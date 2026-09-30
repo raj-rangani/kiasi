@@ -1,0 +1,20 @@
+## Context rules
+
+Every turn re-sends the whole conversation, so context size times turns is the real cost. Keep both small:
+- One task per session. Start a new session or `/clear` when the task changes; kiasi writes a note at compaction and at stop, and injects the last one at session start.
+- Scripts longer than twenty lines go to a file in the scratchpad once and run by path; never re-paste a script inline.
+- Never poll with sleep loops. Run background commands and wait for the notification.
+- Read documents and large files by section (offset and limit, sed ranges), not whole, and never twice.
+- A line starting with `[kiasi kept` or `[kiasi trimmed` names a saved file with the full text; read it by path if the cut part matters.
+- Pasted content is saved under Kiasi data directory's `pastes/` folder (`~/.claude/kiasi/pastes` unless `CLAUDE_PLUGIN_DATA` points elsewhere); refer to it by path after the turn it arrived in.
+- Prompts over 40k chars are refused and saved under that same `pastes/` folder; resend the instruction with the path.
+- Every turn has a budget of 60 tool calls or 8M re-read tokens. At the warning, write the remaining work as a checklist to the path kiasi names and end the turn or hand the checklist to one general-purpose subagent. After the stop, only Write, Agent and the final message are allowed.
+- Loop-shaped work (parity, hardening, "anything missing?") is one round per turn: batch commands, run each test suite once, end with the checklist.
+- Subagents get a 40-call budget in their brief; scope review subagents to the diff, never the whole repo.
+- To find something in a saved output, paste, note or checkpoint, use the `mcp__kiasi__search` tool if it is available (needs `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1`), or run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/search.py <words>` and read only the file it names, by section.
+
+## Compact instructions
+
+Keep verbatim: the user's current task, every file path created or edited, the exact function, class and constant names introduced, and every command that failed with its error text.
+Pasted content is saved under Kiasi data directory's `pastes/` folder; keep only the path and one line per paste.
+Reduce every other tool output to one line. End with the concrete next steps not yet done.

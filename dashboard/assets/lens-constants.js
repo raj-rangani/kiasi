@@ -1,0 +1,163 @@
+const LENS_FILE = '/reports/lens.json';
+const REFRESH_MS = 30000;
+const CHART_HEIGHT = 300;
+const BAR_RADIUS = 4;
+const MINI_HEIGHT = 110;
+const PAD = { top: 24, right: 88, bottom: 44, left: 64 };
+const MINI_PAD = { top: 8, right: 8, bottom: 8, left: 8 };
+const NARROW_STEP_PX = 48;
+const MAX_ROWS = 400;
+const OVERVIEW_ROWS = 12;
+const STARTUP_HINT_RATIO = 1.1;
+const MISS_CAUSE_HELP = {
+  compaction: 'the transcript was rebuilt, so this one is expected',
+  'idle over 1h': 'the cache expired during a long pause',
+  'idle over 5 min': 'the cache expired during a pause (5-minute cache)',
+  'model switch': 'each model has its own cache',
+  other: 'something early in the prompt changed that Kiasi did not see: a reload, the tool list, or a change made before it started recording',
+  'settings changed': 'a settings file changed between two steps',
+  'CLAUDE.md changed': 'a CLAUDE.md file changed between two steps',
+  'plugins changed': 'a plugin was installed, updated or reloaded',
+  'skills changed': 'a skill was added or edited',
+  'MCP changed': 'the project MCP servers changed',
+};
+const MISS_CAUSE_FIX = {
+  compaction: 'expected, nothing to do',
+  'idle over 1h': 'start a new session or /clear after a long break instead of carrying on',
+  'idle over 5 min': 'short pauses while the 5-minute cache was in use; mostly unavoidable',
+  'model switch': 'pick the model at the start of a session and keep it',
+  other: 'avoid editing CLAUDE.md, settings, skills or plugins while a session is running',
+  'settings changed': 'change settings between sessions, not during one',
+  'CLAUDE.md changed': 'edit CLAUDE.md between sessions, not during one',
+  'plugins changed': 'update or reload plugins between sessions',
+  'skills changed': 'edit skills between sessions',
+  'MCP changed': 'change MCP servers between sessions',
+};
+const MISS_SPARK = { width: 96, height: 22 };
+const CACHE_CAUSE_MIN_SHARE = 0.1;
+const RECALL_LOW = 0.05;
+const RECALL_HIGH = 0.3;
+const MULTIPLES = 12;
+const BOOKKEEPING_KINDS = ['note', 'recall', 'state', 'agent_model', 'compaction', 'review_asked'];
+const SMALL_SESSION_STEPS = 5;
+const SESSION_ROWS = 10;
+const KIND_LABELS = {
+  cap: 'output cap', paste_refused: 'paste refused', delegated: 'delegation', pruned: 'compaction pruned', summary: 'compaction summarised',
+  compaction: 'compaction', reread_check: 're-read check', paste_saved: 'paste saved', nudge: 'context nudge', turn_warn: 'turn warning',
+  turn_stop: 'turn stopped', read_skipped: 're-read skipped', read_retry: 're-read let through', agent_model: 'subagent model', review_asked: 'review round asked', note: 'session note', recall: 'note recalled', loop: 'loop stopped', state: 'state re-injected',
+};
+const KIND_STRIP_DAYS = 8;
+
+// One-line versions of KIND_HELP for the overview tiles; the full text is the tile's tooltip.
+const KIND_SHORT = {
+  cap: 'oversized tool output cut, full text kept on disk',
+  pruned: 'transcript pruned instead of summarised',
+  read_skipped: 'unchanged file range not read twice',
+  turn_warn: 'passed the warning step or re-read budget',
+  reread_check: 'here-vs-subagent estimate shown to Claude',
+  turn_stop: 'blocked at the stop budget until checkpoint',
+  summary: "prune missed the ceiling; built-in summary ran",
+  loop: 'same failing call stopped after repeats',
+};
+
+const KIND_HELP = {
+  cap: 'a tool result over its cap was cut; the full text is saved to disk',
+  paste_refused: 'a prompt over 40 k chars was saved to disk and dropped from the conversation',
+  delegated: 'the re-read numbers said a subagent was cheaper, so Claude was told to delegate',
+  pruned: 'the plugin replaced the summariser with a deterministic prune of the transcript',
+  summary: 'the prune could not get under the ceiling, so the built-in summary ran',
+  compaction: 'a compaction happened (PreCompact hook)',
+  read_skipped: 'a Read of a file range already in context and unchanged on disk was answered with a pointer to the earlier copy',
+  read_retry: 'Claude repeated a skipped Read, so it went through; a high count means the skip fires when the copy is gone',
+  reread_check: 'here-versus-subagent estimates were shown and left to Claude',
+  paste_saved: 'a prompt over 4 k chars was saved so later turns can refer to the path',
+  nudge: 'a message asked to compact or clear',
+  turn_warn: 'the turn passed the warning step or re-read budget',
+  turn_stop: 'the turn was blocked at the stop budget until it checkpointed',
+  agent_model: 'a subagent got its model set by type',
+  review_asked: 'a repeated review round became a permission prompt',
+  note: 'a session note was written for recall',
+  recall: 'the last note for the project was injected at session start',
+  loop: 'the same failing command or file edit failed repeatedly in one turn, so Claude was told to stop retrying and check its assumption',
+  state: 'after a compaction the task, edited files, still-failing commands, saved outputs and checklists were re-injected from the transcript',
+};
+const MARK_LABELS = { compaction: 'compaction', pruned: 'pruned compaction', check: 're-read check', stop: 'turn stopped' };
+const VIEWS = [
+  ['overview', 'Overview', 'What Kiasi kept off your weekly limit, and the proof. <b>Re-read</b> is the whole conversation sent again on every step; <b>avoided</b> is what Kiasi kept out of it.'],
+  ['sessions', 'Sessions', 'One chart per session: context at every step, prompts as ticks, compactions as rings. Click a session for its full trajectory and every Kiasi action inside it.'],
+  ['rules', 'Rules', 'Each rule of Kiasi: how often it fired, what it saved, and its log. The chart shows where the steps go, which is what the turn budget shapes.'],
+  ['budget', 'Budget', 'Where the weekly limit goes: every turn re-reads the whole conversation, so the cost is context size times turns.'],
+  ['storage', 'Storage', 'What Kiasi keeps on disk and for how long. A saved file follows its session: once both are unused for a week it goes to trash, and the trash is emptied a week later.']
+];
+// Growth below this many bytes a day reads as flat.
+const STORE_FLAT_BYTES = 10e3;
+// Days of growth averaged for the rate under the bar.
+const STORE_RATE_DAYS = 7;
+// Never-read saved files below this size get no recommendation.
+const STORE_REC_MIN_BYTES = 100e3;
+// Storage categories in bar order: key, label, 24px line-icon SVG body, data-folder names (empty = everything unlisted).
+const STORE_CATS = [
+  ['outputs', 'Cut outputs', '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/>', ['outputs']],
+  ['checkpoints', 'Checkpoints', '<path d="M10 6h10M10 12h10M10 18h10"/><path d="m3 6 1.5 1.5L7 5M3 12l1.5 1.5L7 11M3 18l1.5 1.5L7 17"/>', ['checkpoints']],
+  ['pastes', 'Pastes', '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>', ['pastes']],
+  ['notes', 'Notes', '<path d="M4 4h16v10l-6 6H4z"/><path d="M14 20v-6h6M8 9h8M8 13h4"/>', ['notes']],
+  ['sessions', 'Session counters', '<path d="M3.34 19a10 10 0 1 1 17.32 0"/><path d="m12 14 4-4"/>', ['sessions']],
+  ['log', 'Event log', '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>', ['kiasi.jsonl', 'cleanup.jsonl']],
+  ['trash', 'Trash', '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>', ['trash']],
+  ['caches', 'Caches', '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"/>', []],
+];
+const STORE_CAT_HELP = {
+  outputs: 'Full text of cut tool results and compaction originals',
+  checkpoints: 'Handover checklists written at the turn budget',
+  pastes: 'Large pasted prompts saved to disk',
+  notes: 'Last task per project, shown at session start',
+  sessions: 'Per-session counters for the hooks',
+  log: 'Kept · every chart is built from it',
+  caches: 'Dashboard data and status files · rebuilt on every sync',
+};
+const STORAGE_ACTIONS = { trash: 'moved to trash', delete: 'deleted', restore: 'restored' };
+const BUDGET_FILE = '/reports/budget.json';
+const LIMITS_FILE = '/limits';
+const LIMIT_WARN = 75;
+const LIMIT_BAD = 90;
+const LIMIT_PACE_SLACK = 5;
+const LIMITS_STALE_MS = 30 * 60 * 1000;
+const LIMITS_HINTS = {
+  none: 'Plan limits show here once the Kiasi status line is set up: run /kiasi:limits setup in Claude Code. It hands the status line the 5-hour and weekly use on Pro and Max plans.',
+  waiting: 'Plan limits show after the next reply in a Claude Code session.',
+};
+const SYNC_URL = '/sync';
+const SYNC_STATUS_FILE = '/reports/sync.json';
+const SYNC_POLL_MS = 1000;
+const SYNC_TIMEOUT_MS = 60000;
+const SYNC_EVERY_TEXT = 'auto every 30 min';
+const VIEW_ALIASES = { actions: 'rules' };
+const TOP_MULTIPLES = 8;
+const LOG_ROWS = 60;
+const RULES = [
+  { key: 'cap', name: 'Output cap', kinds: ['cap'], what: 'A tool result over its cap is cut and the full text saved to disk; the conversation keeps a marker with the path.' },
+  { key: 'pruner', name: 'Compaction pruner', kinds: ['pruned', 'summary'], what: 'At compaction the plugin prunes the transcript deterministically instead of calling the summariser; it falls back only if the prune cannot get under the ceiling.' },
+  { key: 'turn', name: 'Turn budget', kinds: ['turn_warn', 'turn_stop'], what: 'A prompt that runs too many steps is warned, then stopped until the remaining work is written down.' },
+  { key: 'reread', name: 'Re-read check', kinds: ['reread_check', 'delegated'], what: 'Shows what the rest of the turn will cost here against in a subagent, and lets Claude delegate.' },
+  { key: 'reads', name: 'Re-read skip', kinds: ['read_skipped', 'read_retry'], what: 'A Read of a file range already in context and unchanged on disk gets a pointer to the earlier copy instead of the text; repeating the Read lets it through.' },
+  { key: 'loop', name: 'Loop check', kinds: ['loop'], what: 'A command or edit that fails three times in one turn, or one command failing five times with different arguments, gets a note to stop retrying and check the assumption. Failed calls also count toward the turn budget.' },
+  { key: 'paste', name: 'Paste manager', kinds: ['paste_saved', 'paste_refused'], what: 'Large pasted prompts are saved to disk so later turns refer to the path; very large ones are refused.' },
+  { key: 'notes', name: 'Notes and recall', kinds: ['note', 'recall', 'state', 'agent_model', 'compaction', 'nudge', 'review_asked'], what: 'Bookkeeping: a note at every stop and compaction, recalled at the next start; working state re-injected after each compaction; subagent models set by type.', muted: true },
+];
+const DETAIL_HEIGHT = 340;
+const PROMPT_ROWS = 20;
+const RULE_CHART_HEIGHT = 200;
+const PANEL_MS = 260;
+const JUMP_LABELS = { 'Which tools get capped': 'Tools', 'How much each cut kept out': 'Cut sizes', 'Every compaction the pruner handled': 'Compactions', 'Every warning and stop': 'Warnings', 'Every check shown': 'Checks', 'Every paste handled': 'Pastes' };
+const OFFENDER_ROWS = 5;
+const OFFENDER_LABEL_CHARS = 48;
+
+const EST_TAG = 'est.';
+const EST_TIPS = {
+  avoided: 'Estimate: tokens kept out of context, times the assistant steps that came after in the session.',
+  cap: 'Estimate: (characters before the cut − characters shown) ÷ 4, times the assistant steps that came after.',
+  pruner: 'Estimate: the context size before the compaction (tokens_before) that the pruned transcript did not have to rebuild.',
+  reread: 'Estimate: re-read tokens if this ran here, minus re-read tokens if it were delegated to a subagent.',
+  extra: 'Estimate: tokens written again after each miss, priced against a cache read.',
+};
+const EST_NOTE = 'Figures marked est. come from a formula; everything else is read from your transcripts.';

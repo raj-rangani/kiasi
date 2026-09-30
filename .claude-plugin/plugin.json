@@ -1,0 +1,41 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "kiasi",
+  "displayName": "Kiasi",
+  "version": "0.2.0",
+  "description": "Kiasi keeps Claude Code's context small and its weekly limit long: output caps, turn budgets, refused mega-pastes, deterministic pruning at compaction, a searchable store of everything it cut, and a local dashboard of what it saved.",
+  "author": { "name": "Raj Rangani", "email": "iamrajrangani@gmail.com" },
+  "homepage": "https://github.com/raj-rangani/kiasi",
+  "repository": "https://github.com/raj-rangani/kiasi",
+  "license": "MIT",
+  "keywords": ["context", "tokens", "compaction", "budget", "hooks", "claude-code"],
+  "userConfig": {
+    "output_cap_chars": {
+      "type": "number",
+      "title": "Output cap (chars)",
+      "description": "Reads of transcripts, logs and /tmp files over this many characters are cut and saved in full to the data directory.",
+      "default": 12000,
+      "min": 1000
+    },
+    "turn_call_budget": {
+      "type": "number",
+      "title": "Turn call budget",
+      "description": "Tool calls allowed in one turn before kiasi blocks further calls and asks Claude to checkpoint and stop or delegate.",
+      "default": 60,
+      "min": 5
+    },
+    "paste_refusal_chars": {
+      "type": "number",
+      "title": "Paste refusal size (chars)",
+      "description": "Pasted prompts over this size are refused outright: saved to disk, dropped from the conversation, and Claude is asked to resend the instruction with the path.",
+      "default": 40000,
+      "min": 1000
+    },
+    "compaction_window_text": {
+      "type": "string",
+      "title": "Compaction window",
+      "description": "Shown in the SessionStart warning when CLAUDE_CODE_AUTO_COMPACT_WINDOW is unset. Set that env var yourself; this only controls the wording of the reminder.",
+      "default": "200000"
+    }
+  }
+}

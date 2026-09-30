@@ -1,0 +1,15 @@
+{
+  "name": "kiasi",
+  "owner": { "name": "raj-rangani", "email": "iamrajrangani@gmail.com" },
+  "metadata": {
+    "description": "Kiasi: keeps Claude Code's context small and its weekly limit long."
+  },
+  "plugins": [
+    {
+      "name": "kiasi",
+      "source": "./",
+      "description": "Output caps, turn budgets, refused mega-pastes, deterministic pruning at compaction, a searchable store of everything it cut, and a local dashboard of what it saved.",
+      "version": "0.2.0"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+node_modules/
+*.log
+*.tsbuildinfo
+.DS_Store
+# Plugin state never lives in the repo; it lives in ${CLAUDE_PLUGIN_DATA} or ~/.claude/kiasi/.
+logs/
+*.jsonl
+*.db
+sync.json
+budget.json
+lens.json
+# Internal build notes for this machine; not part of the published plugin.
+SHIPPING.md
+# Written by Claude Code each time it loads the plugin; early-access API declarations, not ours to publish.
+.claude-plugin/types/
