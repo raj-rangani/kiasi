@@ -1,5 +1,9 @@
 # Changelog
 
+### Unreleased
+
+- README rewritten for first-time visitors: quick start, a table of every rule, the commands, and dashboard screenshots (`docs/`, fictional sample data).
+
 ## 0.2.0 - 2026-09-30
 
 - Dashboard server answers only requests whose Host is 127.0.0.1 or localhost (a page on another site cannot reach it through DNS rebinding), and runs `POST /sync` only when the Origin or Referer is the dashboard itself.
