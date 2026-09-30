@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kiasi</title>
+<meta name="description" content="A Claude Code plugin that makes your weekly limit last longer: output caps, turn budgets, paste refusal, compaction pruning and a local dashboard of what it saved.">
+<meta property="og:title" content="Kiasi: make your Claude Code weekly limit last longer">
+<meta property="og:description" content="Fixed rules, no model calls, nothing sent anywhere. Caps huge outputs, stops runaway turns, prunes at compaction, and shows what it saved.">
+<meta property="og:image" content="https://raj-rangani.github.io/kiasi/overview.webp">
+<meta property="og:url" content="https://raj-rangani.github.io/kiasi/">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="mark.svg" type="image/svg+xml">
+<style>
+:root {
+  --paper: #f6f2ea;
+  --ink: #1d1a16;
+  --muted: #6b6560;
+  --rule: #d9d2c5;
+  --card: #fbf8f2;
+  --code: #efe9dd;
+  --accent: #f2b632;
+  --accent-ink: #8a5a00;
+  --link: #1f63b5;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --serif: Georgia, "Times New Roman", serif;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #171411; --ink: #efe9dd; --muted: #a39b8f; --rule: #3a342c; --card: #1f1b17;
+    --code: #26211c; --accent-ink: #f2b632; --link: #6ea1ea; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #171411; --ink: #efe9dd; --muted: #a39b8f; --rule: #3a342c; --card: #1f1b17;
+  --code: #26211c; --accent-ink: #f2b632; --link: #6ea1ea; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.6; }
+a { color: var(--link); text-underline-offset: 3px; }
+code { font-family: var(--mono); font-size: 0.88em; background: var(--code); padding: 1px 6px; border-radius: 5px; overflow-wrap: anywhere; }
+pre { margin: 0; overflow-x: auto; }
+pre code { display: block; padding: 14px 16px; background: none; font-size: 13.5px; line-height: 1.55; overflow-wrap: normal; }
+img { max-width: 100%; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+
+.top { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--paper) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--rule); }
+.top .wrap { display: flex; align-items: center; gap: 20px; height: 60px; }
+.brand { display: flex; flex: none; }
+.brand img { height: 30px; width: auto; display: block; }
+.nav { display: flex; gap: 18px; margin-left: auto; font-family: var(--mono); font-size: 13px; }
+.nav a { color: var(--muted); text-decoration: none; }
+.nav a:hover { color: var(--ink); }
+.iconbtn { flex: none; width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--rule); border-radius: 999px; background: none; color: var(--ink); cursor: pointer; }
+.iconbtn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+@media (max-width: 760px) { .nav .opt { display: none; } }
+@media (max-width: 420px) { .nav { gap: 12px; } .brand img { height: 26px; } }
+
+.brand .logo-dark { display: none; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .brand .logo-light { display: none; } :root:not([data-theme="light"]) .brand .logo-dark { display: block; } }
+:root[data-theme="dark"] .brand .logo-light { display: none; }
+:root[data-theme="dark"] .brand .logo-dark { display: block; }
+
+.hero { padding: 72px 0 40px; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: 48px; align-items: center; }
+.pill { display: inline-block; font-family: var(--mono); font-size: 12px; color: var(--accent-ink); border: 1px solid var(--accent); border-radius: 999px; padding: 2px 10px; margin-bottom: 18px; }
+h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(36px, 6vw, 58px); line-height: 1.08; letter-spacing: -0.015em; margin: 0 0 18px; }
+.lede { font-size: 18px; color: var(--muted); margin: 0 0 28px; max-width: 34em; }
+.lede b { color: var(--ink); font-weight: 600; }
+.ctas { display: flex; gap: 12px; flex-wrap: wrap; }
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 999px; font-weight: 600; font-size: 15px; text-decoration: none; border: 1px solid var(--ink); color: var(--ink); }
+.btn.primary { background: var(--ink); color: var(--paper); }
+.btn svg { width: 16px; height: 16px; fill: currentColor; }
+
+.install { background: var(--card); border: 1px solid var(--rule); border-radius: 14px; overflow: hidden; }
+.install-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px 10px 16px; border-bottom: 1px solid var(--rule); font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.copy { font-family: var(--mono); font-size: 12px; background: none; border: 1px solid var(--rule); color: var(--ink); border-radius: 999px; padding: 3px 12px; cursor: pointer; }
+.install pre code .p { color: var(--muted); user-select: none; }
+
+.shot { margin: 16px 0 0; }
+.shot img { display: block; width: 100%; height: auto; border: 1px solid var(--rule); border-radius: 12px; box-shadow: 0 18px 50px -24px rgba(29, 26, 22, 0.35); }
+.shot figcaption { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 10px; text-align: center; }
+
+section { padding: 72px 0 0; }
+.kicker { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-ink); margin: 0 0 8px; }
+h2 { font-family: var(--serif); font-weight: 400; font-size: clamp(28px, 4vw, 38px); line-height: 1.15; margin: 0 0 14px; }
+h3 { font-family: var(--serif); font-weight: 400; font-size: 21px; margin: 0 0 6px; }
+.intro { color: var(--muted); max-width: 44em; margin: 0 0 28px; }
+
+.equation { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.eq { background: var(--card); border: 1px solid var(--rule); border-radius: 14px; padding: 22px; }
+.eq b { display: block; font-family: var(--serif); font-weight: 400; font-size: 30px; line-height: 1.1; margin-bottom: 8px; }
+.eq p { margin: 0; color: var(--muted); font-size: 15px; }
+
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.card { background: var(--card); border: 1px solid var(--rule); border-radius: 14px; padding: 20px; }
+.card p { margin: 0; color: var(--muted); font-size: 15px; }
+.tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); border: 1px solid var(--rule); border-radius: 999px; padding: 0 8px; margin-left: 6px; vertical-align: 3px; white-space: nowrap; }
+
+.tour { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
+.tabs-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 24px; padding: 0; list-style: none; }
+.tabs-list li { font-family: var(--mono); font-size: 13px; border: 1px solid var(--rule); border-radius: 999px; padding: 4px 12px; }
+.tabs-list li b { font-weight: 600; }
+
+.steps { counter-reset: step; list-style: none; padding: 0; margin: 0; display: grid; gap: 16px; }
+.steps li { counter-increment: step; display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 16px; background: var(--card); border: 1px solid var(--rule); border-radius: 14px; padding: 20px; }
+.steps li::before { content: counter(step); width: 40px; height: 40px; border-radius: 999px; background: var(--accent); color: #1d1a16; display: grid; place-items: center; font-family: var(--serif); font-size: 20px; }
+.steps h3 { margin-bottom: 8px; }
+.steps p { margin: 0 0 10px; color: var(--muted); }
+.steps pre { background: var(--code); border-radius: 10px; margin-bottom: 10px; }
+
+.table { overflow-x: auto; border: 1px solid var(--rule); border-radius: 14px; background: var(--card); }
+table { border-collapse: collapse; width: 100%; font-size: 15px; }
+th { text-align: left; font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; padding: 12px 16px; border-bottom: 1px solid var(--rule); }
+td { padding: 12px 16px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+td:first-child { white-space: nowrap; }
+
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px 40px; }
+.cols ul { margin: 0; padding-left: 20px; color: var(--muted); }
+.cols li { margin-bottom: 6px; }
+.prose p { color: var(--muted); margin: 0 0 14px; }
+.prose p b { color: var(--ink); }
+.sub { margin-top: 40px; }
+
+details { border: 1px solid var(--rule); border-radius: 14px; background: var(--card); margin-bottom: 12px; }
+summary { cursor: pointer; padding: 16px 20px; font-family: var(--serif); font-size: 19px; }
+details > div { padding: 0 20px 16px; color: var(--muted); }
+details > div p { margin: 0 0 12px; }
+details pre { background: var(--code); border-radius: 10px; margin-bottom: 12px; }
+
+footer { margin-top: 88px; border-top: 1px solid var(--rule); padding: 28px 0 48px; font-family: var(--mono); font-size: 13px; color: var(--muted); }
+footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+footer a { color: var(--muted); }
+
+@media (max-width: 900px) {
+  .hero { grid-template-columns: minmax(0, 1fr); padding-top: 48px; gap: 32px; }
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .equation, .grid, .tour, .cols { grid-template-columns: minmax(0, 1fr); }
+  section { padding-top: 56px; }
+  td:first-child { white-space: normal; }
+  pre code { font-size: 12px; padding: 12px; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#" aria-label="Kiasi home">
+      <img class="logo-light" src="logo-light.svg" alt="Kiasi" width="326" height="82">
+      <img class="logo-dark" src="logo-dark.svg" alt="Kiasi" width="326" height="82">
+    </a>
+    <nav class="nav" aria-label="Sections">
+      <a class="opt" href="#rules">Rules</a>
+      <a class="opt" href="#dashboard">Dashboard</a>
+      <a href="#install">Install</a>
+      <a class="opt" href="#reference">Reference</a>
+      <a href="https://github.com/raj-rangani/kiasi">GitHub</a>
+    </nav>
+    <button class="iconbtn" id="theme" type="button" aria-label="Switch light and dark theme" title="Switch light and dark"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg></button>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="hero">
+    <div>
+      <span class="pill">Claude Code plugin · beta</span>
+      <h1>Make your Claude Code weekly limit last longer.</h1>
+      <p class="lede">Kiasi caps huge tool outputs, stops runaway turns, refuses mega-pastes, prunes the transcript at compaction, and shows you exactly what it saved. <b>Fixed rules, no model calls, nothing sent anywhere.</b></p>
+      <div class="ctas">
+        <a class="btn primary" href="#install">Install in 1 minute</a>
+        <a class="btn" href="https://github.com/raj-rangani/kiasi"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>View on GitHub</a>
+      </div>
+    </div>
+    <div class="install">
+      <div class="install-head"><span>In Claude Code</span><button class="copy" type="button" data-copy="install-cmd">Copy</button></div>
+      <pre><code id="install-cmd"><span class="p">&gt; </span>/plugin marketplace add raj-rangani/kiasi
+<span class="p">&gt; </span>/plugin install kiasi@kiasi</code></pre>
+    </div>
+  </div>
+
+  <figure class="shot">
+    <img src="overview.webp" alt="Kiasi dashboard overview: re-read tokens per day before and after Kiasi was switched on" width="1400" height="1225">
+    <figcaption>The dashboard's Overview tab. Screenshots use fictional sample data.</figcaption>
+  </figure>
+
+  <section id="why">
+    <p class="kicker">Why</p>
+    <h2>You pay for context × steps.</h2>
+    <p class="intro">Every step in Claude Code re-sends the whole conversation. One 40k-token log read early in a turn is paid for again on every step after it. Kiasi keeps both numbers small, so the same weekly limit covers more work.</p>
+    <div class="equation">
+      <div class="eq"><b>Smaller context</b><p>Big outputs are cut to what matters, with the full text saved to disk, and the transcript is pruned at compaction.</p></div>
+      <div class="eq"><b>Fewer steps</b><p>Turns get a budget, retry loops are called out, and unchanged files aren't read twice.</p></div>
+      <div class="eq"><b>Proof, not promises</b><p>A local dashboard counts every action and the re-read tokens it kept off your limit.</p></div>
+    </div>
+  </section>
+
+  <section id="rules">
+    <p class="kicker">What it does</p>
+    <h2>Twelve rules, all deterministic.</h2>
+    <p class="intro">Each rule runs as a Claude Code hook. There are no model calls and no dependencies beyond Python's standard library. Every threshold is a named constant you can change.</p>
+    <div class="grid">
+      <div class="card"><h3>Output cap</h3><p>Web results, log, transcript and <code>/tmp</code> reads, and bulk command output over 12,000 chars are cut. The full text is saved and a <code>[kiasi kept …]</code> marker says where.</p></div>
+      <div class="card"><h3>Output cleaning</h3><p>Build, install, test and search output loses colour codes, progress-bar redraws and repeated lines. File-reading commands are never touched.</p></div>
+      <div class="card"><h3>Turn budget</h3><p>A turn is warned at 30 tool calls (or 4M re-read tokens) and stopped at 60 (or 8M). Claude writes the remaining work as a checklist.</p></div>
+      <div class="card"><h3>Loop check</h3><p>The same call failing 3 times, or one command failing 5 times with different arguments, tells Claude to stop retrying and check its assumption.</p></div>
+      <div class="card"><h3>Re-read skip</h3><p>Reading a file range that's already in context and unchanged on disk returns a pointer to the earlier copy instead of the text.</p></div>
+      <div class="card"><h3>Paste manager</h3><p>Prompts over 4,000 chars are saved to disk. Prompts over 40,000 chars are refused, saved, and you're asked to resend the instruction with the path.</p></div>
+      <div class="card"><h3>Compaction pruner<span class="tag">experimental</span></h3><p>Replaces the model-written summary with a rule-based prune: your prompts and Claude's replies stay word for word, old tool output is cut to its head.</p></div>
+      <div class="card"><h3>State after compaction</h3><p>Re-injects the task, edited files, commands still failing, saved outputs and checklists, read from the transcript.</p></div>
+      <div class="card"><h3>Notes and recall</h3><p>A note is written at every stop and compaction, and injected at the next session start for that project.</p></div>
+      <div class="card"><h3>Subagent policy</h3><p>Sets a default model per subagent type and adds a step budget to every subagent brief.</p></div>
+      <div class="card"><h3>Context rules</h3><p>Working rules (one task per session, no polling, read files by section) are injected at session start. Nothing to paste into <code>CLAUDE.md</code>.</p></div>
+      <div class="card"><h3>Search<span class="tag">experimental</span></h3><p><code>mcp__kiasi__search</code> does full-text search over everything Kiasi saved: outputs, pastes, notes and checkpoints.</p></div>
+    </div>
+  </section>
+
+  <section id="dashboard">
+    <p class="kicker">Dashboard</p>
+    <h2>See exactly what it saved.</h2>
+    <p class="intro"><code>/kiasi:dashboard</code> starts a small local server on 127.0.0.1 and prints its URL. Reports rebuild every 30 minutes, or right away with the Sync button or <code>/kiasi:sync</code>. Figures marked "est." come from a formula; hover them to see it.</p>
+    <ul class="tabs-list">
+      <li><b>Overview</b> · before and after</li>
+      <li><b>Sessions</b> · every step</li>
+      <li><b>Rules</b> · what fired</li>
+      <li><b>Budget</b> · where the limit goes</li>
+      <li><b>Storage</b> · what's on disk</li>
+    </ul>
+    <div class="tour">
+      <figure class="shot"><img src="rules.webp" alt="The Rules tab: one card per rule with how often it fired and the tokens it avoided" width="1400" height="1100" loading="lazy"><figcaption>Rules: how often each rule fired and what it avoided.</figcaption></figure>
+      <figure class="shot"><img src="session-detail.webp" alt="A session's detail panel: context at every step, with a pruned compaction and a turn stop marked" width="1400" height="1100" loading="lazy"><figcaption>A session: context at every step, compactions and stops.</figcaption></figure>
+    </div>
+  </section>
+
+  <section id="install">
+    <p class="kicker">Install</p>
+    <h2>Four steps, about a minute.</h2>
+    <ol class="steps">
+      <li><div><h3>Install the plugin</h3><p>In Claude Code:</p><pre><code>/plugin marketplace add raj-rangani/kiasi
+/plugin install kiasi@kiasi</code></pre></div></li>
+      <li><div><h3>Add two settings</h3><p>A plugin can't set your environment, so add these to the <code>env</code> block of <code>~/.claude/settings.json</code>. Kiasi works without them, just less effectively, and reminds you at session start if either is missing.</p><pre><code>{
+  "env": {
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "200000",
+    "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"
+  }
+}</code></pre><p>The first caps the context window so compaction happens before the re-read bill grows large. It's the single biggest lever: on the machine Kiasi was built on, it took mean context from about 250k to 57k tokens. The second turns on the experimental compaction pruner and search tool.</p></div></li>
+      <li><div><h3>Set up plan limits</h3><p>Restart Claude Code, then run <code>/kiasi:limits setup</code>. The status line is the only place Claude Code exposes your 5-hour and weekly limits. A status line you already have keeps running, with Kiasi's part added after it.</p></div></li>
+      <li><div><h3>Work as usual</h3><p>After a session or two, run <code>/kiasi:dashboard</code> and open the URL it prints.</p></div></li>
+    </ol>
+  </section>
+
+  <section id="privacy">
+    <p class="kicker">Privacy</p>
+    <h2>Everything stays on your machine.</h2>
+    <div class="cols">
+      <div class="prose">
+        <p>Kiasi reads the transcript files under <code>~/.claude/projects</code>, your own conversation history, to compute context size, steps per prompt and the reports.</p>
+        <p>It <b>makes no network calls of any kind</b>, <b>never logs prompt text</b>, and writes only to its own data directory.</p>
+      </div>
+      <ul>
+        <li>The dashboard listens on 127.0.0.1 only.</li>
+        <li>It refuses requests addressed to any other host name.</li>
+        <li>It rebuilds reports only when asked from its own pages.</li>
+        <li>Old saved files are cleaned up automatically, and only files Kiasi wrote.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="reference">
+    <p class="kicker">Reference</p>
+    <h2>Commands and settings.</h2>
+    <div class="table">
+      <table>
+        <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>/kiasi:dashboard</code></td><td>Start the dashboard and print its URL</td></tr>
+          <tr><td><code>/kiasi:sync</code></td><td>Rebuild the reports now</td></tr>
+          <tr><td><code>/kiasi:limits setup</code></td><td>Install the Kiasi status line, the only source of your plan limits</td></tr>
+          <tr><td><code>/kiasi:limits remove</code></td><td>Put your previous status line back</td></tr>
+          <tr><td><code>/kiasi:limits</code></td><td>Show whether the status line is set up and when limits were last saved</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="sub">
+      <h3>Configuration</h3>
+      <p class="intro">Set these with <code>/config</code>, or as env vars. Every other threshold is a named constant in <code>scripts/constants.py</code> or <code>hooks/constants.js</code>.</p>
+      <div class="table">
+        <table>
+          <thead><tr><th>Setting</th><th>Env var</th><th>Default</th></tr></thead>
+          <tbody>
+            <tr><td><code>output_cap_chars</code></td><td><code>CLAUDE_PLUGIN_OPTION_OUTPUT_CAP_CHARS</code></td><td>12000</td></tr>
+            <tr><td><code>turn_call_budget</code></td><td><code>CLAUDE_PLUGIN_OPTION_TURN_CALL_BUDGET</code></td><td>60</td></tr>
+            <tr><td><code>paste_refusal_chars</code></td><td><code>CLAUDE_PLUGIN_OPTION_PASTE_REFUSAL_CHARS</code></td><td>40000</td></tr>
+            <tr><td><code>compaction_window_text</code></td><td><code>CLAUDE_PLUGIN_OPTION_COMPACTION_WINDOW_TEXT</code></td><td>"200000"</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="sub">
+      <details>
+        <summary>Data directory</summary>
+        <div>
+          <p>All state (event log, saved pastes, outputs, notes and checkpoints, session records, gzipped report JSON, sync status) goes to <code>${CLAUDE_PLUGIN_DATA}</code>, a path Claude Code exports to every hook process, normally under <code>~/.claude/plugins/data/</code>. Scripts run by hand (the dashboard, <code>sync.py</code>, <code>search.py</code>) follow a pointer the session-start hook leaves in <code>~/.claude/kiasi/</code>, so they read the same directory. Nothing is ever written under the installed plugin code.</p>
+        </div>
+      </details>
+      <details>
+        <summary>Cleanup</summary>
+        <div>
+          <p>A saved output, checkpoint, paste or session record only matters to the session that made it. So <code>scripts/cleanup.py</code> moves such a file, gzipped, to <code>trash/</code> once the file and its session have both been unused for 7 days (pastes: 14). Trash is deleted 7 days later. It runs in the background at session start and on sync, at most once a day. It:</p>
+          <ul>
+            <li>touches only file names Kiasi itself writes, never through a symlink;</li>
+            <li>never touches the running session or anything used in the last 24 hours;</li>
+            <li>removes a notes file only when its newest entry is over 30 days old, and never rewrites the event log;</li>
+            <li>only reports, moving nothing, for the first 7 days (the Storage tab shows what it would move);</li>
+            <li>empties trash oldest first above 50 MB, then only warns;</li>
+            <li>logs every move, delete and restore to <code>cleanup.jsonl</code>.</li>
+          </ul>
+          <p><code>python3 scripts/cleanup.py --dry-run</code> lists what would move, and <code>--restore</code> puts trashed files back. Set <code>KIASI_CLEANUP</code> to <code>report</code>, <code>trash</code> or <code>off</code> to override the default <code>auto</code>.</p>
+        </div>
+      </details>
+      <details>
+        <summary>Plan limits and the status line</summary>
+        <div>
+          <p><code>/kiasi:limits setup</code> copies <code>scripts/statusline.py</code> to <code>~/.claude/kiasi/</code> and points <code>statusLine</code> in <code>~/.claude/settings.json</code> at it, backing the file up once to <code>settings.json.kiasi-bak</code>. A status line you already had keeps running, with the Kiasi part added after it. Run <code>setup</code> again after a plugin update to refresh the copy.</p>
+        </div>
+      </details>
+      <details>
+        <summary>Keeping the dashboard up</summary>
+        <div>
+          <p>To keep the dashboard running on Linux, use a systemd user unit with <code>ExecStart=/usr/bin/python3 &lt;plugin root&gt;/scripts/dashboard.py 8787</code> and <code>Restart=always</code>, enabled with <code>systemctl --user enable --now</code>. Then bookmark <code>http://127.0.0.1:8787/</code>.</p>
+        </div>
+      </details>
+      <details>
+        <summary>Experimental: function hooks</summary>
+        <div>
+          <p>The compaction pruner and <code>mcp__kiasi__search</code> use Claude Code's function-hook API, which is early access (2.1.282+) and may break on an engine update. After upgrading Claude Code, check the debug log for "hooks module ... loaded". Kiasi is fully useful without it: the seven classic hooks run regardless of <code>CLAUDE_CODE_ENABLE_FUNCTION_HOOKS</code>.</p>
+        </div>
+      </details>
+      <details>
+        <summary>Requirements</summary>
+        <div>
+          <ul>
+            <li>Claude Code 2.1.283+</li>
+            <li>Python 3.8+, standard library only (tested on 3.10 and 3.11)</li>
+            <li>Linux (tested) or macOS (expected to work, not yet tested). Windows isn't supported: cleanup uses <code>fcntl</code>.</li>
+            <li>Node 18+ only for the experimental function hooks</li>
+          </ul>
+        </div>
+      </details>
+      <details>
+        <summary>Development</summary>
+        <div>
+<pre><code>python3 -m unittest discover -s tests   # hook handlers, reports, dashboard (runs in CI)
+claude plugin test .                     # hooks/*.test.ts on the real engine
+claude plugin validate .                 # marketplace, manifest and hooks.json
+npx -p typescript tsc --noEmit -p .      # type-check the hooks module (local only)</code></pre>
+          <p>The type-check needs <code>.claude-plugin/types/</code>, which Claude Code writes the first time it loads the plugin from a folder (<code>claude --plugin-dir /path/to/kiasi</code>). It's early-access API and not committed, so the type-check runs locally only.</p>
+        </div>
+      </details>
+      <details>
+        <summary>Uninstall</summary>
+        <div>
+          <p>Run <code>/kiasi:limits remove</code> if you set up the status line, then <code>/plugin uninstall kiasi</code>. Claude Code deletes <code>${CLAUDE_PLUGIN_DATA}</code> when the plugin is uninstalled from its last install location; pass <code>--keep-data</code> to keep it. <code>~/.claude/kiasi/</code> is never removed automatically; delete it yourself if you want it gone.</p>
+        </div>
+      </details>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span><i>kiasi</i> (Swahili): measure, moderation.</span>
+    <span><a href="https://github.com/raj-rangani/kiasi">GitHub</a> · <a href="https://github.com/raj-rangani/kiasi/issues">Issues</a> · <a href="https://github.com/raj-rangani/kiasi/blob/main/LICENSE">MIT</a> © 2026 Raj Rangani</span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  try { var saved = localStorage.getItem('kiasi-theme'); if (saved) root.dataset.theme = saved; } catch (e) {}
+  document.getElementById('theme').addEventListener('click', function () {
+    var dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    root.dataset.theme = dark ? 'light' : 'dark';
+    try { localStorage.setItem('kiasi-theme', root.dataset.theme); } catch (e) {}
+  });
+  document.querySelectorAll('.copy').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var text = Array.prototype.map.call(document.getElementById(btn.dataset.copy).childNodes, function (n) {
+        return n.classList && n.classList.contains('p') ? '' : n.textContent;
+      }).join('');
+      var done = function (label) { btn.textContent = label; setTimeout(function () { btn.textContent = 'Copy'; }, 1600); };
+      if (navigator.clipboard) navigator.clipboard.writeText(text).then(function () { done('Copied'); }, function () { done('Select it'); });
+      else done('Select it');
+    });
+  });
+})();
+</script>
+</body>
+</html>

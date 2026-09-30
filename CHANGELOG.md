@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+- Website at https://raj-rangani.github.io/kiasi/ (`docs/index.html`, served by GitHub Pages from `/docs`): rules, dashboard tour, install steps, privacy and the full reference.
+- README trimmed to the pitch, quick start and a link to the website, with the new Kiasi logo (`docs/logo-light.svg`, `docs/logo-dark.svg`).
 - README rewritten for first-time visitors: quick start, a table of every rule, the commands, and dashboard screenshots (`docs/`, fictional sample data).
 
 ## 0.2.0 - 2026-09-30
