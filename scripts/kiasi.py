@@ -663,6 +663,8 @@ def handle_tool_output(payload):
         kind = "outside-read"
     elif tool_name == "Bash" and len(body) > constants.CAP_BULK_CHARS and is_bulk_command(command):
         kind = "test" if re.search(constants.TEST_COMMAND_PATTERN, command) else "bulk"
+    elif tool_name == "Bash" and len(body) > constants.CAP_BASH_CHARS:
+        kind = "bash"
     elif tool_name.startswith("mcp__") and not tool_name.startswith(constants.MCP_CAP_EXEMPT_PREFIX) and len(text) > constants.CAP_MCP_CHARS:
         kind = "mcp"
     if not kind and not cleaned:
@@ -678,6 +680,11 @@ def handle_tool_output(payload):
         shown = failure_cut(body, saved)
     elif kind == "bulk":
         shown = bulk_cut(body, saved)
+    elif kind == "bash":
+        resp = payload.get("tool_response")
+        failed = isinstance(resp, dict) and (bool(resp.get("stderr")) or resp.get("exitCode") not in (None, 0))
+        shown = (failure_cut(body, saved) if failed else bulk_cut(body, saved)) \
+            or head_cut(body, constants.CAP_BASH_HEAD_CHARS, saved, "command output")
     if shown is None and cleaned:
         kind, shown = "clean", body + f"\n[kiasi removed colour codes and repeated lines; original output saved at {saved}]"
     if shown is None:

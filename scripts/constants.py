@@ -124,6 +124,8 @@ OUTSIDE_READ_PATTERN = r"(/\.claude/projects/|^/tmp/|\.(log|jsonl)$)"
 CAP_MCP_CHARS = 8_000
 CAP_MCP_HEAD_CHARS = 6_000
 MCP_CAP_EXEMPT_PREFIX = "mcp__kiasi__"
+CAP_BASH_CHARS = 12_000
+CAP_BASH_HEAD_CHARS = 6_000
 CAP_BULK_CHARS = 6_000
 BULK_HEAD_LINES = 40
 BULK_TAIL_LINES = 20
@@ -297,6 +299,7 @@ PROJECT_FILE_NAME = ".kiasi.json"
 PROJECT_KEYS = {
     "output_cap_chars": "CAP_OUTSIDE_READ_CHARS",
     "mcp_cap_chars": "CAP_MCP_CHARS",
+    "bash_cap_chars": "CAP_BASH_CHARS",
     "web_cap_chars": "CAP_WEB_CHARS",
     "read_nudge_chars": "READ_NUDGE_CHARS",
     "paste_refusal_chars": "PASTE_BLOCK_CHARS",
@@ -346,6 +349,7 @@ LIMIT_GROUP_SPAN = {"session": 5 * 3600, "weekly": 7 * 86400}
 # dashboard's session detail. A jump is one step growing the context this much.
 PM_JUMP_TOKENS = 25_000
 PM_STARTUP_TOKENS = 30_000
+PM_BASH_CAPS = 3
 PM_MAX_FINDINGS = 5
 STATUSLINE_CHAIN_NAME = "statusline-chain.json"
 STATUSLINE_SCRIPT_NAME = "statusline.py"

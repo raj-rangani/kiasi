@@ -429,6 +429,11 @@ def postmortem(info, acts, steps_per_prompt, mean_context):
         elif a["kind"] == "loop":
             findings.append({"label": a["label"], "cost": 0,
                              "fix": "change approach after two identical failures instead of retrying"})
+    bash_caps = [a for a in acts if a["kind"] == "cap" and a["record"].get("kind") in ("bash", "bulk", "test")]
+    if len(bash_caps) >= constants.PM_BASH_CAPS:
+        findings.append({"label": f"{len(bash_caps)} long command outputs were capped in this session",
+                         "cost": 0,
+                         "fix": "run scan-only commands through mcp__kiasi__run so only a digest ever enters the conversation"})
     findings.sort(key=lambda f: -f["cost"])
     return findings[: constants.PM_MAX_FINDINGS]
 

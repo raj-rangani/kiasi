@@ -504,6 +504,36 @@ class TestSandbox(KiasiTestCase):
         self.assertTrue(pattern.fullmatch("toolu_abc123.txt"))
 
 
+class TestBashCap(KiasiTestCase):
+    def payload(self, text, tool_use_id, stderr=""):
+        response = {"stdout": text}
+        if stderr:
+            response["stderr"] = stderr
+        return {"hook_event_name": "PostToolUse", "session_id": "s1", "tool_use_id": tool_use_id,
+                "tool_name": "Bash", "tool_input": {"command": "./scan.sh"}, "tool_response": response}
+
+    def test_long_plain_output_gets_the_trimmed_digest(self):
+        text = "\n".join(f"line {i}" for i in range(2000))
+        out = kiasi.handle_tool_output(self.payload(text, "toolu_bash1"))
+        shown = out["hookSpecificOutput"]["updatedToolOutput"]
+        self.assertIn("[kiasi trimmed", shown)
+        self.assertIn("line 1999", shown, "the tail survives")
+        self.assertTrue((constants.OUTPUT_DIR / "toolu_bash1.txt").exists())
+
+    def test_failed_output_keeps_failure_lines(self):
+        text = "\n".join(["ok step passed"] * 900 + ["FAIL: test_x", "AssertionError: 1 != 2"] + ["ok step passed"] * 900)
+        out = kiasi.handle_tool_output(self.payload(text, "toolu_bash2", stderr="exit 1"))
+        shown = out["hookSpecificOutput"]["updatedToolOutput"]
+        self.assertIn("AssertionError", shown)
+
+    def test_single_line_monster_falls_back_to_head_cut(self):
+        out = kiasi.handle_tool_output(self.payload("x" * 15_000, "toolu_bash3"))
+        self.assertIn("[kiasi kept the first", out["hookSpecificOutput"]["updatedToolOutput"])
+
+    def test_output_under_the_cap_passes(self):
+        self.assertIsNone(kiasi.handle_tool_output(self.payload("y" * 11_000, "toolu_bash4")))
+
+
 class TestMcpCap(KiasiTestCase):
     def test_big_mcp_output_is_capped_and_saved(self):
         payload = {"hook_event_name": "PostToolUse", "session_id": "s1", "tool_use_id": "toolu_mcp1",
@@ -666,6 +696,14 @@ class TestPostmortem(KiasiTestCase):
     def test_a_lean_session_has_no_findings(self):
         info = {"contexts": [8_000, 9_000], "steps": [1, 2], "prompts": [0]}
         self.assertEqual(self.lens.postmortem(info, [], [2], 8_500), [])
+
+    def test_repeated_bash_caps_get_the_sandbox_advisory(self):
+        info = {"contexts": [8_000, 9_000], "steps": [1, 2], "prompts": [0]}
+        acts = [{"kind": "cap", "label": "", "record": {"kind": "bash"}} for _ in range(3)]
+        findings = self.lens.postmortem(info, acts, [2], 8_500)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("3 long command outputs were capped", findings[0]["label"])
+        self.assertIn("mcp__kiasi__run", findings[0]["fix"])
 
 
 class TestStatuslineHistory(KiasiTestCase):
