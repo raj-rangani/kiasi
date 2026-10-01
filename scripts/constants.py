@@ -93,6 +93,11 @@ EDIT_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
 READ_SKIP_MIN_CHARS = 2000
 READ_SKIP_REASON = ("kiasi: {path}{span} is unchanged since you read it earlier in this conversation, so its text is already in your context. "
                     "Use that copy. If it is no longer in your context, repeat the same Read and it will go through.")
+READ_NUDGE_CHARS = 30_000
+READ_NUDGE_SKIP_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".ipynb"}
+READ_NUDGE_REASON = ("kiasi: {path} is {chars} chars and this Read has no offset or limit. Read only the section you need "
+                     "(offset and limit around the lines you want, from a search hit or a grep), or use mcp__kiasi__distill to derive "
+                     "the answer without reading it. If you truly need the whole file, repeat the same Read and it will go through.")
 AGENT_DEFAULT_MODEL = {
     "Explore": "haiku",
     "Plan": "sonnet",
@@ -116,6 +121,9 @@ CAP_WEB_HEAD_CHARS = 6_000
 CAP_OUTSIDE_READ_CHARS = 12_000
 CAP_OUTSIDE_READ_HEAD_CHARS = 8_000
 OUTSIDE_READ_PATTERN = r"(/\.claude/projects/|^/tmp/|\.(log|jsonl)$)"
+CAP_MCP_CHARS = 8_000
+CAP_MCP_HEAD_CHARS = 6_000
+MCP_CAP_EXEMPT_PREFIX = "mcp__kiasi__"
 CAP_BULK_CHARS = 6_000
 BULK_HEAD_LINES = 40
 BULK_TAIL_LINES = 20
@@ -172,6 +180,17 @@ BUDGET_TOP_OUTPUTS = 8
 BUDGET_BIG_OUTPUT_CHARS = 20_000
 BUDGET_HIGH_CONTEXT_TOKENS = 200_000
 
+# Sandbox tools (mcp__kiasi__run, mcp__kiasi__distill → scripts/sandbox.py): the full
+# output never enters the conversation; it is saved under outputs/ and only a digest returns.
+SANDBOX_TIMEOUT_SECONDS = 120
+SANDBOX_TIMEOUT_MAX_SECONDS = 600
+RUN_HEAD_LINES = 15
+RUN_TAIL_LINES = 10
+RUN_ERROR_LINES = 20
+RUN_LINE_CHARS = 200
+DISTILL_RESULT_CHARS = 4_000
+DISTILL_ERROR_CHARS = 2_000
+
 SEARCH_DB = LOG_DIR / "search.db"
 SEARCH_DIRS = (OUTPUT_DIR, PASTE_DIR, NOTES_DIR, CHECKPOINT_DIR)
 SEARCH_SUFFIXES = {".txt", ".md", ".jsonl", ".json"}
@@ -180,6 +199,7 @@ SEARCH_RESULTS = 8
 SEARCH_SNIPPET_TOKENS = 40
 SEARCH_WORD_ENDINGS = r"(?:s|es|ed|ing|er)?"
 SEARCH_AVG_CHARS = 20_000
+SEARCH_HIT_LINES = 5
 
 LENS_FILE = LOG_DIR / "lens.json.gz"  # gzipped; the dashboard server sends it as is with Content-Encoding: gzip
 LENS_MAX_ACTIONS = 2000
@@ -239,7 +259,7 @@ STORAGE_LIST_ROWS = 200
 STORAGE_HISTORY_ROWS = 100
 # Only files whose names Kiasi itself writes are ever touched; anything else in these folders stays.
 CLEANUP_PATTERNS = {
-    "outputs": r"(toolu_[A-Za-z0-9_-]+|compact-[0-9a-f]{8}-\d{8}-\d{6})\.txt",
+    "outputs": r"(toolu_[A-Za-z0-9_-]+|compact-[0-9a-f]{8}-\d{8}-\d{6}|(run|distill)-\d{8}-\d{6}-\d+)\.txt",
     "checkpoints": r"[0-9a-f]{8}-\d+\.md",
     "pastes": r"[0-9a-f-]{36}-\d+\.txt",
     "sessions": r"[0-9a-f-]{36}\.json",
@@ -269,6 +289,37 @@ SUBAGENT_STEP_LIMIT = _env_int("CLAUDE_PLUGIN_OPTION_TURN_CALL_BUDGET", SUBAGENT
 TURN_STOP_STEPS = _env_int("CLAUDE_PLUGIN_OPTION_TURN_CALL_BUDGET", TURN_STOP_STEPS)
 PASTE_BLOCK_CHARS = _env_int("CLAUDE_PLUGIN_OPTION_PASTE_REFUSAL_CHARS", PASTE_BLOCK_CHARS)
 COMPACTION_WINDOW_TEXT = os.environ.get("CLAUDE_PLUGIN_OPTION_COMPACTION_WINDOW_TEXT", "200000")
+
+# Per-project overrides: a .kiasi.json at the project root (the session's cwd) tunes
+# caps and budgets for that codebase. It wins over the env knobs above, since it is
+# the more specific setting; unknown keys and non-positive values are ignored.
+PROJECT_FILE_NAME = ".kiasi.json"
+PROJECT_KEYS = {
+    "output_cap_chars": "CAP_OUTSIDE_READ_CHARS",
+    "mcp_cap_chars": "CAP_MCP_CHARS",
+    "web_cap_chars": "CAP_WEB_CHARS",
+    "read_nudge_chars": "READ_NUDGE_CHARS",
+    "paste_refusal_chars": "PASTE_BLOCK_CHARS",
+    "turn_call_budget": "TURN_STOP_STEPS",
+    "turn_warn_steps": "TURN_WARN_STEPS",
+    "subagent_call_budget": "SUBAGENT_STEP_LIMIT",
+}
+
+
+def apply_project(cwd):
+    """Overlay .kiasi.json from the project root onto this module. Fail-open."""
+    applied = {}
+    try:
+        import json as _json
+        raw = _json.loads((Path(cwd) / PROJECT_FILE_NAME).read_text(encoding="utf-8"))
+        for key, name in PROJECT_KEYS.items():
+            value = raw.get(key)
+            if isinstance(value, (int, float)) and int(value) > 0:
+                globals()[name] = int(value)
+                applied[name] = int(value)
+    except (OSError, ValueError, TypeError):
+        pass
+    return applied
 SYNC_TIMEOUT_SECONDS = 120
 
 # The dashboard answers only requests addressed to the loopback names it listens on,
@@ -281,6 +332,21 @@ RATE_LIMITS_NAME = "rate-limits.json"
 LEGACY_LIMITS_NAME = "limits.json"
 LIMIT_WARN_PERCENT = 75
 LIMIT_CRITICAL_PERCENT = 90
+
+# Burn-rate forecast: the statusline wrapper appends every changed limit reading to
+# limits-history.jsonl; the dashboard projects a run-out time from the points of the
+# current window. Under FORECAST_MIN_SPAN_SECONDS of history the forecast stays quiet —
+# a projection from less than four hours of a week is noise, not a pace.
+LIMITS_HISTORY_NAME = "limits-history.jsonl"
+FORECAST_MIN_POINTS = 2
+FORECAST_MIN_SPAN_SECONDS = 4 * 3600
+LIMIT_GROUP_SPAN = {"session": 5 * 3600, "weekly": 7 * 86400}
+
+# Session postmortem: deterministic findings ranked by token cost, shown in the
+# dashboard's session detail. A jump is one step growing the context this much.
+PM_JUMP_TOKENS = 25_000
+PM_STARTUP_TOKENS = 30_000
+PM_MAX_FINDINGS = 5
 STATUSLINE_CHAIN_NAME = "statusline-chain.json"
 STATUSLINE_SCRIPT_NAME = "statusline.py"
 CLAUDE_SETTINGS_FILE = Path.home() / ".claude" / "settings.json"

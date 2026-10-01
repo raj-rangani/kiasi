@@ -47,6 +47,13 @@ function actionRows(rows) {
     <span class="saved${a.saved ? '' : ' zero'}">${a.saved ? fmtM(a.saved) : '·'}</span><span class="steps">${a.kind === 'turn_stop' ? `${a.later_steps} after` : a.later_steps ? `× ${a.later_steps}` : ''}</span></div>${openAction === i ? `<div class="detail"><p>${esc(a.formula || 'no token effect is attributed to this row; it is counted')}</p><pre>${esc(JSON.stringify(a.record, null, 1))}</pre></div>` : ''}`).join('');
 }
 
+function postmortemList(s) {
+  const rows = s.findings || [];
+  if (!rows.length) return '';
+  return `<h3 class="sub" data-jump="Postmortem">What cost the most</h3><ol class="postmortem">${rows.map(f =>
+    `<li><span class="pm-cost">${f.cost ? fmtM(f.cost) : '·'}</span><div>${esc(f.label)}<small>${esc(f.fix)}</small></div></li>`).join('')}</ol>`;
+}
+
 function billSplit(s, d) {
   const rows = s.prompt_rows || [];
   const bands = [['under the warning', r => r.steps < d.settings.turn_warn_steps, 'hist'], ['warned', r => r.steps >= d.settings.turn_warn_steps && r.steps < d.settings.turn_stop_steps, 'delegated'], ['stopped', r => r.steps >= d.settings.turn_stop_steps, 'red']];
@@ -82,6 +89,7 @@ function renderDetail(d) {
     <h3 class="sub" data-jump="Context">Context at every step</h3>
     <div class="chart">${sessionSvg(s, d.settings, panelWidth(), DETAIL_HEIGHT, true)}</div>
     <div class="legend"><span><i class="tick"></i>prompt</span><span><i class="ring"></i>compaction</span><span><i class="ring pruned"></i>pruned compaction</span><span><i class="amber"></i>re-read check</span><span><i class="red"></i>turn stopped</span><span><i class="line"></i>warning</span><span><i class="line warn"></i>hard limit</span></div>
+    ${postmortemList(s)}
     <h3 class="sub" data-jump="Bill">Where the bill went</h3>${billSplit(s, d)}
     <h3 class="sub">Prompts</h3><p class="hist-note">Each prompt's cost is its context summed over the steps it ran. Prompt text is never logged.</p>${promptTable(s, d)}
     <h3 class="sub" data-jump="Actions">Kiasi actions in this session</h3>${actionRows(rows) || '<div class="empty">None logged.</div>'}`;

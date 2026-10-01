@@ -381,3 +381,9 @@ button.store-row:hover .store-name b, button.store-row:focus-visible .store-name
 
 abbr.est { margin-left: 5px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); text-decoration: none; cursor: help; font-weight: 400; font-style: normal; }
 .est-note { margin: 24px 0 0; color: var(--muted); font-size: 13px; }
+
+.postmortem { list-style: none; margin: 0 0 8px; padding: 0; }
+.postmortem li { display: flex; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--rule); align-items: baseline; }
+.postmortem li div { flex: 1; }
+.postmortem li small { display: block; color: var(--sub); margin-top: 2px; }
+.pm-cost { min-width: 58px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600; }

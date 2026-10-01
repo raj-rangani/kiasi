@@ -47,11 +47,14 @@ function limitColumn(item, now, first, stale, updated) {
   const paceLine = expired ? 'no reading since'
     : stale ? `as of ${esc(updated.toLocaleString([], WHEN_OPTS))}`
     : pace == null ? '' : paceText(used, pace);
+  const runOut = item.run_out_at && !expired ? new Date(item.run_out_at * 1000) : null;
+  const runOutLine = runOut && resets && runOut < resets && runOut > now && !stale
+    ? ` · at this pace runs out <strong>${esc(runOut.toLocaleString([], WHEN_OPTS))}</strong>, before the reset` : '';
   return `<div class="lim ${tone}${item === first ? ' first' : ''}${stale ? ' old' : ''}" role="group" aria-label="${esc(item.label)}">`
     + `<div class="lim-head"><span>${esc(item.label)}</span>${item === first ? '<span class="lim-first">runs out first</span>' : ''}</div>`
     + `<div class="lim-value">${expired ? 'new' : `${used}%`}<small>used</small></div>`
     + `<span class="lim-bar" role="meter" aria-valuenow="${used}" aria-valuemin="0" aria-valuemax="100" aria-label="${esc(item.label)}"><i style="width:${used}%"></i>${pace != null ? `<b style="left:${pace}%" title="${pace}% of the window gone"></b>` : ''}</span>`
-    + `<p>${resetLine}<br>${paceLine}</p></div>`;
+    + `<p>${resetLine}<br>${paceLine}${runOutLine}</p></div>`;
 }
 
 function renderLimits(l) {

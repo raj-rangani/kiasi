@@ -396,6 +396,43 @@ def prompt_rows(info):
     return rows
 
 
+def postmortem(info, acts, steps_per_prompt, mean_context):
+    """Deterministic ranking of what cost this session the most, with the rule that avoids it."""
+    contexts, steps = info["contexts"], info["steps"]
+    findings = []
+    for i in range(1, len(contexts)):
+        jump = contexts[i] - contexts[i - 1]
+        later = len(steps) - i - 1
+        if jump >= constants.PM_JUMP_TOKENS and later > 0:
+            findings.append({"label": f"step {i + 1} added {jump // 1000}k tokens of context in one step",
+                             "cost": jump * later,
+                             "fix": "read by section, or derive the answer out of context with mcp__kiasi__distill or mcp__kiasi__run"})
+    if contexts and contexts[0] >= constants.PM_STARTUP_TOKENS:
+        findings.append({"label": f"the session started at {contexts[0] // 1000}k tokens before any work",
+                         "cost": contexts[0] * len(steps),
+                         "fix": "every step re-sends this; trim always-on MCP servers, startup hooks and CLAUDE.md"})
+    long_turns = [c for c in steps_per_prompt if c >= constants.TURN_STOP_STEPS]
+    if long_turns:
+        findings.append({"label": f"{len(long_turns)} turn(s) ran {constants.TURN_STOP_STEPS}+ steps",
+                         "cost": sum(long_turns) * mean_context,
+                         "fix": "checkpoint the remaining work to a file or hand it to one subagent at the warning"})
+    compactions = [a for a in acts if a["kind"] == "compaction"]
+    if compactions:
+        findings.append({"label": f"compacted {len(compactions)} time(s) mid-task",
+                         "cost": sum(a["record"].get("context_tokens", 0) for a in compactions),
+                         "fix": "one task per session: /clear at the task switch instead of compacting mid-task"})
+    for a in acts:
+        if a["kind"] == "read_retry":
+            findings.append({"label": f"whole read of {a['record'].get('path', '')} repeated after the skip and let through",
+                             "cost": 0,
+                             "fix": "the file was unchanged and its first read is still in context; search that instead"})
+        elif a["kind"] == "loop":
+            findings.append({"label": a["label"], "cost": 0,
+                             "fix": "change approach after two identical failures instead of retrying"})
+    findings.sort(key=lambda f: -f["cost"])
+    return findings[: constants.PM_MAX_FINDINGS]
+
+
 def session_records(sessions, actions):
     per_session = defaultdict(list)
     for a in actions:
@@ -408,12 +445,14 @@ def session_records(sessions, actions):
             if kind:
                 marks[min(len(info["steps"]) - 1, bisect_left(info["steps"], epoch_local(a["ts"])))].append(kind)
         steps_per_prompt = [count for count, _ in prompt_steps(info) if count]
+        mean_context = int(sum(info["contexts"]) / len(info["contexts"]))
         records.append({
             "session": session, "short": session[:8], "project": info["project"], "day": local_day(info["steps"][0]), "start": local_stamp(info["steps"][0]),
             "prompts": len(info["prompts"]), "steps": len(info["steps"]), "mean_steps": round(sum(steps_per_prompt) / max(1, len(steps_per_prompt)), 1),
             "long_turns": sum(1 for c in steps_per_prompt if c >= constants.TURN_STOP_STEPS),
             "startup": info["contexts"][0],
-            "mean_context": int(sum(info["contexts"]) / len(info["contexts"])), "peak": max(info["contexts"]), "bill": info["reread"],
+            "mean_context": mean_context, "peak": max(info["contexts"]), "bill": info["reread"],
+            "findings": postmortem(info, per_session.get(session, []), steps_per_prompt, mean_context),
             "compactions": max(sum(1 for a in per_session.get(session, []) if a["kind"] == "compaction"),
                                sum(1 for a in per_session.get(session, []) if a["kind"] in ("pruned", "summary"))),
             "actions": len(per_session.get(session, [])), "saved": sum(a["saved"] for a in per_session.get(session, [])),

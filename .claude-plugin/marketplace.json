@@ -9,7 +9,7 @@
       "name": "kiasi",
       "source": "./",
       "description": "Output caps, turn budgets, refused mega-pastes, deterministic pruning at compaction, a searchable store of everything it cut, and a local dashboard of what it saved.",
-      "version": "0.2.0"
+      "version": "0.3.0"
     }
   ]
 }

@@ -350,6 +350,10 @@ def handle_agent(payload):
 def response_text(tool_name, response):
     if isinstance(response, str):
         return response
+    if isinstance(response, list):
+        if all(isinstance(block, dict) and block.get("type") == "text" for block in response):
+            return "\n".join(block.get("text", "") for block in response)
+        return ""
     if not isinstance(response, dict):
         return json.dumps(response, ensure_ascii=False)
     if tool_name == "Bash":
@@ -490,6 +494,27 @@ def forget_reads(session_id):
         save_session(session_id, state)
 
 
+def read_nudge(payload, tool_input, session_id, state):
+    path = tool_input.get("file_path") or ""
+    if tool_input.get("offset") or tool_input.get("limit") or os.path.splitext(path)[1].lower() in constants.READ_NUDGE_SKIP_SUFFIXES:
+        return None
+    if path.startswith(str(constants.DATA_DIR)):
+        return None
+    stamp = file_stamp(path)
+    if not stamp or stamp[1] < constants.READ_NUDGE_CHARS:
+        return None
+    nudges = state.setdefault("read_nudges", {}).setdefault(reader_key(payload), [])
+    if path in nudges:
+        nudges.remove(path)
+        save_session(session_id, state)
+        return None
+    nudges.append(path)
+    save_session(session_id, state)
+    log_event({"event": "read_nudge", "session_id": session_id, "path": path, "chars": stamp[1], "agent_id": payload.get("agent_id")})
+    return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                   "permissionDecisionReason": constants.READ_NUDGE_REASON.format(path=path, chars=stamp[1])}}
+
+
 def handle_read_check(payload):
     tool_input = payload.get("tool_input") or {}
     session_id = payload.get("session_id", "")
@@ -498,7 +523,7 @@ def handle_read_check(payload):
     key = read_key(tool_input)
     entry = reads.get(key)
     if not entry:
-        return None
+        return read_nudge(payload, tool_input, session_id, state)
     path = tool_input.get("file_path", "")
     if file_stamp(path) != entry.get("stamp"):
         reads.pop(key)
@@ -638,6 +663,8 @@ def handle_tool_output(payload):
         kind = "outside-read"
     elif tool_name == "Bash" and len(body) > constants.CAP_BULK_CHARS and is_bulk_command(command):
         kind = "test" if re.search(constants.TEST_COMMAND_PATTERN, command) else "bulk"
+    elif tool_name.startswith("mcp__") and not tool_name.startswith(constants.MCP_CAP_EXEMPT_PREFIX) and len(text) > constants.CAP_MCP_CHARS:
+        kind = "mcp"
     if not kind and not cleaned:
         return None
     saved = save_output(payload.get("tool_use_id"), text)
@@ -645,6 +672,8 @@ def handle_tool_output(payload):
         shown = head_cut(text, constants.CAP_WEB_HEAD_CHARS, saved, "web result")
     elif kind == "outside-read":
         shown = head_cut(text, constants.CAP_OUTSIDE_READ_HEAD_CHARS, saved, "file")
+    elif kind == "mcp":
+        shown = head_cut(text, constants.CAP_MCP_HEAD_CHARS, saved, "tool result")
     elif kind == "test":
         shown = failure_cut(body, saved)
     elif kind == "bulk":
@@ -943,6 +972,7 @@ HANDLERS = {
 
 def main():
     payload = json.loads(sys.stdin.read() or "{}")
+    constants.apply_project(payload.get("cwd") or "")
     handler = HANDLERS.get(payload.get("hook_event_name", ""))
     if not handler:
         return

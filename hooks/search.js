@@ -1,6 +1,5 @@
 import {
-  SEARCH_SCRIPT, SEARCH_TOOL, SEARCH_TOOL_FULL_NAME, SEARCH_DEFAULT_LIMIT, SEARCH_MAX_LIMIT, SEARCH_TIMEOUT_MS,
-  SEARCH_DESCRIPTION, SEARCH_INPUT_SCHEMA,
+  SEARCH_SCRIPT, SEARCH_TOOL_FULL_NAME, SEARCH_DEFAULT_LIMIT, SEARCH_MAX_LIMIT, SEARCH_TIMEOUT_MS,
 } from './constants.js';
 
 function limitOf(input) {
@@ -23,9 +22,5 @@ async function runSearch($, input) {
 }
 
 export function registerSearch(on) {
-  on('session.start', async ($, e, next) => {
-    await $.tool.register({ name: SEARCH_TOOL, description: SEARCH_DESCRIPTION, inputSchema: SEARCH_INPUT_SCHEMA });
-    return next(e);
-  });
   on('tool.call', { tool: SEARCH_TOOL_FULL_NAME }, ($, e) => runSearch($, e));
 }

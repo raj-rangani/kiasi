@@ -84,6 +84,11 @@ def matches(body, clauses):
     return counts
 
 
+def hit_lines(body, patterns):
+    """Sorted 1-based line numbers of every hit, so the file can be read by section."""
+    return sorted({body.count("\n", 0, m.start()) + 1 for p in patterns for m in p.finditer(body)})
+
+
 def snippet(body, patterns):
     """About SEARCH_SNIPPET_TOKENS words around the first hit, with every hit in [brackets]."""
     first = min((m.start() for m in (p.search(body) for p in patterns) if m), default=0)
@@ -99,7 +104,7 @@ def snippet(body, patterns):
 
 
 def search(words, limit):
-    """([(path, snippet, score)] best first, files scanned); rarer words and repeated hits score higher, as in bm25."""
+    """([(path, snippet, score, lines)] best first, files scanned); rarer words and repeated hits score higher, as in bm25."""
     clauses = parse(words)
     wanted = [p for kind, patterns in clauses if kind != "none" for p in patterns]
     if not wanted:
@@ -117,7 +122,7 @@ def search(words, limit):
         length = max(1, len(body) / constants.SEARCH_AVG_CHARS)
         found = [p for p in wanted if counts.get(p)]
         score = sum(math.log(1 + total / df[p]) * counts[p] / (counts[p] + length) for p in found)
-        rows.append((str(path), snippet(body, found), score))
+        rows.append((str(path), snippet(body, found), score, hit_lines(body, found)))
     rows.sort(key=lambda row: -row[2])
     return rows[:limit], total
 
@@ -134,8 +139,10 @@ def main():
     if not rows:
         print(f"no match in {total} files")
         return
-    for path, text, score in rows:
-        print(f"{path}  ({score:.1f})")
+    for path, text, score, lines in rows:
+        shown = ", ".join(str(n) for n in lines[: constants.SEARCH_HIT_LINES])
+        extra = f" +{len(lines) - constants.SEARCH_HIT_LINES} more" if len(lines) > constants.SEARCH_HIT_LINES else ""
+        print(f"{path}  ({score:.1f})  lines {shown}{extra}")
         print("  " + " ".join(text.split()))
 
 

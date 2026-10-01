@@ -10,6 +10,7 @@ are normalised to one shape, and the newest reading wins row by row:
      "setup": "none" | "waiting" | "ready"}
 """
 import json
+import time
 from datetime import datetime
 
 import constants
@@ -80,6 +81,52 @@ def normalize_statusline(data):
     return {"updated": int(data.get("updated") or 0), "source": "statusline", "limits": items}
 
 
+def _history_points():
+    points = []
+    try:
+        with open(constants.DATA_DIR / constants.LIMITS_HISTORY_NAME, encoding="utf-8") as fh:
+            for line in fh:
+                try:
+                    points.append(json.loads(line))
+                except ValueError:
+                    continue
+    except OSError:
+        pass
+    return points
+
+
+def _forecast(points, item, now):
+    """Linear burn from the first and last reading of the current window."""
+    span = constants.LIMIT_GROUP_SPAN.get(item["group"])
+    resets = item.get("resets_at")
+    if not span or not resets or item.get("used") is None:
+        return None
+    mine = [p for p in points
+            if p.get("key") == item["key"] and p.get("used") is not None
+            and resets - span <= p.get("ts", 0) <= now]
+    if len(mine) < constants.FORECAST_MIN_POINTS:
+        return None
+    first, last = mine[0], mine[-1]
+    elapsed, climb = last["ts"] - first["ts"], last["used"] - first["used"]
+    if elapsed < constants.FORECAST_MIN_SPAN_SECONDS or climb <= 0:
+        return None
+    rate = climb / elapsed
+    return {"run_out_at": int(last["ts"] + (100 - last["used"]) / rate),
+            "burn_per_day": round(rate * 86400, 1)}
+
+
+def add_forecast(reading):
+    points = _history_points()
+    now = int(time.time())
+    for item in reading["limits"]:
+        forecast = _forecast(points, item, now)
+        if forecast:
+            item.update(forecast)
+            if forecast["run_out_at"] < (item.get("resets_at") or 0) and item["severity"] == "normal":
+                item["severity"] = "warning"
+    return reading
+
+
 def statusline_installed():
     return (constants.HOME_DIR / constants.STATUSLINE_CHAIN_NAME).is_file()
 
@@ -94,7 +141,7 @@ def get_limits():
     best = readings[0]
     for older in readings[1:]:
         best = _merge(best, older)
-    return dict(best, setup="ready")
+    return add_forecast(dict(best, setup="ready"))
 
 
 def _merge(newer, older):

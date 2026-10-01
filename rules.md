@@ -11,7 +11,9 @@ Every turn re-sends the whole conversation, so context size times turns is the r
 - Every turn has a budget of 60 tool calls or 8M re-read tokens. At the warning, write the remaining work as a checklist to the path kiasi names and end the turn or hand the checklist to one general-purpose subagent. After the stop, only Write, Agent and the final message are allowed.
 - Loop-shaped work (parity, hardening, "anything missing?") is one round per turn: batch commands, run each test suite once, end with the checklist.
 - Subagents get a 40-call budget in their brief; scope review subagents to the diff, never the whole repo.
-- To find something in a saved output, paste, note or checkpoint, use the `mcp__kiasi__search` tool if it is available (needs `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1`), or run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/search.py <words>` and read only the file it names, by section.
+- A command whose output you will only scan (a build, a test run, a long log, curl) goes through the `mcp__kiasi__run` tool when it is available: the full output is saved and searchable, and only a digest enters the conversation.
+- To count, filter or parse something in big files without reading them, use the `mcp__kiasi__distill` tool when it is available: it runs a short python3 or node script over the paths and only what the script prints enters the conversation.
+- To find something in a saved output, paste, note or checkpoint, use the `mcp__kiasi__search` tool if it is available (needs `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1`), or run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/search.py <words>` and read only the file it names, by section, around the hit lines it reports.
 
 ## Compact instructions
 

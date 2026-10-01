@@ -404,7 +404,7 @@ class TestSearch(KiasiTestCase):
         (constants.NOTES_DIR / "proj.jsonl").write_text('{"task": "fix the login redirect"}\n')
 
     def paths(self, *words):
-        return [Path(path).name for path, _, _ in self.search.search(list(words), 8)[0]]
+        return [Path(path).name for path, *_ in self.search.search(list(words), 8)[0]]
 
     def test_all_words_must_appear_and_endings_match(self):
         self.assertEqual(self.paths("login", "timeout"), ["toolu_a.txt"])
@@ -421,6 +421,268 @@ class TestSearch(KiasiTestCase):
         self.assertEqual(total, 3)
         self.assertIn("[login]", rows[0][1])
         self.assertEqual(self.search.search(["nothing-here"], 8), ([], 3))
+
+    def test_rows_carry_hit_line_numbers(self):
+        rows, _ = self.search.search(["timeout"], 8)
+        self.assertEqual(rows[0][3], [2], "'Timeout waiting' is on line 2 of toolu_a.txt")
+
+
+class TestSandbox(KiasiTestCase):
+    def setUp(self):
+        super().setUp()
+        import sandbox
+        self.sandbox = sandbox
+
+    def run_cli(self, *argv):
+        import contextlib
+        import io
+        out = io.StringIO()
+        before = sys.argv
+        sys.argv = ["sandbox.py", *argv]
+        try:
+            with contextlib.redirect_stdout(out), self.assertRaises(SystemExit) as caught:
+                self.sandbox.main()
+        finally:
+            sys.argv = before
+        return caught.exception.code or 0, out.getvalue()
+
+    def test_run_saves_full_output_and_returns_a_digest(self):
+        command = "seq 1 100 && echo 'Error: broke here' && seq 101 200"
+        code, shown = self.run_cli("run", "--command", command)
+        self.assertEqual(code, 0)
+        saved = list(constants.OUTPUT_DIR.glob("run-*.txt"))
+        self.assertEqual(len(saved), 1)
+        self.assertIn("101", saved[0].read_text(), "full output is on disk")
+        self.assertIn("exit 0", shown)
+        self.assertIn("[kiasi trimmed", shown)
+        self.assertIn("Error: broke here", shown, "error lines from the trimmed middle are kept")
+        self.assertNotIn("\n101\n", shown, "the middle stays out of the conversation")
+
+    def test_distill_returns_only_what_the_script_prints(self):
+        big = constants.OUTPUT_DIR / "big.txt"
+        big.write_text("x\n" * 5000)
+        code, shown = self.run_cli("distill", "--code", "import sys; print(sum(1 for _ in open(sys.argv[1])))", "--file", str(big))
+        self.assertEqual(code, 0)
+        self.assertEqual(shown.strip(), "5000")
+
+    def test_distill_overflow_is_saved_and_named(self):
+        code, shown = self.run_cli("distill", "--code", "print('y' * 10000)")
+        self.assertEqual(code, 0)
+        self.assertIn("[kiasi kept the first", shown)
+        saved = list(constants.OUTPUT_DIR.glob("distill-*.txt"))
+        self.assertEqual(len(saved), 1)
+        self.assertEqual(len(saved[0].read_text().strip()), 10000)
+
+    def test_distill_failure_reports_exit_and_stderr(self):
+        code, shown = self.run_cli("distill", "--code", "raise SystemExit('boom')")
+        self.assertEqual(code, 1)
+        self.assertIn("script failed (exit 1)", shown)
+        self.assertIn("boom", shown)
+
+    def test_run_logs_its_saving_as_a_cap_event(self):
+        self.run_cli("run", "--command", "seq 1 500")
+        events = [json.loads(line) for line in constants.EVENT_LOG.read_text().splitlines()]
+        caps = [e for e in events if e.get("event") == "cap" and e.get("kind") == "sandbox"]
+        self.assertEqual(len(caps), 1)
+        self.assertEqual(caps[0]["tool_name"], "mcp__kiasi__run")
+        self.assertGreater(caps[0]["chars"], caps[0]["shown_chars"])
+
+    def test_distill_counts_the_avoided_read(self):
+        big = constants.OUTPUT_DIR / "big.txt"
+        big.write_text("x" * 50_000)
+        self.run_cli("distill", "--code", "print('ok')", "--file", str(big))
+        events = [json.loads(line) for line in constants.EVENT_LOG.read_text().splitlines()]
+        caps = [e for e in events if e.get("event") == "cap" and e.get("kind") == "sandbox"]
+        self.assertEqual(caps[0]["chars"], 50_000, "the saving is the Read the script replaced")
+        self.assertLess(caps[0]["shown_chars"], 10)
+
+    def test_sandbox_files_match_the_cleanup_pattern(self):
+        import re as re_module
+        pattern = re_module.compile(constants.CLEANUP_PATTERNS["outputs"])
+        self.assertTrue(pattern.fullmatch("run-20261001-120000-123.txt"))
+        self.assertTrue(pattern.fullmatch("distill-20261001-120000-123.txt"))
+        self.assertTrue(pattern.fullmatch("toolu_abc123.txt"))
+
+
+class TestMcpCap(KiasiTestCase):
+    def test_big_mcp_output_is_capped_and_saved(self):
+        payload = {"hook_event_name": "PostToolUse", "session_id": "s1", "tool_use_id": "toolu_mcp1",
+                   "tool_name": "mcp__playwright__browser_snapshot", "tool_input": {},
+                   "tool_response": {"content": "snap " * 4000}}
+        result = kiasi.handle_tool_output(payload)
+        shown = result["hookSpecificOutput"]["updatedToolOutput"]
+        self.assertIn("[kiasi kept the first 6000", shown)
+        self.assertTrue((constants.OUTPUT_DIR / "toolu_mcp1.txt").exists())
+
+    def test_mcp_list_of_text_blocks_is_capped(self):
+        payload = {"hook_event_name": "PostToolUse", "session_id": "s1", "tool_use_id": "toolu_lt",
+                   "tool_name": "mcp__playwright__browser_snapshot", "tool_input": {},
+                   "tool_response": [{"type": "text", "text": "A" * 9000}]}
+        result = kiasi.handle_tool_output(payload)
+        self.assertIn("[kiasi kept", result["hookSpecificOutput"]["updatedToolOutput"])
+
+    def test_mcp_image_blocks_pass_untouched(self):
+        payload = {"hook_event_name": "PostToolUse", "session_id": "s1", "tool_use_id": "toolu_img",
+                   "tool_name": "mcp__chrome__computer", "tool_input": {},
+                   "tool_response": [{"type": "image", "data": "B" * 20_000}]}
+        self.assertIsNone(kiasi.handle_tool_output(payload))
+
+    def test_kiasi_own_tools_and_small_outputs_pass(self):
+        own = {"hook_event_name": "PostToolUse", "session_id": "s1", "tool_use_id": "toolu_own",
+               "tool_name": "mcp__kiasi__search", "tool_input": {}, "tool_response": {"content": "hit " * 4000}}
+        small = {"hook_event_name": "PostToolUse", "session_id": "s1", "tool_use_id": "toolu_small",
+                 "tool_name": "mcp__github__list_issues", "tool_input": {}, "tool_response": {"content": "ok"}}
+        self.assertIsNone(kiasi.handle_tool_output(own))
+        self.assertIsNone(kiasi.handle_tool_output(small))
+
+
+class TestReadNudge(KiasiTestCase):
+    def setUp(self):
+        super().setUp()
+        # project files must live outside DATA_DIR, which the nudge exempts
+        self.proj = Path(tempfile.mkdtemp(prefix="kiasi-proj-"))
+
+    def tearDown(self):
+        shutil.rmtree(self.proj, ignore_errors=True)
+        super().tearDown()
+
+    def payload(self, path, **tool_input):
+        return {"hook_event_name": "PreToolUse", "session_id": "s1", "transcript_path": "/tmp/t.jsonl",
+                "tool_name": "Read", "tool_input": {"file_path": str(path), **tool_input}}
+
+    def test_whole_read_of_a_big_file_is_denied_once(self):
+        big = self.proj / "big.py"
+        big.write_text("x = 1\n" * 10_000)
+        first = kiasi.handle_read_check(self.payload(big))
+        self.assertEqual(first["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertIn("mcp__kiasi__distill", first["hookSpecificOutput"]["permissionDecisionReason"])
+        self.assertIsNone(kiasi.handle_read_check(self.payload(big)), "the repeat goes through")
+
+    def test_sectioned_reads_small_files_and_images_pass(self):
+        big = self.proj / "big.py"
+        big.write_text("x = 1\n" * 10_000)
+        image = self.proj / "shot.png"
+        image.write_bytes(b"p" * 40_000)
+        small = self.proj / "small.py"
+        small.write_text("x = 1\n")
+        self.assertIsNone(kiasi.handle_read_check(self.payload(big, offset=10, limit=50)))
+        self.assertIsNone(kiasi.handle_read_check(self.payload(image)))
+        self.assertIsNone(kiasi.handle_read_check(self.payload(small)))
+
+    def test_nudge_exempts_kiasi_data_dir(self):
+        saved = constants.OUTPUT_DIR / "toolu_big.txt"
+        saved.write_text("x" * 40_000)
+        self.assertIsNone(kiasi.handle_read_check(self.payload(saved)),
+                          "reads of kiasi's own saved files are never denied")
+
+
+class TestLimitsForecast(KiasiTestCase):
+    def setUp(self):
+        super().setUp()
+        import usage_limits
+        self.usage_limits = usage_limits
+
+    def write_reading(self, used, resets_at):
+        (constants.DATA_DIR / constants.RATE_LIMITS_NAME).write_text(json.dumps(
+            {"updated": int(time.time()),
+             "rate_limits": {"seven_day": {"used_percentage": used, "resets_at": resets_at}}}))
+
+    def write_history(self, points):
+        lines = [json.dumps({"key": "seven_day", **p}) for p in points]
+        (constants.DATA_DIR / constants.LIMITS_HISTORY_NAME).write_text("\n".join(lines) + "\n")
+
+    def test_steady_burn_projects_a_run_out_before_the_reset(self):
+        now = int(time.time())
+        resets = now + 5 * 86400
+        self.write_reading(40, resets)
+        self.write_history([{"ts": now - 86400, "used": 20, "resets_at": resets},
+                            {"ts": now - 3600, "used": 40, "resets_at": resets}])
+        item = self.usage_limits.get_limits()["limits"][0]
+        self.assertLess(item["run_out_at"], resets, "40 points in a day burns out in ~3 days")
+        self.assertEqual(item["severity"], "warning")
+        self.assertGreater(item["burn_per_day"], 15)
+
+    def test_short_or_flat_history_stays_quiet(self):
+        now = int(time.time())
+        resets = now + 5 * 86400
+        self.write_reading(40, resets)
+        self.write_history([{"ts": now - 600, "used": 39, "resets_at": resets},
+                            {"ts": now - 60, "used": 40, "resets_at": resets}])
+        item = self.usage_limits.get_limits()["limits"][0]
+        self.assertNotIn("run_out_at", item, "under four hours of history is noise")
+
+
+class TestProjectOverrides(KiasiTestCase):
+    def setUp(self):
+        super().setUp()
+        self.before = {name: getattr(constants, name) for name in constants.PROJECT_KEYS.values()}
+
+    def tearDown(self):
+        for name, value in self.before.items():
+            setattr(constants, name, value)
+        super().tearDown()
+
+    def test_kiasi_json_tunes_caps_and_budgets(self):
+        (self.tmp / constants.PROJECT_FILE_NAME).write_text(json.dumps(
+            {"output_cap_chars": 20_000, "turn_call_budget": 80, "mystery_knob": 7, "mcp_cap_chars": -1}))
+        applied = constants.apply_project(self.tmp)
+        self.assertEqual(constants.CAP_OUTSIDE_READ_CHARS, 20_000)
+        self.assertEqual(constants.TURN_STOP_STEPS, 80)
+        self.assertEqual(constants.CAP_MCP_CHARS, self.before["CAP_MCP_CHARS"], "non-positive values are ignored")
+        self.assertEqual(set(applied), {"CAP_OUTSIDE_READ_CHARS", "TURN_STOP_STEPS"})
+
+    def test_missing_or_broken_file_changes_nothing(self):
+        self.assertEqual(constants.apply_project(self.tmp), {})
+        (self.tmp / constants.PROJECT_FILE_NAME).write_text("{not json")
+        self.assertEqual(constants.apply_project(self.tmp), {})
+        self.assertEqual(constants.TURN_STOP_STEPS, self.before["TURN_STOP_STEPS"])
+
+
+class TestBenchmark(KiasiTestCase):
+    def test_every_scenario_cuts_at_least_half(self):
+        import benchmark
+        rows = benchmark.scenarios(benchmark.point_at_tmp())
+        self.assertEqual(len(rows), 6)
+        for name, _rule, chars_in, chars_shown in rows:
+            self.assertLess(chars_shown, chars_in / 2, f"{name} should cut at least half")
+
+
+class TestPostmortem(KiasiTestCase):
+    def setUp(self):
+        super().setUp()
+        import lens
+        self.lens = lens
+
+    def test_findings_are_ranked_by_what_they_cost(self):
+        info = {"contexts": [40_000, 42_000, 90_000, 91_000, 92_000], "steps": [1, 2, 3, 4, 5], "prompts": [0]}
+        acts = [{"kind": "compaction", "label": "", "record": {"context_tokens": 150_000}}]
+        findings = self.lens.postmortem(info, acts, [5], 71_000)
+        labels = [f["label"] for f in findings]
+        self.assertIn("started at 40k", labels[0], "startup × 5 steps = 200k is the biggest cost")
+        self.assertIn("compacted 1 time", labels[1])
+        self.assertIn("step 3 added 48k", labels[2])
+        self.assertTrue(all(f["fix"] for f in findings))
+
+    def test_a_lean_session_has_no_findings(self):
+        info = {"contexts": [8_000, 9_000], "steps": [1, 2], "prompts": [0]}
+        self.assertEqual(self.lens.postmortem(info, [], [2], 8_500), [])
+
+
+class TestStatuslineHistory(KiasiTestCase):
+    def setUp(self):
+        super().setUp()
+        import statusline
+        self.statusline = statusline
+
+    def payload(self, used):
+        return {"rate_limits": {"seven_day": {"used_percentage": used, "resets_at": 1791388800}}}
+
+    def test_only_changed_readings_are_appended(self):
+        self.statusline.save_rate_limits(self.payload(10), self.tmp)
+        self.statusline.save_rate_limits(self.payload(10), self.tmp)
+        self.statusline.save_rate_limits(self.payload(11), self.tmp)
+        lines = (self.tmp / self.statusline.HISTORY_NAME).read_text().splitlines()
+        self.assertEqual([json.loads(line)["used"] for line in lines], [10, 11])
 
 
 class TestCleanup(KiasiTestCase):

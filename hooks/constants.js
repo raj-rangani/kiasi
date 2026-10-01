@@ -37,7 +37,7 @@ export const SEARCH_TOOL_FULL_NAME = 'mcp__kiasi__search';
 export const SEARCH_DEFAULT_LIMIT = 8;
 export const SEARCH_MAX_LIMIT = 20;
 export const SEARCH_TIMEOUT_MS = 20000;
-export const SEARCH_DESCRIPTION = 'Full-text search over the context kiasi\'s saved tool outputs, pasted prompts, session notes and turn checkpoints. Returns the file path, a score and a snippet per match; read the named file by section afterwards instead of re-reading whole files. Every word must appear (common endings like -s, -ed, -ing also match); OR, NOT, "quoted phrases" and a trailing * work.';
+export const SEARCH_DESCRIPTION = 'Full-text search over the context kiasi\'s saved tool outputs, pasted prompts, session notes and turn checkpoints. Returns the file path, a score, the hit line numbers and a snippet per match; read the named file by section (offset and limit around the named lines) afterwards instead of re-reading whole files. Every word must appear (common endings like -s, -ed, -ing also match); OR, NOT, "quoted phrases" and a trailing * work.';
 export const SEARCH_INPUT_SCHEMA = {
   type: 'object',
   properties: {
@@ -45,6 +45,35 @@ export const SEARCH_INPUT_SCHEMA = {
     limit: { type: 'integer', minimum: 1, maximum: SEARCH_MAX_LIMIT, description: `How many files to list (default ${SEARCH_DEFAULT_LIMIT}).` },
   },
   required: ['query'],
+};
+
+export const SANDBOX_SCRIPT = 'sandbox.py';
+export const SANDBOX_DEFAULT_TIMEOUT_S = 120;
+export const SANDBOX_MAX_TIMEOUT_S = 600;
+export const SANDBOX_EXTRA_MS = 10000;
+export const RUN_TOOL = 'run';
+export const RUN_TOOL_FULL_NAME = 'mcp__kiasi__run';
+export const RUN_DESCRIPTION = 'Run a shell command out of context: the full output is saved to kiasi\'s outputs folder (searchable with mcp__kiasi__search) and only a digest — exit code, head, error lines, tail, saved path — enters the conversation. Use it for commands whose output you would only scan: builds, test runs, long logs, curl. Use plain Bash when you need the exact full output or the command changes files you will edit next.';
+export const RUN_INPUT_SCHEMA = {
+  type: 'object',
+  properties: {
+    command: { type: 'string', description: 'The shell command, run with bash -lc from the project directory.' },
+    timeout_s: { type: 'integer', minimum: 1, maximum: SANDBOX_MAX_TIMEOUT_S, description: `Seconds before the command is stopped (default ${SANDBOX_DEFAULT_TIMEOUT_S}).` },
+  },
+  required: ['command'],
+};
+export const DISTILL_TOOL = 'distill';
+export const DISTILL_TOOL_FULL_NAME = 'mcp__kiasi__distill';
+export const DISTILL_DESCRIPTION = 'Derive an answer from files without reading them into context: runs a short python3 or node script, with the file paths as script arguments (sys.argv[1:] / process.argv.slice(2)), and only what it prints enters the conversation, capped at 4000 chars (the overflow is saved and the result names the file). Use it to count, filter, parse or aggregate over big files, including files kiasi saved. It cannot edit files; use Write or Edit for that.';
+export const DISTILL_INPUT_SCHEMA = {
+  type: 'object',
+  properties: {
+    code: { type: 'string', description: 'The script body. Print only the derived answer, not the data.' },
+    language: { type: 'string', enum: ['python', 'node'], description: 'python (default) runs python3 -c, node runs node -e.' },
+    files: { type: 'array', items: { type: 'string' }, description: 'File paths passed to the script as arguments.' },
+    timeout_s: { type: 'integer', minimum: 1, maximum: SANDBOX_MAX_TIMEOUT_S, description: `Seconds before the script is stopped (default ${SANDBOX_DEFAULT_TIMEOUT_S}).` },
+  },
+  required: ['code'],
 };
 
 export const QUIET_EVENT_NAME = 'PluginQuiet';
