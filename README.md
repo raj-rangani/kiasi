@@ -1,4 +1,9 @@
-# <img src="docs/mark.svg" width="28" alt=""> Kiasi
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+  <img src="docs/logo-light.svg" alt="Kiasi" width="150">
+</picture>
+
+**Make your Claude Code limit last.**
 
 Kiasi is a Claude Code plugin that makes your weekly limit last longer. Every step of Claude Code re-sends the whole conversation, so one noisy tool output is paid for again on every step after it. Kiasi keeps that noise out with fixed rules, on your machine, with no model calls and no network.
 

@@ -112,37 +112,48 @@ section { padding: 72px 0 0; }
 .trust span { font-family: var(--mono); font-size: 12px; color: var(--muted); }
 @media (max-width: 760px) { .trust { grid-template-columns: repeat(2, 1fr); } .trust b { font-size: 26px; } }
 
-.calc { background: var(--card); border: 1px solid var(--rule); border-radius: 18px; padding: 24px 28px 28px; display: grid; grid-template-columns: 1fr 1.15fr; gap: 22px 40px; align-items: start; }
-.presets { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-family: var(--mono); font-size: 12px; color: var(--muted); }
-.presets span { margin-right: 4px; }
-.chip { font: inherit; color: var(--ink); background: var(--code); border: 1px solid transparent; border-radius: 999px; padding: 5px 12px; cursor: pointer; transition: background .2s, border-color .2s, transform .2s var(--ease); }
-.chip:hover { transform: translateY(-1px); }
-.chip.on { background: var(--accent); color: #1d1a16; }
-.ctl { margin-bottom: 18px; }
-.ctl label { display: flex; justify-content: space-between; align-items: baseline; font-family: var(--mono); font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
-.ctl output { font-family: var(--mono); font-size: 12px; color: var(--ink); text-transform: none; letter-spacing: 0; background: var(--code); border-radius: 6px; padding: 2px 8px; font-variant-numeric: tabular-nums; transition: transform .2s var(--ease); display: inline-block; }
-.ctl output.bump { transform: scale(1.12); }
-.ctl input[type=range] { width: 100%; margin: 0; accent-color: var(--accent-ink); }
-.ctl .scale { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 2px; }
-.result .row { margin-bottom: 16px; }
-.result .row small { display: flex; justify-content: space-between; align-items: baseline; font-family: var(--mono); font-size: 12px; color: var(--muted); margin-bottom: 7px; }
-.result .row small b { color: var(--ink); font-weight: 400; font-size: 15px; font-variant-numeric: tabular-nums; }
-.strip { display: flex; gap: 1px; height: 22px; border-radius: 6px; overflow: hidden; background: var(--code); }
-.strip i { flex: 1 1 0; min-width: 1px; background: var(--rule); transition: background-color .35s var(--ease); }
-.strip i.land { background: var(--accent); }
-.strip i.hit { background: var(--bad); }
-.strip i.cap { background: var(--good); }
-.strip i.stop { background: repeating-linear-gradient(135deg, var(--rule) 0 3px, transparent 3px 6px); }
-.key { display: flex; flex-wrap: wrap; gap: 4px 14px; font-family: var(--mono); font-size: 11px; color: var(--muted); margin: -6px 0 14px; }
-.key i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; vertical-align: -1px; margin-right: 5px; }
-.delta { display: flex; align-items: flex-start; gap: 14px; margin: 4px 0 6px; }
-.badge { flex: none; font-family: var(--mono); font-size: 13px; color: #1d1a16; background: var(--accent); border-radius: 999px; padding: 4px 11px; font-variant-numeric: tabular-nums; }
-.badge.pop { animation: pop .45s var(--ease); }
-@keyframes pop { 0% { transform: scale(.7); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
-.verdict { font-family: var(--serif); font-size: 22px; line-height: 1.3; margin: 0; }
-.verdict b { font-weight: 400; color: var(--accent-ink); }
-.note { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin: 0; }
-@media (max-width: 760px) { .calc { grid-template-columns: 1fr; padding: 20px; gap: 18px; } .verdict { font-size: 19px; } }
+.bill { background: var(--card); border: 1px solid var(--rule); border-radius: 18px; padding: 22px 26px 26px; display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(250px, 1fr); gap: 18px 32px; align-items: start; }
+.bill-head { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tab { font-family: var(--mono); font-size: 12px; color: var(--muted); background: transparent; border: 1px solid var(--rule); border-radius: 999px; padding: 6px 13px; cursor: pointer; transition: background .2s, color .2s, border-color .2s, transform .2s var(--ease); }
+.tab:hover { transform: translateY(-1px); color: var(--ink); }
+.tab[aria-selected="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.replay { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12px; color: var(--accent-ink); background: none; border: 0; cursor: pointer; padding: 6px 4px; }
+.replay svg { width: 14px; height: 14px; transition: transform .5s var(--ease); }
+.replay:hover svg { transform: rotate(-200deg); }
+.chart { min-width: 0; }
+.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.chart text { font-family: var(--mono); font-size: 10.5px; fill: var(--muted); }
+.chart .axis { stroke: var(--rule); }
+.chart .capline { stroke: var(--good); stroke-dasharray: 3 4; }
+.chart .col rect { transform-box: fill-box; transform-origin: 50% 100%; transform: scaleY(0); transition: transform .4s var(--ease); }
+.chart .col.on rect { transform: none; }
+.chart .ghost { fill: var(--rule); }
+.chart .full { fill: var(--bad); }
+.chart .capped { fill: var(--good); }
+.chart .land { fill: var(--accent); }
+.chart .stopzone { fill: url(#hatch); }
+.chart .stopline { stroke: var(--ink); stroke-dasharray: 2 3; }
+.chart .stoplabel { fill: var(--ink); }
+.chart .stopzone, .chart .stoplabel, .chart .stopline { opacity: 0; transition: opacity .5s var(--ease); }
+.chart.done .stopzone, .chart.done .stoplabel, .chart.done .stopline { opacity: 1; }
+.key { display: flex; flex-wrap: wrap; gap: 4px 14px; font-family: var(--mono); font-size: 11px; color: var(--muted); margin: 10px 0 0; }
+.key i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.receipt { font-family: var(--mono); font-size: 12.5px; background: var(--paper); border: 1px dashed var(--rule); border-radius: 10px; padding: 16px 18px 18px; position: relative; }
+.receipt h4 { margin: 0 0 12px; font: inherit; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.receipt .ln { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; color: var(--muted); }
+.receipt .ln b { font-weight: 400; color: var(--ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.receipt .ln .dots { flex: 1; border-bottom: 1px dotted var(--rule); transform: translateY(-4px); }
+.receipt .ln.bad b { color: var(--bad); }
+.receipt .ln.good b { color: var(--good); }
+.receipt hr { border: 0; border-top: 1px dashed var(--rule); margin: 8px 0; }
+.receipt .total { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-top: 10px; padding-top: 12px; border-top: 2px solid var(--ink); color: var(--ink); }
+.receipt .total b { font-family: var(--serif); font-size: 28px; font-weight: 400; line-height: 1; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.receipt .total small { font-size: 11px; color: var(--muted); margin-left: 4px; }
+.stamp { position: absolute; right: 14px; top: 12px; font-family: var(--mono); font-size: 13px; color: var(--accent-ink); border: 2px solid var(--accent-ink); border-radius: 6px; padding: 2px 8px; transform: rotate(-8deg) scale(1.7); opacity: 0; transition: transform .35s var(--ease), opacity .3s; font-variant-numeric: tabular-nums; }
+.stamp.on { transform: rotate(-8deg) scale(1); opacity: 1; }
+.caption { grid-column: 1 / -1; font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin: 0; }
+@media (max-width: 760px) { .bill { grid-template-columns: 1fr; padding: 18px; gap: 16px; } .replay { margin-left: 0; } .chart text { font-size: 14px; } }
 
 .leaks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .leak { background: var(--card); border: 1px solid var(--rule); border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 8px; }
@@ -274,28 +285,34 @@ footer a { color: var(--muted); }
   <section id="cost">
     <div class="narrow centered">
       <p class="kicker reveal">The cost</p>
-      <h2 class="reveal">What does one noisy output cost you?</h2>
-      <p class="lede reveal">Claude Code has no memory between steps. A tool output lands in context once and is re-sent on every step after it. Pick a case or drag the sliders.</p>
+      <h2 class="reveal">One output. Every step pays for it again.</h2>
+      <p class="lede reveal">Claude Code has no memory between steps. A tool output lands in context once and is re-sent on every step after it. Watch one output run up its bill.</p>
     </div>
-    <div class="calc reveal" id="calc">
-      <div class="presets" role="group" aria-label="Typical cases"><span>Try</span>
-        <button type="button" class="chip on" data-chars="40000" data-at="3" data-steps="40">npm install</button>
-        <button type="button" class="chip" data-chars="60000" data-at="8" data-steps="70">failing test run</button>
-        <button type="button" class="chip" data-chars="25000" data-at="2" data-steps="20">git log</button>
-        <button type="button" class="chip" data-chars="80000" data-at="1" data-steps="120">pasted log</button>
+    <div class="bill reveal" id="bill">
+      <div class="bill-head">
+        <div class="tabs" role="tablist" aria-label="Scenario">
+          <button type="button" class="tab" role="tab" aria-selected="true" data-name="npm install" data-chars="40000" data-at="3" data-steps="40">npm install</button>
+          <button type="button" class="tab" role="tab" aria-selected="false" data-name="failing test run" data-chars="60000" data-at="8" data-steps="70">failing test run</button>
+          <button type="button" class="tab" role="tab" aria-selected="false" data-name="pasted log" data-chars="80000" data-at="1" data-steps="120">pasted log</button>
+        </div>
+        <button type="button" class="replay" id="replay" aria-label="Replay the chart"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M3.2 7a3.8 3.8 0 1 1 1.1 2.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M3.2 3.4V7h3.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>replay</button>
       </div>
-      <div class="controls">
-        <div class="ctl"><label for="chars">Tool output size <output id="chars-out">40,000 chars</output></label><input type="range" id="chars" min="2000" max="80000" step="1000" value="40000"><div class="scale"><span>2k</span><span>cap 12k</span><span>80k</span></div></div>
-        <div class="ctl"><label for="at">Lands at step <output id="at-out">3</output></label><input type="range" id="at" min="1" max="30" step="1" value="3"><div class="scale"><span>1</span><span>30</span></div></div>
-        <div class="ctl"><label for="steps">Steps in the turn <output id="steps-out">40</output></label><input type="range" id="steps" min="5" max="120" step="1" value="40"><div class="scale"><span>5</span><span>stop 60</span><span>120</span></div></div>
+      <div class="chart" id="chart">
+        <svg viewBox="0 0 640 240" role="img" aria-labelledby="chart-title"><title id="chart-title">Tokens re-sent on each step of the turn, with and without Kiasi</title></svg>
+        <div class="key"><span><i style="background:var(--accent)"></i>output lands</span><span><i style="background:var(--bad)"></i>re-sent in full</span><span><i style="background:var(--good)"></i>re-sent capped at 12k chars</span><span><i style="background:repeating-linear-gradient(135deg,var(--rule) 0 2px,transparent 2px 5px)"></i>turn stopped at 60 calls</span></div>
       </div>
-      <div class="result" aria-live="polite">
-        <div class="row"><small><span>Without Kiasi</span><b id="without">0</b></small><div class="strip" id="strip-without" aria-hidden="true"></div></div>
-        <div class="row"><small><span>With Kiasi</span><b id="with">0</b></small><div class="strip" id="strip-with" aria-hidden="true"></div></div>
-        <div class="key"><span><i style="background:var(--accent)"></i>lands</span><span><i style="background:var(--bad)"></i>re-sent in full</span><span><i style="background:var(--good)"></i>re-sent capped</span><span><i style="background:repeating-linear-gradient(135deg,var(--rule) 0 3px,transparent 3px 6px)"></i>turn stopped</span></div>
-        <div class="delta"><span class="badge" id="badge">0%</span><p class="verdict" id="verdict"></p></div>
-        <p class="note">Re-read tokens for this one output, one cell per step. Kiasi caps output at 12,000 chars (the full text is saved to disk) and stops a turn at 60 tool calls. About 4 chars per token.</p>
+      <div class="receipt" aria-live="polite">
+        <span class="stamp" id="stamp">0%</span>
+        <h4 id="r-title">Receipt</h4>
+        <div class="ln"><span>output size</span><i class="dots"></i><b id="r-size">0</b></div>
+        <div class="ln"><span>lands at step</span><i class="dots"></i><b id="r-at">0</b></div>
+        <div class="ln"><span>re-sent on</span><i class="dots"></i><b id="r-steps">0 steps</b></div>
+        <hr>
+        <div class="ln bad"><span>without Kiasi</span><i class="dots"></i><b id="r-without">0</b></div>
+        <div class="ln good"><span>with Kiasi</span><i class="dots"></i><b id="r-with">0</b></div>
+        <div class="total"><span>kept off your limit</span><span><b id="r-kept">0</b><small>tokens</small></span></div>
       </div>
+      <p class="caption">Columns are steps, height is what that step re-sends, the area is the bill. Kiasi caps one output at 12,000 chars (the full text is saved to disk) and stops a turn at 60 tool calls. About 4 chars per token.</p>
     </div>
   </section>
 
@@ -496,71 +513,120 @@ claude plugin validate .                 # manifest, marketplace and hooks.json<
     setInterval(play, 500 + lines.length * 1100 + 5000);
   }
 
-  var CAP = 12000, STOP = 60, CHARS_PER_TOKEN = 4;
-  var chars = document.getElementById('chars'), at = document.getElementById('at'), steps = document.getElementById('steps');
-  var outs = { chars: document.getElementById('chars-out'), at: document.getElementById('at-out'), steps: document.getElementById('steps-out') };
-  var shown = { without: 0, with: 0 };
-  var tween = function (el, key, to) {
-    var from = shown[key]; shown[key] = to;
-    if (still || from === to) { el.textContent = fmt(to) + ' tokens'; return; }
-    var t0 = performance.now();
-    var tick = function (now) {
-      var k = Math.max(0, Math.min(1, (now - t0) / 420));
-      el.textContent = fmt(Math.round(from + (to - from) * (1 - Math.pow(1 - k, 3)))) + ' tokens';
-      if (k < 1) requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
+  var CAP = 12000, STOP = 60, CPT = 4, NS = 'http://www.w3.org/2000/svg';
+  var chart = document.getElementById('chart'), svg = chart.querySelector('svg');
+  var R = {};
+  ['title', 'size', 'at', 'steps', 'without', 'with', 'kept'].forEach(function (k) { R[k] = document.getElementById('r-' + k); });
+  var stamp = document.getElementById('stamp'), tabs = document.querySelectorAll('.tab');
+  var scene = { name: '', chars: 40000, at: 3, steps: 40 }, cols = [], raf = null;
+  var mk = function (tag, attrs, parent) {
+    var el = document.createElementNS(NS, tag);
+    for (var k in attrs) el.setAttribute(k, attrs[k]);
+    (parent || svg).appendChild(el);
+    return el;
   };
-  var strip = function (id, s, a, kind) {
-    var el = document.getElementById(id);
-    while (el.children.length > s) el.removeChild(el.lastChild);
-    while (el.children.length < s) el.appendChild(document.createElement('i'));
+  var label = function (x, y, text, anchor, style) {
+    var t = mk('text', { x: x, y: y, 'text-anchor': anchor || 'middle' });
+    if (style) t.setAttribute('style', style);
+    t.textContent = text;
+    return t;
+  };
+  var build = function () {
+    while (svg.lastChild && svg.lastChild.tagName !== 'title') svg.removeChild(svg.lastChild);
+    cols = [];
+    var W = 640, H = 240, L = 40, RM = 8, T = 18, B = 30, pw = W - L - RM, ph = H - T - B;
+    var s = scene.steps, a = scene.at, top = scene.chars / CPT, capT = Math.min(scene.chars, CAP) / CPT;
+    var y = function (v) { return T + ph - ph * v / top; };
+    var cw = pw / s, bw = Math.max(0.8, cw - Math.min(2, cw * 0.25));
+    var x = function (i) { return L + (i - 1) * cw + (cw - bw) / 2; };
+    var defs = mk('defs');
+    var pat = mk('pattern', { id: 'hatch', patternUnits: 'userSpaceOnUse', width: 6, height: 6, patternTransform: 'rotate(45)' }, defs);
+    mk('rect', { width: 2.5, height: 6, fill: 'var(--paper)' }, pat);
+    mk('line', { 'class': 'axis', x1: L, x2: L + pw, y1: T + ph + 0.5, y2: T + ph + 0.5 });
+    label(L - 6, T + 4, fmt(top), 'end');
+    label(L - 6, T + ph + 4, '0', 'end');
+    if (capT < top) {
+      mk('line', { 'class': 'capline', x1: L, x2: L + pw, y1: y(capT), y2: y(capT) });
+      label(L - 6, y(capT) + 4, fmt(capT), 'end', 'fill:var(--good)');
+    }
+    if (a === 1) label(x(1), T + ph + 18, 'step 1 · lands', 'start', 'fill:var(--accent-ink)');
+    else {
+      if (x(a) - x(1) > 60) label(x(1), T + ph + 18, 'step 1', 'start');
+      label(x(a) + bw / 2, T + ph + 18, 'lands', 'middle', 'fill:var(--accent-ink)');
+    }
+    label(x(s) + bw, T + ph + 18, 'step ' + s, 'end');
     for (var i = 1; i <= s; i++) {
-      var c = '';
-      if (i === a) c = 'land';
-      else if (i > a) c = (kind === 'with' && i > STOP) ? 'stop' : (kind === 'with' && +chars.value > CAP) ? 'cap' : 'hit';
-      el.children[i - 1].className = c;
+      var g = mk('g', { 'class': 'col' });
+      if (i < a) mk('rect', { 'class': 'ghost', x: x(i), y: T + ph - 2, width: bw, height: 2 }, g);
+      else if (i === a) mk('rect', { 'class': 'land', x: x(i), y: y(top), width: bw, height: ph, rx: 1 }, g);
+      else {
+        mk('rect', { 'class': 'full', x: x(i), y: y(top), width: bw, height: ph, rx: 1 }, g);
+        if (i <= STOP) mk('rect', { 'class': 'capped', x: x(i), y: y(capT), width: bw, height: ph * capT / top, rx: 1 }, g);
+      }
+      cols.push(g);
+    }
+    if (s > STOP) {
+      var sx = L + STOP * cw, room = pw - STOP * cw;
+      mk('rect', { 'class': 'stopzone', x: sx, y: T - 2, width: room, height: ph + 2 });
+      mk('line', { 'class': 'stopline', x1: sx, x2: sx, y1: T - 10, y2: T + ph });
+      label(room > 150 ? sx + 5 : L + pw, T - 6, 'with Kiasi the turn stops at 60', room > 150 ? 'start' : 'end').setAttribute('class', 'stoplabel');
     }
   };
-  var bump = function (el) { el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); };
-  var lastPct = null;
-  var calc = function () {
-    var c = +chars.value, a = +at.value, s = +steps.value;
-    outs.chars.textContent = c.toLocaleString() + ' chars';
-    outs.at.textContent = a;
-    outs.steps.textContent = s;
-    var later = Math.max(0, s - a);
-    var without = Math.round(c / CHARS_PER_TOKEN * later);
-    var withK = Math.round(Math.min(c, CAP) / CHARS_PER_TOKEN * Math.max(0, Math.min(s, STOP) - a));
-    tween(document.getElementById('without'), 'without', without);
-    tween(document.getElementById('with'), 'with', withK);
-    strip('strip-without', s, a, 'without');
-    strip('strip-with', s, a, 'with');
-    var pct = without ? Math.round((1 - withK / without) * 100) : 0;
-    var badge = document.getElementById('badge');
-    badge.textContent = '−' + pct + '%';
-    if (pct !== lastPct && !still) { badge.classList.remove('pop'); void badge.offsetWidth; badge.classList.add('pop'); }
-    lastPct = pct;
-    var v = document.getElementById('verdict');
-    if (!without) v.innerHTML = 'Nothing re-sent yet: the output lands on the last step.';
-    else if (withK >= without) v.innerHTML = 'Under the cap and inside the budget, so <b>nothing to cut</b> here.';
-    else v.innerHTML = 'Kiasi keeps <b>' + fmt(without - withK) + ' tokens</b> off your limit for this one output.';
+  var totals = function (i) {
+    var perFull = scene.chars / CPT, perCap = Math.min(scene.chars, CAP) / CPT;
+    var n = Math.max(0, i - scene.at), without = perFull * n, withK = perCap * Math.max(0, Math.min(i, STOP) - scene.at);
+    R.steps.textContent = n + ' step' + (n === 1 ? '' : 's');
+    R.without.textContent = fmt(without) + ' tokens';
+    R.with.textContent = fmt(withK) + ' tokens';
+    R.kept.textContent = fmt(without - withK);
+    return { without: without, withK: withK };
   };
-  var chips = document.querySelectorAll('.chip');
-  var syncChips = function () {
-    chips.forEach(function (ch) { ch.classList.toggle('on', ch.dataset.chars === chars.value && ch.dataset.at === at.value && ch.dataset.steps === steps.value); });
+  var play = function () {
+    if (raf) cancelAnimationFrame(raf);
+    chart.classList.remove('done');
+    stamp.classList.remove('on');
+    build();
+    R.title.textContent = 'Receipt · ' + scene.name;
+    R.size.textContent = fmt(scene.chars / CPT) + ' tokens';
+    R.at.textContent = scene.at;
+    var s = scene.steps, i = 0;
+    var finish = function () {
+      var t = totals(s);
+      chart.classList.add('done');
+      stamp.textContent = '−' + (t.without ? Math.round((1 - t.withK / t.without) * 100) : 0) + '%';
+      stamp.classList.add('on');
+    };
+    if (still) { cols.forEach(function (g) { g.classList.add('on'); }); finish(); return; }
+    var t0 = performance.now(), dur = 2000;
+    var tick = function (now) {
+      var k = Math.max(0, Math.min(1, (now - t0) / dur)), target = Math.floor(k * s);
+      while (i < target) { i++; cols[i - 1].classList.add('on'); }
+      totals(i);
+      if (k < 1) raf = requestAnimationFrame(tick); else { raf = null; finish(); }
+    };
+    raf = requestAnimationFrame(tick);
   };
-  [chars, at, steps].forEach(function (el) {
-    el.addEventListener('input', function () { bump(outs[el.id]); calc(); syncChips(); });
-  });
-  chips.forEach(function (ch) {
-    ch.addEventListener('click', function () {
-      chars.value = ch.dataset.chars; at.value = ch.dataset.at; steps.value = ch.dataset.steps;
-      Object.keys(outs).forEach(function (k) { bump(outs[k]); });
-      calc(); syncChips();
-    });
-  });
-  calc();
+  var pick = function (tab) {
+    tabs.forEach(function (t) { t.setAttribute('aria-selected', t === tab ? 'true' : 'false'); });
+    scene = { name: tab.dataset.name, chars: +tab.dataset.chars, at: +tab.dataset.at, steps: +tab.dataset.steps };
+    play();
+  };
+  tabs.forEach(function (t) { t.addEventListener('click', function () { pick(t); }); });
+  document.getElementById('replay').addEventListener('click', play);
+  scene.name = tabs[0].dataset.name;
+  build();
+  totals(0);
+  R.title.textContent = 'Receipt · ' + scene.name;
+  R.size.textContent = fmt(scene.chars / CPT) + ' tokens';
+  R.at.textContent = scene.at;
+  var bill = document.getElementById('bill');
+  if (still || !('IntersectionObserver' in window)) play();
+  else {
+    var bio = new IntersectionObserver(function (entries) {
+      if (entries.some(function (e) { return e.isIntersecting; })) { bio.disconnect(); play(); }
+    }, { threshold: 0.35 });
+    bio.observe(bill);
+  }
 
   var items = document.querySelectorAll('#steps-list li');
   if (still || !('IntersectionObserver' in window)) {

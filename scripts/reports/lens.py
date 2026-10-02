@@ -685,6 +685,7 @@ def build(days):
                      "turn_stop_steps": constants.TURN_STOP_STEPS, "comply_steps": constants.LENS_COMPLY_STEPS, "saving_kinds": SAVING_KINDS},
     }
     constants.LOG_DIR.mkdir(parents=True, exist_ok=True)
+    constants.LENS_FILE.parent.mkdir(parents=True, exist_ok=True)
     tmp = constants.LENS_FILE.with_suffix(".tmp")
     tmp.write_bytes(gzip.compress(json.dumps(report, ensure_ascii=False).encode(), compresslevel=6, mtime=0))
     os.replace(tmp, constants.LENS_FILE)

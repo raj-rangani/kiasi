@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- Landing page: the cost section is now a step-by-step bill. Three scenarios, one column per step, with-Kiasi columns in front and a receipt that runs up as the chart plays. README shows the wordmark logo in both GitHub themes. Tests redirect the lens report so the suite passes on a clean machine.
 - README rewritten to match the landing page: small logo, one number-led paragraph, key features, quick start, how it works, dashboard, privacy, settings, requirements. Landing page cost section gained presets, a per-step strip for each scenario, animated counts and a savings badge; the install section is a timeline that lights up on scroll with timed steps, an animated copy tick and a what-happens-next row.
 - Landing page (docs/index.html) rebuilt around one story: hero with an animated session demo, a re-read cost calculator, six leaks and rules, dashboard proof, three-step install, privacy, and a collapsed reference. Same palette, no external requests. Dashboard screenshot refreshed.
 - Per-day history: budget.py merges every build into `history.json` in the data dir, so days outlive the report window and Claude Code's transcript retention; the Overview before-and-after block reads it and no longer disappears a week after install. Report window `BUDGET_DAYS` raised from 7 to 30 days and used by the dashboard's rebuild too.

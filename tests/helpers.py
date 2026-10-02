@@ -35,6 +35,7 @@ class KiasiTestCase(unittest.TestCase):
         constants.CHECKPOINT_DIR = data_dir / "checkpoints"
         constants.BUDGET_FILE = data_dir / "budget.json"
         constants.HISTORY_FILE = data_dir / "history.json"
+        constants.LENS_FILE = data_dir / "lens.json.gz"
         constants.HOME_DIR = data_dir / "home"
         constants.DATA_DIR_POINTER = constants.HOME_DIR / "data-dir"
         constants.LEGACY_HOME_DIR = data_dir / "legacy-home"
