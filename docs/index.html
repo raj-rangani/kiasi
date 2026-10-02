@@ -121,8 +121,10 @@ body { overflow-x: clip; }
 .h2 { font-family: var(--serif); font-weight: 400; font-size: clamp(36px, 5.2vw, 64px); line-height: 1.02; letter-spacing: -0.02em; margin: 0; max-width: 14ch; }
 .h2 em { font-style: italic; color: var(--accent-ink); }
 .sub { font-size: 18px; line-height: 1.55; color: var(--muted); max-width: 52ch; margin: 18px 0 0; }
-.head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px 64px; align-items: end; }
-.head .sub { margin-top: 0; padding-bottom: 8px; }
+.head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 64px; align-items: start; }
+.head > div { display: contents; }
+.head .fig { grid-column: 1 / -1; }
+.head .sub { margin-top: 0; padding-top: clamp(4px, 0.9vw, 12px); }
 
 /* week simulator */
 .sim { margin-top: 56px; position: relative; border-radius: 22px; padding: 32px 36px 28px; background: var(--card); box-shadow: 0 1px 0 var(--rule), 0 30px 80px -40px rgba(0,0,0,.35); overflow: hidden; }
@@ -143,7 +145,6 @@ body { overflow-x: clip; }
 .rail .fill { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 10px; transition: width .42s var(--ease); }
 .track.a .fill { background: linear-gradient(90deg, color-mix(in srgb, var(--bad) 55%, var(--accent)), var(--bad)); }
 .track.b .fill { background: linear-gradient(90deg, color-mix(in srgb, var(--good) 60%, var(--accent)), var(--good)); }
-.rail .cap { position: absolute; right: 0; top: 0; bottom: 0; width: 2px; background: var(--ink); opacity: .5; }
 .rail .tick { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--paper); opacity: .7; }
 .rail.hit { animation: hit .5s var(--ease); }
 @keyframes hit { 0%, 100% { transform: none; } 30% { transform: translateX(-3px); } 60% { transform: translateX(3px); } }
@@ -185,6 +186,19 @@ body { overflow-x: clip; }
 .fact > span { display: block; color: var(--muted); font-size: 14.5px; line-height: 1.5; margin-top: 8px; }
 
 /* rules marquee + grid */
+.sl { margin-top: 44px; border: 1px solid var(--rule); border-radius: 14px; background: var(--term); color: var(--term-ink); overflow: hidden; }
+.sl .slbar { display: flex; justify-content: space-between; padding: 12px 16px; font-size: 11.5px; color: var(--term-dim); border-bottom: 1px solid rgba(255,255,255,.08); font-family: var(--mono); }
+.sl .slbar b { color: var(--term-ink); font-weight: 500; }
+.slline { font-family: var(--mono); font-size: 13px; line-height: 1.7; padding: 16px 18px; white-space: nowrap; overflow-x: auto; }
+.slline i { font-style: normal; color: var(--term-dim); margin: 0 7px; }
+.slline .l { color: var(--term-dim); } .slline .d { color: var(--term-dim); opacity: .75; }
+.slline .m { color: var(--term-ink); } .slline .k { color: var(--accent); }
+.slline .ok { color: #7cc48a; } .slline .warn { color: #e3a73a; }
+.slkey { list-style: none; margin: 0; padding: 14px 18px 16px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 24px; border-top: 1px solid rgba(255,255,255,.08); font-size: 12.5px; line-height: 1.5; color: var(--term-dim); }
+.slkey b { display: block; font-family: var(--mono); font-weight: 500; color: var(--term-ink); margin-bottom: 2px; }
+.slkey em { font-style: normal; color: #e3a73a; }
+.slnote { margin: 28px 0 0; font-size: 14px; color: var(--muted); }
+.slnote code { font-size: 12.5px; }
 .mq { margin-top: 48px; overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); }
 .mq ul { display: flex; gap: 12px; width: max-content; margin: 0; padding: 0; list-style: none; animation: slide 36s linear infinite; }
 .mq:hover ul { animation-play-state: paused; }
@@ -272,6 +286,7 @@ body { overflow-x: clip; }
   .track, .days { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .track .out { order: 3; } .days ol { grid-column: 1; }
   .rgrid, .proof3 { grid-template-columns: 1fr; gap: 0; }
+  .slkey { grid-template-columns: 1fr 1fr; } .slline { font-size: 12.5px; padding: 14px; white-space: normal; }
   .trust2 { grid-template-columns: 1fr 1fr; gap: 0 20px; }
   .tty { position: static; }
   .fact b { font-size: 32px; }
@@ -289,6 +304,7 @@ body { overflow-x: clip; }
       <a href="#week">A week</a>
       <a href="#step">One step</a>
       <a href="#rules">The rules</a>
+      <a href="#daily">Every day</a>
       <a href="#install">Install</a>
     </nav>
     <button class="iconbtn" id="theme" type="button" aria-label="Toggle dark mode">
@@ -358,12 +374,12 @@ body { overflow-x: clip; }
         <div class="cursor" id="cur"></div>
         <div class="track a">
           <div class="who"><b>Without Kiasi</b>raw tool output, long turns</div>
-          <div class="rail" id="railA"><div class="fill" id="fillA"></div><div class="cap"></div></div>
+          <div class="rail" id="railA"><div class="fill" id="fillA"></div></div>
           <div class="out" id="outA">&nbsp;</div>
         </div>
         <div class="track b">
           <div class="who"><b>With Kiasi</b>capped, cleaned, stopped at 60</div>
-          <div class="rail" id="railB"><div class="fill" id="fillB"></div><div class="cap"></div></div>
+          <div class="rail" id="railB"><div class="fill" id="fillB"></div></div>
           <div class="out" id="outB">&nbsp;</div>
         </div>
       </div>
@@ -417,10 +433,39 @@ body { overflow-x: clip; }
     </div>
   </section>
 
+  <section id="daily">
+    <div class="head">
+      <div>
+        <p class="fig reveal">Fig. 04 · the everyday</p>
+        <h2 class="h2 reveal">Always on. <em>Never</em> in the way.</h2>
+      </div>
+      <p class="sub reveal" style="--d:1">The parts you see every session: a status line with your real limits, and tools Claude reaches for instead of flooding the conversation.</p>
+    </div>
+    <div class="sl reveal" style="--d:2" aria-label="Kiasi status line">
+      <div class="slbar"><b>status line</b><span>what Kiasi adds after your own</span></div>
+      <div class="slline"><span class="l">ctx</span> <span class="ok">███</span><span class="d">░░░░░░░</span> <span class="ok">31%</span> <span class="d">62k</span><i>│</i><span class="l">turn</span> <span class="k">12/60</span><i>│</i><span class="l">5h</span> <span class="ok">████</span><span class="d">░░░░░░</span> <span class="ok">42%</span> <span class="d">⟳ 4:30 pm</span><i>│</i><span class="l">wk</span> <span class="warn">██████</span><span class="d">░░░░</span> <span class="warn">61%</span> <span class="d">⟳ Mon 9:00 am</span> <span class="warn">▲3</span><i>│</i><span class="k">kiasi −1.9M</span></div>
+      <ul class="slkey">
+        <li><b>ctx</b>how much of the context window this turn carries</li>
+        <li><b>turn</b>tool calls of the 60 before Kiasi stops the turn</li>
+        <li><b>5h · wk</b>your plan limits, when they reset, and <em>▲</em> when you are ahead of the week's pace</li>
+        <li><b>kiasi −</b>tokens kept off your limit this session</li>
+      </ul>
+    </div>
+    <div class="rgrid">
+      <div class="rule reveal"><span class="n">01</span><h3>Status line</h3><p>One command adds Kiasi to your status line, after whatever you already had. It is the only place your 5-hour and weekly limits are read from.</p><code>/kiasi:limits setup</code></div>
+      <div class="rule reveal" style="--d:1"><span class="n">02</span><h3>Run</h3><p>A build, a test run or a long log goes through a tool that saves the full output and returns a digest. The whole text never enters the conversation.</p><code>mcp__kiasi__run</code></div>
+      <div class="rule reveal" style="--d:2"><span class="n">03</span><h3>Distill</h3><p>A short Python or Node script runs over big files on disk. Only what it prints comes back, so counting and parsing cost almost nothing.</p><code>mcp__kiasi__distill</code></div>
+      <div class="rule reveal"><span class="n">04</span><h3>Fetch and search</h3><p>A web page is saved and searched; only its head and the matching lines come back. Search finds a line in any saved output, paste or note.</p><code>mcp__kiasi__fetch · mcp__kiasi__search</code></div>
+      <div class="rule reveal" style="--d:1"><span class="n">05</span><h3>Dashboard from login</h3><p>One command registers the dashboard with your system's login starter, so it runs with no Claude Code session open. Linux, macOS and Windows.</p><code>/kiasi:dashboard autostart on</code></div>
+      <div class="rule reveal" style="--d:2"><span class="n">06</span><h3>Cleanup</h3><p>Saved outputs and pastes older than seven days are compressed, then dropped. The data folder stays small on its own, and a restore command brings a day back.</p><code>daily, at session start</code></div>
+    </div>
+    <p class="slnote reveal">The run, distill, fetch and search tools need <code>CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1</code>, the second of the two settings in the install step.</p>
+  </section>
+
   <section id="proof">
     <div class="head">
       <div>
-        <p class="fig reveal">Fig. 04 · your own before and after</p>
+        <p class="fig reveal">Fig. 05 · your own before and after</p>
         <h2 class="h2 reveal">The receipt is <em>yours.</em></h2>
       </div>
       <p class="sub reveal" style="--d:1">The days before you installed Kiasi are the baseline. Every cut, skip and stop is a row with the saved file beside it. Rebuilt every 30 minutes by a small local server.</p>
@@ -436,7 +481,7 @@ body { overflow-x: clip; }
   <section id="install">
     <div class="head">
       <div>
-        <p class="fig reveal">Fig. 05 · install</p>
+        <p class="fig reveal">Fig. 06 · install</p>
         <h2 class="h2 reveal">Three lines. <em>About a minute.</em></h2>
       </div>
       <p class="sub reveal" style="--d:1">Nothing to build, nothing to sign up for. Requires Claude Code 2.1.283 or newer and Python 3.8 or newer, standard library only.</p>
@@ -467,7 +512,7 @@ body { overflow-x: clip; }
   </section>
 
   <section class="fin">
-    <p class="fig reveal" style="justify-content:center">Fig. 06 · the ask</p>
+    <p class="fig reveal" style="justify-content:center">Fig. 07 · the ask</p>
     <h2 class="h2 reveal">Make this week's <em>limit last.</em></h2>
     <p class="sub reveal" style="--d:1">One minute to install. Your first before-and-after shows up the next day.</p>
     <div class="cmdbox reveal" style="--d:2"><span>/plugin marketplace add raj-rangani/kiasi</span><button class="copy" data-copy="/plugin marketplace add raj-rangani/kiasi&#10;/plugin install kiasi@kiasi">Copy</button></div>
