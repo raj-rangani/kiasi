@@ -45,6 +45,7 @@ const KIND_LABELS = {
   cap: 'output cap', paste_refused: 'paste refused', delegated: 'delegation', pruned: 'compaction pruned', summary: 'compaction summarised',
   compaction: 'compaction', reread_check: 're-read check', paste_saved: 'paste saved', nudge: 'context nudge', turn_warn: 'turn warning',
   turn_stop: 'turn stopped', read_skipped: 're-read skipped', read_retry: 're-read let through', agent_model: 'subagent model', review_asked: 'review round asked', note: 'session note', recall: 'note recalled', loop: 'loop stopped', state: 'state re-injected',
+  routed: 'routed to sandbox', route_retry: 'routing let through',
 };
 const KIND_STRIP_DAYS = 8;
 
@@ -58,6 +59,7 @@ const KIND_SHORT = {
   turn_stop: 'blocked at the stop budget until checkpoint',
   summary: "prune missed the ceiling; built-in summary ran",
   loop: 'same failing call stopped after repeats',
+  routed: 'raw Bash or WebFetch pointed at the sandbox tool',
 };
 
 const KIND_HELP = {
@@ -80,6 +82,8 @@ const KIND_HELP = {
   recall: 'the last note for the project was injected at session start',
   loop: 'the same failing command or file edit failed repeatedly in one turn, so Claude was told to stop retrying and check its assumption',
   state: 'after a compaction the task, edited files, still-failing commands, saved outputs and checklists were re-injected from the transcript',
+  routed: 'a Bash command whose output would only be scanned, or a WebFetch, was refused once with the mcp__kiasi__run or mcp__kiasi__fetch call to make instead',
+  route_retry: 'Claude repeated the same raw call after the routing, so it went through; a high count means the sandbox digest was not enough',
 };
 const MARK_LABELS = { compaction: 'compaction', pruned: 'pruned compaction', check: 're-read check', stop: 'turn stopped' };
 const VIEWS = [
@@ -89,6 +93,34 @@ const VIEWS = [
   ['budget', 'Budget', 'Where the weekly limit goes: every turn re-reads the whole conversation, so the cost is context size times turns.'],
   ['storage', 'Storage', 'What Kiasi keeps on disk and for how long. A saved file follows its session: once both are unused for a week it goes to trash, and the trash is emptied a week later.']
 ];
+// Page-level empty states, one per view. `missing` is shown when no report exists yet,
+// `empty` when the report holds no session in range; {days} is the report window.
+const EMPTY_STATES = {
+  overview: {
+    missing: ['Your first report is one click away', 'Kiasi reads your Claude Code transcripts and shows what it kept off the weekly limit. Nothing has been built yet.'],
+    empty: ['No Claude Code sessions in the last {days} days', 'The savings, the daily bill and the rule cards fill in from the next session with Kiasi on. The report rebuilds every 30 minutes.'],
+  },
+  sessions: {
+    missing: ['No sessions to chart yet', 'One chart per session appears here, context at every step, once Kiasi has read a Claude Code session. Nothing has been built yet.'],
+    empty: ['No Claude Code sessions in the last {days} days', 'One chart per session appears here from the next session with Kiasi on. The report rebuilds every 30 minutes.'],
+  },
+  rules: {
+    missing: ['Rules have not fired yet', 'Each rule\'s count, savings and log fill in as you work in Claude Code with Kiasi on. Nothing has been built yet.'],
+    empty: ['No rule fired in the last {days} days', 'Each rule\'s count, savings and log fill in from the next session with Kiasi on. The report rebuilds every 30 minutes.'],
+  },
+  budget: {
+    missing: ['No re-read bill yet', 'The per-day bill and the costliest tool results appear here after the first session. Plan limits above stay live. Nothing has been built yet.'],
+    empty: ['No Claude Code sessions in the last {days} days', 'The per-day bill and the costliest tool results appear here from the next session with Kiasi on. Plan limits above stay live.'],
+  },
+  storage: {
+    missing: ['No storage scan yet', 'What Kiasi keeps on disk, and for how long, is measured when the report is built. Nothing has been built yet.'],
+    empty: ['No storage scan in this report', 'The scan runs with the next report build, every 30 minutes.'],
+  },
+};
+const EMPTY_ACTIONS = { missing: 'Build the report', empty: 'Rebuild now' };
+const EMPTY_BUILDING = 'Reading the transcripts, usually under a minute.';
+const EMPTY_LOADING = 'Loading the report';
+const EMPTY_LINK = { text: 'What each tab shows', href: 'https://raj-rangani.github.io/kiasi/#dashboard' };
 // Growth below this many bytes a day reads as flat.
 const STORE_FLAT_BYTES = 10e3;
 // Days of growth averaged for the rate under the bar.
@@ -136,6 +168,7 @@ const TOP_MULTIPLES = 8;
 const LOG_ROWS = 60;
 const RULES = [
   { key: 'cap', name: 'Output cap', kinds: ['cap'], what: 'A tool result over its cap is cut and the full text saved to disk; the conversation keeps a marker with the path.' },
+  { key: 'route', name: 'Sandbox routing', kinds: ['routed', 'route_retry'], what: 'While the sandbox tools are registered, a Bash command whose output would only be scanned (tests, builds, installs, curl, git log) or a WebFetch is refused once with the mcp__kiasi__run or mcp__kiasi__fetch call to make instead; repeating the same call lets it through.' },
   { key: 'pruner', name: 'Compaction pruner', kinds: ['pruned', 'summary'], what: 'At compaction the plugin prunes the transcript deterministically instead of calling the summariser; it falls back only if the prune cannot get under the ceiling.' },
   { key: 'turn', name: 'Turn budget', kinds: ['turn_warn', 'turn_stop'], what: 'A prompt that runs too many steps is warned, then stopped until the remaining work is written down.' },
   { key: 'reread', name: 'Re-read check', kinds: ['reread_check', 'delegated'], what: 'Shows what the rest of the turn will cost here against in a subagent, and lets Claude delegate.' },

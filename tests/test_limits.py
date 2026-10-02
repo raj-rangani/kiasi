@@ -1,0 +1,106 @@
+import json
+import time
+
+from helpers import KiasiTestCase
+from core import constants  # noqa: E402
+
+
+class TestLimitsForecast(KiasiTestCase):
+    def setUp(self):
+        super().setUp()
+        import limits_data
+        self.limits_data = limits_data
+
+    def write_reading(self, used, resets_at):
+        (constants.DATA_DIR / constants.RATE_LIMITS_NAME).write_text(json.dumps(
+            {"updated": int(time.time()),
+             "rate_limits": {"seven_day": {"used_percentage": used, "resets_at": resets_at}}}))
+
+    def write_history(self, points):
+        lines = [json.dumps({"key": "seven_day", **p}) for p in points]
+        (constants.DATA_DIR / constants.LIMITS_HISTORY_NAME).write_text("\n".join(lines) + "\n")
+
+    def test_steady_burn_projects_a_run_out_before_the_reset(self):
+        now = int(time.time())
+        resets = now + 5 * 86400
+        self.write_reading(40, resets)
+        self.write_history([{"ts": now - 86400, "used": 20, "resets_at": resets},
+                            {"ts": now - 3600, "used": 40, "resets_at": resets}])
+        item = self.limits_data.get_limits()["limits"][0]
+        self.assertLess(item["run_out_at"], resets, "40 points in a day burns out in ~3 days")
+        self.assertEqual(item["severity"], "warning")
+        self.assertGreater(item["burn_per_day"], 15)
+
+    def test_short_or_flat_history_stays_quiet(self):
+        now = int(time.time())
+        resets = now + 5 * 86400
+        self.write_reading(40, resets)
+        self.write_history([{"ts": now - 600, "used": 39, "resets_at": resets},
+                            {"ts": now - 60, "used": 40, "resets_at": resets}])
+        item = self.limits_data.get_limits()["limits"][0]
+        self.assertNotIn("run_out_at", item, "under four hours of history is noise")
+
+
+class TestStatuslineHistory(KiasiTestCase):
+    def setUp(self):
+        super().setUp()
+        import statusline
+        self.statusline = statusline
+
+    def payload(self, used):
+        return {"rate_limits": {"seven_day": {"used_percentage": used, "resets_at": 1791388800}}}
+
+    def test_only_changed_readings_are_appended(self):
+        self.statusline.save_rate_limits(self.payload(10), self.tmp)
+        self.statusline.save_rate_limits(self.payload(10), self.tmp)
+        self.statusline.save_rate_limits(self.payload(11), self.tmp)
+        lines = (self.tmp / self.statusline.HISTORY_NAME).read_text().splitlines()
+        self.assertEqual([json.loads(line)["used"] for line in lines], [10, 11])
+
+
+class TestLimits(KiasiTestCase):
+    MINE = {"type": "command", "command": "bash ~/my-line.sh", "padding": 1}
+
+    def setUp(self):
+        super().setUp()
+        import statusline_install
+        self.limits = statusline_install
+        constants.CLAUDE_SETTINGS_FILE = self.tmp / "settings.json"
+
+    def settings(self):
+        return json.loads(constants.CLAUDE_SETTINGS_FILE.read_text())
+
+    def test_setup_chains_previous_line_and_backs_up_once(self):
+        constants.CLAUDE_SETTINGS_FILE.write_text(json.dumps({"statusLine": self.MINE, "model": "x"}))
+        self.limits.setup()
+        self.limits.setup()
+        line = self.settings()["statusLine"]
+        self.assertTrue(self.limits.is_ours(line))
+        self.assertEqual(self.settings()["model"], "x")
+        self.assertTrue((constants.HOME_DIR / constants.STATUSLINE_SCRIPT_NAME).is_file())
+        chain = json.loads((constants.HOME_DIR / constants.STATUSLINE_CHAIN_NAME).read_text())
+        self.assertEqual(chain["previous"], self.MINE, "a second setup keeps the user's line, not ours")
+        backup = json.loads((self.tmp / ("settings.json" + constants.SETTINGS_BACKUP_SUFFIX)).read_text())
+        self.assertEqual(backup["statusLine"], self.MINE)
+
+    def test_remove_restores_previous_line(self):
+        constants.CLAUDE_SETTINGS_FILE.write_text(json.dumps({"statusLine": self.MINE}))
+        self.limits.setup()
+        self.limits.remove()
+        self.assertEqual(self.settings()["statusLine"], self.MINE)
+        self.assertFalse((constants.HOME_DIR / constants.STATUSLINE_CHAIN_NAME).exists())
+
+    def test_remove_without_previous_line_drops_the_key(self):
+        self.limits.setup()
+        self.limits.remove()
+        self.assertNotIn("statusLine", self.settings())
+
+    def test_remove_leaves_someone_elses_line_alone(self):
+        constants.CLAUDE_SETTINGS_FILE.write_text(json.dumps({"statusLine": self.MINE}))
+        self.assertIn("not Kiasi's", self.limits.remove())
+        self.assertEqual(self.settings()["statusLine"], self.MINE)
+
+    def test_invalid_settings_json_is_not_overwritten(self):
+        constants.CLAUDE_SETTINGS_FILE.write_text("{broken")
+        self.assertEqual(self.limits.main(["setup"]), 1)
+        self.assertEqual(constants.CLAUDE_SETTINGS_FILE.read_text(), "{broken")

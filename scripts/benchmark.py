@@ -3,7 +3,7 @@
 
 Every number is measured, not estimated: the inputs are generated here,
 deterministically, and fed through the same handlers that run in a session
-(kiasi.handle_tool_output for the caps and the Bash clean, sandbox.run and
+(caps.handle_tool_output for the caps and the Bash clean, sandbox.run and
 sandbox.distill for the out-of-context tools). Nothing touches a real data
 dir; everything lands in a temp folder.
 
@@ -25,7 +25,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import constants
+from core import constants
 
 LATER_STEPS = 10
 
@@ -116,21 +116,21 @@ def mcp_payload(tool, text):
 
 
 def scenarios(tmp):
-    import kiasi
+    from core import caps
     import sandbox
 
     rows = []
 
     text = playwright_snapshot()
     rows.append(("Playwright page snapshot via MCP", "MCP output cap", len(text),
-                 entered(kiasi.handle_tool_output(mcp_payload("mcp__playwright__browser_snapshot", text)), len(text))))
+                 entered(caps.handle_tool_output(mcp_payload("mcp__playwright__browser_snapshot", text)), len(text))))
 
     text = github_issue_list()
     rows.append(("GitHub issue list via MCP", "MCP output cap", len(text),
-                 entered(kiasi.handle_tool_output(mcp_payload("mcp__github__list_issues", text)), len(text))))
+                 entered(caps.handle_tool_output(mcp_payload("mcp__github__list_issues", text)), len(text))))
 
     text = npm_install_log()
-    shown = entered(kiasi.handle_tool_output({
+    shown = entered(caps.handle_tool_output({
         "hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_use_id": "toolu_bench_npm",
         "session_id": "bench", "tool_input": {"command": "npm install"},
         "tool_response": {"stdout": text, "stderr": ""}}), len(text))
@@ -138,7 +138,7 @@ def scenarios(tmp):
 
     text = session_transcript()
     rows.append(("Session transcript Read (.jsonl)", "outside-read cap", len(text),
-                 entered(kiasi.handle_tool_output({
+                 entered(caps.handle_tool_output({
                      "hook_event_name": "PostToolUse", "tool_name": "Read", "tool_use_id": "toolu_bench_jsonl",
                      "session_id": "bench", "transcript_path": str(tmp / "none.jsonl"),
                      "tool_input": {"file_path": "/home/user/.claude/projects/demo/session.jsonl"},
@@ -180,7 +180,7 @@ def report(rows):
 Measured, not estimated: every row below is a shape-realistic tool output
 generated deterministically by `scripts/benchmark.py` and replayed through
 the **same handlers that run in a session** — the caps and the Bash clean in
-`kiasi.py`, and the out-of-context `run`/`distill` tools in `sandbox.py`.
+`core/caps.py`, and the out-of-context `run`/`distill` tools in `sandbox.py`.
 Reproduce it with:
 
     python3 scripts/benchmark.py

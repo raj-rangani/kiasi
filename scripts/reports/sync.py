@@ -1,6 +1,6 @@
 """Rebuild logs/budget.json and logs/lens.json.gz and record the outcome in logs/sync.json.
 
-Run directly (`python3 sync.py [days]`), by the dashboard server (every 30 minutes, or on POST /sync), by the /kiasi:sync
+Run directly (`python3 reports/sync.py [days]`), by the dashboard server (every 30 minutes, or on POST /sync), by the /kiasi:sync
 command, or by anything else that wants the pages fresh. Never raises: the outcome, including
 a failure, goes to sync.json so the pages can show it.
 """
@@ -10,8 +10,10 @@ import subprocess
 import sys
 import time
 from datetime import datetime
+from pathlib import Path
 
-import constants
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from core import constants
 
 
 def now():

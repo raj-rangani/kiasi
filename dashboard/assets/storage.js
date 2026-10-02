@@ -154,8 +154,7 @@ function openLog(s) {
 
 registerView('storage', d => {
   const s = d.storage;
-  if (!s || !s.cleaned) { $('#store-meter').innerHTML = '<p class="empty">No storage data yet; press sync.</p>'; return; }
   const cats = categories(s);
   renderMeter(s, cats); renderRecs(s); renderList(s, cats);
-});
+}, 'lens', d => Boolean(d.storage && d.storage.cleaned));
 })();

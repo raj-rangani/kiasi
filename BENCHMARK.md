@@ -3,7 +3,7 @@
 Measured, not estimated: every row below is a shape-realistic tool output
 generated deterministically by `scripts/benchmark.py` and replayed through
 the **same handlers that run in a session** — the caps and the Bash clean in
-`kiasi.py`, and the out-of-context `run`/`distill` tools in `sandbox.py`.
+`core/caps.py`, and the out-of-context `run`/`distill` tools in `sandbox.py`.
 Reproduce it with:
 
     python3 scripts/benchmark.py

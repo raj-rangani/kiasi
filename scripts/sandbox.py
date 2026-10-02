@@ -5,6 +5,8 @@
 other saved output) and prints only a digest: exit code, head, error lines, tail, saved path.
 `distill` executes a short python3 or node script over files passed as arguments and prints
 only what the script printed, capped; the overflow is saved and named.
+`fetch` downloads a URL, strips HTML to text, saves the whole page under outputs/ and prints
+only its head plus the lines matching the words asked for.
 """
 import argparse
 import json
@@ -13,10 +15,13 @@ import re
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
+from html.parser import HTMLParser
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import constants
+from core import constants
 
 
 def log_saving(tool, raw_chars, shown_chars, saved_path, label, session=""):
@@ -104,6 +109,86 @@ def distill(args):
     return 0
 
 
+class TextExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+        self.title = ""
+        self.skip = 0
+        self.in_title = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag in constants.FETCH_SKIP_TAGS:
+            self.skip += 1
+        if tag == "title":
+            self.in_title = True
+        if tag in constants.FETCH_BLOCK_TAGS:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag in constants.FETCH_SKIP_TAGS:
+            self.skip = max(0, self.skip - 1)
+        if tag == "title":
+            self.in_title = False
+        if tag in constants.FETCH_BLOCK_TAGS:
+            self.parts.append("\n")
+
+    def handle_data(self, data):
+        if self.in_title:
+            self.title += data
+        elif not self.skip:
+            self.parts.append(data)
+
+
+def html_to_text(html):
+    parser = TextExtractor()
+    parser.feed(html)
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in "".join(parser.parts).splitlines()]
+    return parser.title.strip(), "\n".join(line for line in lines if line)
+
+
+def download(url, timeout):
+    request = urllib.request.Request(url, headers={"User-Agent": constants.FETCH_USER_AGENT, "Accept": "text/html,application/json,text/plain,*/*"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        raw = response.read(constants.FETCH_MAX_BYTES + 1)
+        content_type = response.headers.get_content_type()
+        charset = response.headers.get_content_charset() or "utf-8"
+    truncated = len(raw) > constants.FETCH_MAX_BYTES
+    return raw[: constants.FETCH_MAX_BYTES].decode(charset, errors="replace"), content_type, truncated
+
+
+def find_lines(lines, words):
+    wanted = [w.lower() for w in words if w]
+    if not wanted:
+        return []
+    hits = [f"{number}: {clip(line)}" for number, line in enumerate(lines, 1) if any(w in line.lower() for w in wanted)]
+    shown = hits[: constants.FETCH_FIND_LINES]
+    header = f"lines matching {', '.join(words)} ({len(shown)} of {len(hits)}):" if hits else f"no line matches {', '.join(words)}"
+    return [header, *shown]
+
+
+def fetch(args):
+    try:
+        body, content_type, truncated = download(args.url, args.timeout)
+    except (urllib.error.URLError, ValueError, OSError) as exc:
+        print(f"fetch failed: {exc}")
+        return 1
+    title = ""
+    if "html" in content_type or body.lstrip()[:1] == "<":
+        title, body = html_to_text(body)
+    saved = save("fetch", f"{args.url}\n\n{body}")
+    lines = body.splitlines()
+    head = body[: constants.FETCH_HEAD_CHARS].rstrip()
+    if len(body) > constants.FETCH_HEAD_CHARS:
+        head += f"\n[kiasi kept the first {constants.FETCH_HEAD_CHARS} of {len(body)} chars; the rest is in the saved file]"
+    cut = f", cut at {constants.FETCH_MAX_BYTES} bytes" if truncated else ""
+    shown = "\n".join([f"fetched {args.url}: {title or content_type}; {len(body)} chars, {len(lines)} lines{cut}; "
+                       f"full text saved at {saved}, search it with mcp__kiasi__search", head, *find_lines(lines, args.find)])
+    log_saving(constants.FETCH_TOOL_NAME, len(body), len(shown), saved, args.url, args.session)
+    print(shown)
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="mode", required=True)
@@ -119,6 +204,12 @@ def main():
     p_distill.add_argument("--timeout", type=int, default=constants.SANDBOX_TIMEOUT_SECONDS)
     p_distill.add_argument("--session", default="")
     p_distill.set_defaults(handler=distill)
+    p_fetch = sub.add_parser("fetch")
+    p_fetch.add_argument("--url", required=True)
+    p_fetch.add_argument("--find", action="append", default=[])
+    p_fetch.add_argument("--timeout", type=int, default=constants.SANDBOX_TIMEOUT_SECONDS)
+    p_fetch.add_argument("--session", default="")
+    p_fetch.set_defaults(handler=fetch)
     args = parser.parse_args()
     args.timeout = max(1, min(constants.SANDBOX_TIMEOUT_MAX_SECONDS, args.timeout))
     sys.exit(args.handler(args))

@@ -34,7 +34,7 @@ function renderMultiples(d) {
   const W = 300;
   host.innerHTML = d.sessions.slice(0, TOP_MULTIPLES).map(s => `<article class="mini ${s.session === selected ? 'selected' : ''}" data-session="${esc(s.session)}">
     <h3><b>${esc(s.short)}</b><span>${esc(s.day)}</span></h3><div class="proj" title="${esc(s.project)}">${esc(s.project)}</div>${sessionSvg(s, d.settings, W, MINI_HEIGHT, false)}
-    <dl class="kv"><dt>prompts</dt><dd>${s.prompts}</dd><dt>steps</dt><dd>${s.steps}</dd><dt>peak</dt><dd>${fmtK(s.peak)}</dd><dt>bill</dt><dd>${fmtM(s.bill)}</dd></dl></article>`).join('') || '<div class="empty">No sessions in range.</div>';
+    <dl class="kv"><dt>prompts</dt><dd>${s.prompts}</dd><dt>steps</dt><dd>${s.steps}</dd><dt>peak</dt><dd>${fmtK(s.peak)}</dd><dt>bill</dt><dd>${fmtM(s.bill)}</dd></dl></article>`).join('') || emptyLine('sessions');
   host.querySelectorAll('.mini').forEach(el => el.addEventListener('click', () => select(el.dataset.session)));
   bindTips(host);
 }

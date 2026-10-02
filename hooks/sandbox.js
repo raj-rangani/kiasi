@@ -1,6 +1,6 @@
 import {
   SANDBOX_SCRIPT, SANDBOX_DEFAULT_TIMEOUT_S, SANDBOX_MAX_TIMEOUT_S, SANDBOX_EXTRA_MS,
-  RUN_TOOL_FULL_NAME, DISTILL_TOOL_FULL_NAME,
+  RUN_TOOL_FULL_NAME, DISTILL_TOOL_FULL_NAME, FETCH_TOOL_FULL_NAME,
 } from './constants.js';
 
 export function timeoutOf(input) {
@@ -26,6 +26,17 @@ export function distillArgv(root, input) {
   ];
 }
 
+export function fetchArgv(root, input) {
+  const url = String(input.url || '').trim();
+  if (!url) return null;
+  const find = Array.isArray(input.find) ? input.find.map(String).filter(Boolean) : [];
+  return [
+    'python3', `${root}/scripts/${SANDBOX_SCRIPT}`, 'fetch',
+    '--url', url, '--timeout', String(timeoutOf(input)),
+    ...find.flatMap((word) => ['--find', word]),
+  ];
+}
+
 async function runSandbox($, input, build, missing) {
   const argv = build($.plugin.root, input);
   if (!argv) return { deny: missing };
@@ -40,4 +51,5 @@ async function runSandbox($, input, build, missing) {
 export function registerSandbox(on) {
   on('tool.call', { tool: RUN_TOOL_FULL_NAME }, ($, e) => runSandbox($, e, runArgv, 'run needs a command'));
   on('tool.call', { tool: DISTILL_TOOL_FULL_NAME }, ($, e) => runSandbox($, e, distillArgv, 'distill needs code'));
+  on('tool.call', { tool: FETCH_TOOL_FULL_NAME }, ($, e) => runSandbox($, e, fetchArgv, 'fetch needs a url'));
 }

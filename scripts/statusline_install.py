@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import constants  # noqa: E402
+from core import constants  # noqa: E402
 
 
 class SettingsError(Exception):

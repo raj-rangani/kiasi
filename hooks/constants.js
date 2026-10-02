@@ -75,6 +75,18 @@ export const DISTILL_INPUT_SCHEMA = {
   },
   required: ['code'],
 };
+export const FETCH_TOOL = 'fetch';
+export const FETCH_TOOL_FULL_NAME = 'mcp__kiasi__fetch';
+export const FETCH_DESCRIPTION = 'Fetch a web page out of context: the page is downloaded, HTML is stripped to text, the whole text is saved to kiasi\'s outputs folder (searchable with mcp__kiasi__search) and only the first 3000 chars plus the lines matching the `find` words enter the conversation. Use it instead of WebFetch to read documentation, API responses or long pages; use WebFetch only when you want a summarised answer to a question.';
+export const FETCH_INPUT_SCHEMA = {
+  type: 'object',
+  properties: {
+    url: { type: 'string', description: 'The http(s) URL to fetch.' },
+    find: { type: 'array', items: { type: 'string' }, description: 'Words or phrases; every line of the page containing one of them is returned with its line number (up to 40).' },
+    timeout_s: { type: 'integer', minimum: 1, maximum: SANDBOX_MAX_TIMEOUT_S, description: `Seconds before the download is stopped (default ${SANDBOX_DEFAULT_TIMEOUT_S}).` },
+  },
+  required: ['url'],
+};
 
 export const QUIET_EVENT_NAME = 'PluginQuiet';
 export const QUIET_RULES = [

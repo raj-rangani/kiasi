@@ -13,7 +13,7 @@ import json
 import time
 from datetime import datetime
 
-import constants
+from core import constants
 
 
 def _read_json(path):

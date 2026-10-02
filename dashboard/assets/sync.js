@@ -18,6 +18,7 @@
     if (btn.disabled) return;
     btn.disabled = true;
     btn.classList.add('busy');
+    setSyncBusy(true);
     setStatus('sync requested', '');
     try {
       const before = await status().catch(() => null);
@@ -34,7 +35,7 @@
         break;
       }
       if (!last || last.state === 'running' || `${last.started}|${last.state}` === seen) {
-        fail('sync not picked up', 'POST /sync was sent but nothing rebuilt the reports within 60 s. Check the dashboard.py process is still running.');
+        fail('sync not picked up', 'POST /sync was sent but nothing rebuilt the reports within 60 s. Check the dashboard server is still running: `python3 scripts/dashboard.py --ensure` restarts it.');
       } else if (last.state === 'failed') {
         fail('sync failed', `The rebuild failed: ${last.error}. Run /kiasi:sync in Claude Code to see the full error.`);
       } else {
@@ -43,11 +44,13 @@
         if (window.reloadReport) await window.reloadReport();
       }
     } catch (err) {
-      fail('sync failed', `Could not reach sync.php: ${err.message}. Is the folder served over localhost with PHP enabled?`);
+      fail('sync failed', `Could not reach the dashboard server: ${err.message}. Start a new Claude Code session or run /kiasi:dashboard to bring it back.`);
     } finally {
       btn.disabled = false;
       btn.classList.remove('busy');
+      setSyncBusy(false);
     }
   }
   btn.addEventListener('click', sync);
+  window.runSync = sync;
 })();

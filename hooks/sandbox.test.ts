@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing';
-import { runArgv, distillArgv, timeoutOf } from './sandbox.js';
+import { runArgv, distillArgv, fetchArgv, timeoutOf } from './sandbox.js';
 
 test('run builds the argv and needs a command', () => {
   expect(runArgv('/root/plugin', { command: 'npm test' })).toEqual(
@@ -14,6 +14,13 @@ test('distill builds the argv, repeats --file and needs code', () => {
   );
   expect(distillArgv('/root/plugin', { code: 'console.log(1)', language: 'node' })).toContain('node');
   expect(distillArgv('/root/plugin', { code: '' })).toBe(null);
+});
+
+test('fetch builds the argv, repeats --find and needs a url', () => {
+  expect(fetchArgv('/root/plugin', { url: 'https://docs.test/page', find: ['needle', 'rate limit'] })).toEqual(
+    ['python3', '/root/plugin/scripts/sandbox.py', 'fetch', '--url', 'https://docs.test/page', '--timeout', '120', '--find', 'needle', '--find', 'rate limit'],
+  );
+  expect(fetchArgv('/root/plugin', { url: '' })).toBe(null);
 });
 
 test('timeout is clamped to one second up to the maximum', () => {

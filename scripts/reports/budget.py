@@ -6,8 +6,8 @@ import time
 from collections import Counter, defaultdict
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import constants
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from core import constants
 
 USAGE_KEYS = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens")
 

@@ -12,6 +12,6 @@ sync.json
 budget.json
 lens.json
 # Internal build notes for this machine; not part of the published plugin.
-SHIPPING.md
+docs/dev-notes.md
 # Written by Claude Code each time it loads the plugin; early-access API declarations, not ours to publish.
 .claude-plugin/types/

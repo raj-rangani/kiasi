@@ -10,9 +10,9 @@ from datetime import datetime
 from math import ceil
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import constants
-from budget import install_day, project_of, transcript_files
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from core import constants
+from reports.budget import install_day, project_of, transcript_files
 
 SAVING_KINDS = ("cap", "paste_refused", "delegated", "pruned", "read_skipped")
 CONTEXT_KEYS = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
@@ -257,6 +257,10 @@ def classify(t, record, sessions):
                       f"{kept:,} tokens not re-sent × {later} later steps in the session")
     if event == "read_retry":
         return action(record, "read_retry", f"skipped read of {record.get('path', '')} repeated and let through")
+    if event == "routed":
+        return action(record, "routed", f"{record.get('tool_name')} pointed at {record.get('target')}: {record.get('label', '')}")
+    if event == "route_retry":
+        return action(record, "route_retry", f"{record.get('tool_name')} repeated after the routing and let through: {record.get('label', '')}")
     if event == "prompt":
         check = record.get("reread_check") or {}
         if record.get("paste_blocked"):

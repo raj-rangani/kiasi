@@ -108,7 +108,7 @@ function cacheCauses(c) {
 function renderMisses(d) {
   const c = d.cache;
   $('#cache-tiles').innerHTML = c ? cacheTiles(c) : '';
-  $('#cache-causes').innerHTML = c && c.misses ? cacheCauses(c) : '<div class="empty">No cache misses in range.</div>';
+  $('#cache-causes').innerHTML = c && c.misses ? cacheCauses(c) : emptyLine('cache misses');
 }
 
 function recallVerdict(share) {
@@ -120,7 +120,7 @@ function recallVerdict(share) {
 function renderRecall(d) {
   const rows = d.recall || [];
   const host = $('#recall');
-  if (!rows.length) { host.innerHTML = '<div class="empty">No cut outputs in range.</div>'; return; }
+  if (!rows.length) { host.innerHTML = emptyLine('cut outputs'); return; }
   const cuts = rows.reduce((sum, row) => sum + row.cuts, 0);
   const back = rows.reduce((sum, row) => sum + row.recalled, 0);
   const share = back / Math.max(1, cuts);
@@ -174,7 +174,7 @@ function renderBill(d) {
   const days = d.per_day;
   const host = $('#bill-chart');
   const kinds = d.settings.saving_kinds;
-  if (!days.length) { host.innerHTML = '<div class="empty">No days in range.</div>'; return; }
+  if (!days.length) { host.innerHTML = emptyLine('days'); return; }
   const f = frame(chartWidth('#bill-chart'), CHART_HEIGHT);
   const max = Math.max(...days.map(day => day.paid + avoidedOf(day, kinds))) || 1;
   const y = scaleY(f, max);

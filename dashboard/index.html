@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="What the context kiasi did and how many re-read tokens each action kept off the weekly limit.">
 <title>Kiasi</title>
-<link rel="stylesheet" href="assets/budget.css?v=2026093019">
-<link rel="stylesheet" href="assets/lens.css?v=2026093019">
+<link rel="stylesheet" href="assets/budget.css?v=2026100117">
+<link rel="stylesheet" href="assets/lens.css?v=2026100117">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cstyle%3E.s{fill:none;stroke:%231d1a16}@media (prefers-color-scheme:dark){.s{stroke:%23f6f2ea}}%3C/style%3E%3Cpath class='s' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' d='M8 3H4v18h4M16 3h4v18h-4'/%3E%3Ccircle fill='%23f2b632' cx='12' cy='12' r='3.6'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -28,6 +28,7 @@
   <div class="banner hidden" id="banner"></div>
 
   <main class="view" data-view="overview" hidden>
+  <section class="view-empty" hidden></section>
   <section class="since" id="since"></section>
   <section class="stats" id="stats"></section>
   <p class="startup-hint" id="startup-hint" hidden></p>
@@ -66,6 +67,7 @@
   </main>
 
   <main class="view" data-view="sessions" hidden>
+  <section class="view-empty" hidden></section>
   <section class="sheet">
     <div class="sheet-head">
       <h2><span class="num">01</span>The costliest sessions</h2>
@@ -86,6 +88,7 @@
   </main>
 
   <main class="view" data-view="rules" hidden>
+  <section class="view-empty" hidden></section>
   <section class="sheet">
     <div class="sheet-head">
       <h2><span class="num">01</span>Each rule</h2>
@@ -106,6 +109,7 @@
 
   <main class="view" data-view="budget" hidden>
   <section class="limits" id="limits" aria-label="Plan limits" hidden></section>
+  <section class="view-empty" hidden></section>
   <section class="sheet">
     <div class="sheet-head">
       <h2><span class="num">01</span>Re-read per day</h2>
@@ -123,6 +127,7 @@
   </main>
 
   <main class="view" data-view="storage" hidden>
+  <section class="view-empty" hidden></section>
   <section class="sheet">
     <div id="store-meter"></div>
   </section>
@@ -148,14 +153,14 @@
       <div class="panel-content" id="panel-content" tabindex="-1"></div>
     </div>
   </aside>
-  <script src="assets/lens-constants.js?v=2026093019"></script>
-<script src="assets/lens-common.js?v=2026093019"></script>
-<script src="assets/lens.js?v=2026093019"></script>
-<script src="assets/sessions.js?v=2026093019"></script>
-<script src="assets/rules.js?v=2026093019"></script>
-<script src="assets/budget.js?v=2026093019"></script>
-<script src="assets/storage.js?v=2026093019"></script>
-<script src="assets/sync.js?v=2026093019"></script>
+  <script src="assets/lens-constants.js?v=2026100117"></script>
+<script src="assets/lens-common.js?v=2026100201"></script>
+<script src="assets/lens.js?v=2026100117"></script>
+<script src="assets/sessions.js?v=2026100117"></script>
+<script src="assets/rules.js?v=2026100117"></script>
+<script src="assets/budget.js?v=2026100117"></script>
+<script src="assets/storage.js?v=2026100117"></script>
+<script src="assets/sync.js?v=2026100201"></script>
 <script>startApp();</script>
 </body>
 </html>

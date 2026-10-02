@@ -9,6 +9,43 @@ const stamp = ts => String(ts || '').replace('T', ' ');
 const read = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const store = v => { try { localStorage.setItem('theme', v); } catch {} };
 
+const emptyLine = what => `<div class="empty">No ${what} in range yet.</div>`;
+const hasDays = d => (d.per_day || []).length > 0;
+const LOGO_SVG = '<svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H4v18h4M16 3h4v18h-4"/><circle cx="12" cy="12" r="3.6"/></svg>';
+
+function emptyMarkup(name, kind, d) {
+  if (kind === 'loading') return `${LOGO_SVG}<h2>${EMPTY_LOADING}</h2>`;
+  const [title, body] = EMPTY_STATES[name][kind];
+  const days = (d && d.days) || 7;
+  return `${LOGO_SVG}<h2>${esc(title.replace('{days}', days))}</h2><p>${esc(body.replace('{days}', days))}</p>
+    <div class="ve-actions"><button class="ve-btn" type="button" data-sync>${esc(EMPTY_ACTIONS[kind])}</button>
+    <a class="ve-link" href="${EMPTY_LINK.href}" target="_blank" rel="noopener">${esc(EMPTY_LINK.text)}</a></div>
+    <p class="ve-note" hidden>${esc(EMPTY_BUILDING)}</p>`;
+}
+
+function renderEmpty(view, name, kind, d) {
+  const host = view.root.querySelector('.view-empty');
+  host.innerHTML = emptyMarkup(name, kind, d);
+  host.hidden = false;
+  view.root.classList.add('is-empty');
+  const btn = host.querySelector('[data-sync]');
+  if (btn) btn.addEventListener('click', () => { if (window.runSync) window.runSync(); });
+  setSyncBusy(document.body.classList.contains('syncing'));
+}
+
+function clearEmpty(view) {
+  const host = view.root.querySelector('.view-empty');
+  host.hidden = true;
+  host.innerHTML = '';
+  view.root.classList.remove('is-empty');
+}
+
+function setSyncBusy(busy) {
+  document.body.classList.toggle('syncing', busy);
+  document.querySelectorAll('.view-empty [data-sync]').forEach(btn => { btn.disabled = busy; });
+  document.querySelectorAll('.view-empty .ve-note').forEach(note => { note.hidden = !busy; });
+}
+
 function setStatus(text, tone) {
   const el = $('#status');
   el.className = `status ${tone}`;
@@ -289,8 +326,8 @@ function bindPanel() {
   });
 }
 
-function registerView(name, render, source = 'lens') {
-  views[name] = { render, source, dirty: true, root: document.querySelector(`[data-view="${name}"]`) };
+function registerView(name, render, source = 'lens', hasData = hasDays) {
+  views[name] = { render, source, hasData, dirty: true, root: document.querySelector(`[data-view="${name}"]`) };
 }
 
 function currentView() {
@@ -318,15 +355,19 @@ function startApp() {
   const data = { lens: null, budget: null };
   const signature = { lens: '', budget: '' };
   let shown = '';
+  let loaded = false;
   bindPanel();
 
   function paint(name) {
     const view = views[name];
     const d = data[view.source];
-    if (!view.dirty || !d) return;
+    if (!view.dirty) return;
+    const kind = !d ? (loaded ? 'missing' : 'loading') : view.hasData(d) ? '' : 'empty';
+    view.dirty = false;
+    if (kind) { renderEmpty(view, name, kind, d); return; }
+    clearEmpty(view);
     activeRoot = view.root;
     view.render(d);
-    view.dirty = false;
   }
 
   function show() {
@@ -350,19 +391,32 @@ function startApp() {
     return true;
   }
 
+  async function lastSync() {
+    try {
+      const res = await fetch(`${SYNC_STATUS_FILE}?t=${Date.now()}`);
+      return res.ok ? await res.json() : null;
+    } catch { return null; }
+  }
+
   async function load() {
     loadLimits();
     const results = await Promise.allSettled([fetchReport('lens', LENS_FILE), fetchReport('budget', BUDGET_FILE)]);
     const lensOk = results[0].status === 'fulfilled';
     if (lensOk || results[1].status === 'fulfilled') {
       const built = (data.lens || data.budget).generated;
-      setStatus(`built ${stamp(built)} · ${SYNC_EVERY_TEXT}`, 'ok');
-      $('#banner').classList.add('hidden');
+      const sync = await lastSync();
+      if (sync && sync.state === 'failed') {
+        setStatus(`built ${stamp(built)} · last rebuild failed`, 'bad');
+        $('#banner').textContent = `The rebuild at ${stamp(sync.started)} failed: ${sync.error}. Run /kiasi:sync in Claude Code to see the full error.`;
+        $('#banner').classList.remove('hidden');
+      } else {
+        setStatus(`built ${stamp(built)} · ${SYNC_EVERY_TEXT}`, 'ok');
+        $('#banner').classList.add('hidden');
+      }
     } else {
-      setStatus('no report yet', 'bad');
-      $('#banner').textContent = 'No report yet. Click Sync to build one from your transcripts; the savings numbers fill in after a session or two with Kiasi on.';
-      $('#banner').classList.remove('hidden');
+      setStatus('no report yet', '');
     }
+    if (!loaded) { loaded = true; Object.values(views).forEach(view => { view.dirty = true; }); }
     paint(currentView());
   }
 

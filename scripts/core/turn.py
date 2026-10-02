@@ -1,0 +1,146 @@
+from core import constants
+from core.caps import failure_label, handle_tool_output, leading_command
+from core.events import load_session, log_event, save_session
+from core.reads import track_reads
+from core.transcript import current_context_tokens, fmt_k, fmt_m, is_short_reply, is_system_prompt, is_task_prompt, prompt_text, tail_entries, transcript_key
+
+
+def steps_per_prompt(entries):
+    counts = []
+    steps = 0
+    started = False
+    for entry in entries:
+        if entry.get("type") == "assistant":
+            steps += started
+            continue
+        if entry.get("type") != "user" or is_system_prompt(prompt_text(entry)):
+            continue
+        if started:
+            counts.append(steps)
+        started = True
+        steps = 0
+    if started:
+        counts.append(steps)
+    return counts[-constants.REREAD_RECENT_PROMPTS:]
+
+
+def reread_check(prompt, tokens, entries, state):
+    if tokens < constants.REREAD_ASK_TOKENS or not is_task_prompt(prompt) or is_short_reply(prompt):
+        return None
+    if tokens - state.get("reread_asked_at", 0) < constants.REREAD_ASK_STEP_TOKENS:
+        return None
+    counts = steps_per_prompt(entries)
+    mean_steps = max(constants.REREAD_MIN_STEPS, round(sum(counts) / len(counts))) if counts else constants.REREAD_MIN_STEPS
+    if counts and sum(counts) / len(counts) < constants.REREAD_MIN_STEPS:
+        return None
+    here = tokens * mean_steps
+    delegated = tokens * constants.REREAD_MAIN_TURNS_WHEN_DELEGATED + mean_steps * constants.REREAD_SUBAGENT_MEAN_TOKENS
+    mode = "delegate" if delegated <= here * constants.REREAD_DELEGATE_RATIO else "here"
+    if mode == "delegate":
+        rule = (
+            f"(3) otherwise delegate without asking: write a self-contained brief (goal, files by absolute path, done condition, constraints), "
+            f"make one Agent call with subagent_type general-purpose, never fork, and relay its summary. Do not ask the user whether to delegate."
+        )
+        verdict = "Claude delegates unless the work needs this conversation."
+    else:
+        rule = f"(3) otherwise do it here within the turn budget of {constants.TURN_STOP_STEPS} tool calls, batching commands and running each test suite once."
+        verdict = "Delegation would not pay; Claude works here within the turn budget."
+    context = (
+        f"kiasi re-read check: the context is {fmt_k(tokens)} tokens and every step of this turn re-reads all of it. "
+        f"Recent prompts in this session took about {mean_steps} steps each, so doing this work here costs about {fmt_m(here)} re-read tokens; "
+        f"one subagent with a fresh context would cost about {fmt_m(delegated)}. Decide before your first tool call: "
+        f"(1) if the prompt is answerable from what is already in the conversation, answer with no tool calls; "
+        f"(2) if the work needs back-and-forth with the user or the exact state of this conversation, do it here; " + rule
+    )
+    message = f"kiasi: context {fmt_k(tokens)}, about {mean_steps} steps per prompt lately: roughly {fmt_m(here)} tokens re-read if done here, {fmt_m(delegated)} in a subagent. {verdict}"
+    return {"context": context, "message": message, "steps": mean_steps, "here": here, "delegated": delegated, "mode": mode}
+
+
+def checkpoint_path(key, turn):
+    return constants.CHECKPOINT_DIR / f"{key[:8]}-{turn.get('index', 0)}.md"
+
+
+def turn_guard(payload, tokens):
+    tool_name = payload.get("tool_name", "")
+    session_id = payload.get("session_id", "")
+    key = transcript_key(payload.get("transcript_path"))
+    state = load_session(session_id)
+    turn = state.setdefault("turns", {}).setdefault(key, {"steps": 0, "reread": 0, "warned": False, "stopped": False, "index": state.get("prompts", 0)})
+    turn["steps"] += 1
+    turn["reread"] += tokens
+    state["turn_budget"] = {"warn": constants.TURN_WARN_STEPS, "stop": constants.TURN_STOP_STEPS}
+    result = None
+    over_stop = turn["steps"] >= constants.TURN_STOP_STEPS or turn["reread"] >= constants.TURN_STOP_TOKENS
+    over_warn = turn["steps"] >= constants.TURN_WARN_STEPS or turn["reread"] >= constants.TURN_WARN_TOKENS
+    checkpoint = checkpoint_path(key, turn)
+    if over_stop and tool_name not in constants.TURN_EXEMPT_TOOLS and (not turn["stopped"] or (turn["steps"] - turn["stopped"]) % constants.TURN_REMIND_STEPS == 0):
+        first = not turn["stopped"]
+        turn["stopped"] = turn["stopped"] or turn["steps"]
+        reason = (
+            f"kiasi turn budget exhausted: {turn['steps']} tool calls and {fmt_m(turn['reread'])} tokens re-read in this turn at a context of {fmt_k(tokens)}. "
+            f"Make no further Read, Bash, Edit or search calls. Write what remains as a checklist to {checkpoint} (Write is allowed), then either make one Agent call with subagent_type general-purpose "
+            f"whose brief is that checklist path plus the done condition, or end the turn reporting what is done, what is verified and what remains."
+        ) if first else f"kiasi: turn budget still exhausted ({turn['steps']} tool calls, {fmt_m(turn['reread'])} tokens). Write the checklist to {checkpoint} and stop or delegate."
+        result = {"decision": "block", "reason": reason}
+        log_event({"event": "turn_stop", "session_id": session_id, "transcript": key, "steps": turn["steps"], "reread": turn["reread"], "context_tokens": tokens, "first": first})
+    elif over_warn and not turn["warned"]:
+        turn["warned"] = True
+        context = (
+            f"kiasi turn budget: this turn has made {turn['steps']} tool calls and re-read {fmt_m(turn['reread'])} tokens at a context of {fmt_k(tokens)}. "
+            f"The turn is stopped at {constants.TURN_STOP_STEPS} tool calls or {fmt_m(constants.TURN_STOP_TOKENS)} tokens. Before that: finish the item in progress, "
+            f"write the remaining items as a checklist to {checkpoint}, then end the turn with that path or hand the checklist to one general-purpose subagent."
+        )
+        result = {"hookSpecificOutput": {"hookEventName": payload.get("hook_event_name", "PostToolUse"), "additionalContext": context}}
+        log_event({"event": "turn_warn", "session_id": session_id, "transcript": key, "steps": turn["steps"], "reread": turn["reread"], "context_tokens": tokens})
+    save_session(session_id, state)
+    return result
+
+
+def handle_post_tool(payload):
+    entries = tail_entries(payload.get("transcript_path"))
+    guard = turn_guard(payload, current_context_tokens(entries))
+    capped = handle_tool_output(payload)
+    track_reads(payload, capped)
+    if not guard:
+        return capped
+    if capped:
+        guard.setdefault("hookSpecificOutput", {}).update(capped["hookSpecificOutput"])
+    return guard
+
+
+def loop_check(payload):
+    tool_name = payload.get("tool_name", "")
+    tool_input = payload.get("tool_input") or {}
+    session_id = payload.get("session_id", "")
+    state = load_session(session_id)
+    turn = state.setdefault("turns", {}).setdefault(transcript_key(payload.get("transcript_path")), {"steps": 0, "reread": 0, "warned": False, "stopped": False, "index": state.get("prompts", 0)})
+    fails = turn.setdefault("fails", {})
+    nudged = turn.setdefault("loop_nudged", [])
+    label = failure_label(tool_name, tool_input)
+    lead = f"{tool_name} {leading_command(tool_input.get('command') or '')}" if tool_name == "Bash" else label
+    fails[label] = fails.get(label, 0) + 1
+    if lead != label:
+        fails[f"lead:{lead}"] = fails.get(f"lead:{lead}", 0) + 1
+    hit = None
+    if fails[label] >= constants.LOOP_SAME_FAILS and label not in nudged:
+        hit = (label, label, fails[label])
+    elif lead != label and fails[f"lead:{lead}"] >= constants.LOOP_LEAD_FAILS and f"lead:{lead}" not in nudged:
+        hit = (f"lead:{lead}", f"{lead} (with different arguments)", fails[f"lead:{lead}"])
+    if hit:
+        nudged.append(hit[0])
+        log_event({"event": "loop", "session_id": session_id, "label": hit[1], "count": hit[2]})
+    save_session(session_id, state)
+    return constants.LOOP_REASON.format(label=hit[1], count=hit[2]) if hit else None
+
+
+def handle_tool_failure(payload):
+    if payload.get("is_interrupt"):
+        return None
+    guard = turn_guard(payload, current_context_tokens(tail_entries(payload.get("transcript_path"))))
+    nudge = loop_check(payload)
+    if not nudge:
+        return guard
+    output = guard or {}
+    specific = output.setdefault("hookSpecificOutput", {"hookEventName": payload.get("hook_event_name", "PostToolUseFailure")})
+    specific["additionalContext"] = "\n".join(part for part in (specific.get("additionalContext"), nudge) if part)
+    return output

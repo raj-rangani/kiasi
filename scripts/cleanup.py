@@ -27,7 +27,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import constants
+from core import constants
 
 DAY = 86400
 TS_FORMAT = "%Y-%m-%dT%H:%M:%S"

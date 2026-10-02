@@ -7,7 +7,7 @@ const dayLabel = day => day.slice(5).replace('-', '/');
 function renderChart(b) {
   const host = $('#levers');
   const days = b.per_day;
-  if (!days.length) { host.innerHTML = '<div class="empty">No transcripts in range.</div>'; return; }
+  if (!days.length) { host.innerHTML = emptyLine('transcripts'); return; }
   const t = b.totals;
   const W = Math.max(300, host.clientWidth || 900);
   const narrow = W < 600;

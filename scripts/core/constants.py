@@ -3,7 +3,7 @@ from pathlib import Path
 
 # PLUGIN_ROOT is the installed plugin's code directory (read-only, changes on update).
 # Use it only for bundled files such as rules.md, never for state.
-PLUGIN_ROOT = Path(__file__).resolve().parent.parent
+PLUGIN_ROOT = Path(__file__).resolve().parents[2]
 
 # DATA_DIR is where all state (events log, sessions, pastes, outputs, notes,
 # checkpoints, reports, sync status, search index) is written. Claude Code
@@ -89,6 +89,9 @@ BUDGET_FRESH_HOURS = 48
 
 AGENT_TOOL = "Agent"
 READ_TOOL = "Read"
+BASH_TOOL = "Bash"
+WEB_FETCH_TOOL = "WebFetch"
+PRE_TOOL_HOOKED = (AGENT_TOOL, READ_TOOL, BASH_TOOL, WEB_FETCH_TOOL)
 EDIT_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
 READ_SKIP_MIN_CHARS = 2000
 READ_SKIP_REASON = ("kiasi: {path}{span} is unchanged since you read it earlier in this conversation, so its text is already in your context. "
@@ -182,8 +185,8 @@ BUDGET_TOP_OUTPUTS = 8
 BUDGET_BIG_OUTPUT_CHARS = 20_000
 BUDGET_HIGH_CONTEXT_TOKENS = 200_000
 
-# Sandbox tools (mcp__kiasi__run, mcp__kiasi__distill → scripts/sandbox.py): the full
-# output never enters the conversation; it is saved under outputs/ and only a digest returns.
+# Sandbox tools (mcp__kiasi__run, mcp__kiasi__distill, mcp__kiasi__fetch → scripts/sandbox.py):
+# the full output never enters the conversation; it is saved under outputs/ and only a digest returns.
 SANDBOX_TIMEOUT_SECONDS = 120
 SANDBOX_TIMEOUT_MAX_SECONDS = 600
 RUN_HEAD_LINES = 15
@@ -192,6 +195,43 @@ RUN_ERROR_LINES = 20
 RUN_LINE_CHARS = 200
 DISTILL_RESULT_CHARS = 4_000
 DISTILL_ERROR_CHARS = 2_000
+FETCH_MAX_BYTES = 5_000_000
+FETCH_HEAD_CHARS = 3_000
+FETCH_FIND_LINES = 40
+FETCH_USER_AGENT = "Mozilla/5.0 (compatible; kiasi-fetch)"
+FETCH_BLOCK_TAGS = {"p", "div", "br", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "section", "article", "header", "footer",
+                    "pre", "blockquote", "table", "ul", "ol", "dd", "dt", "hr", "nav", "main", "aside", "option", "title"}
+FETCH_SKIP_TAGS = {"script", "style", "noscript", "svg", "head", "template"}
+
+# Sandbox routing (PreToolUse on Bash and WebFetch): while the sandbox tools are registered
+# (CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1), a raw call whose output would only be scanned is
+# denied once with the sandbox call to make instead; the identical call repeated goes through.
+ROUTE_ENV_FLAG = "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS"
+RUN_TOOL_NAME = "mcp__kiasi__run"
+FETCH_TOOL_NAME = "mcp__kiasi__fetch"
+ROUTE_LABEL_CHARS = 200
+ROUTE_BASH_PATTERNS = [
+    r"\b(pnpm|npm|yarn|bun)\s+(run\s+)?(test|build|lint|typecheck|check)\b",
+    r"\bnode\s+ace\s+test\b",
+    r"\b(pytest|jest|vitest|mocha|japa|phpunit|go\s+test|cargo\s+(test|build)|python3?\s+-m\s+unittest)\b",
+    r"\b(pnpm|npm|yarn|bun|pip|pip3|apt|apt-get|brew|composer)\s+(i|install|add|ci|update|upgrade)\b",
+    r"\b(tsc|eslint|prettier|ruff|flake8|mypy|pylint|phpstan)\b",
+    r"\b(docker|docker-compose|kubectl)\s+(logs|build|pull|compose\s+(up|build|logs|pull))\b",
+    r"\b(webpack|vite|esbuild|rollup|next)\s+build\b",
+    r"\b(curl|wget)\s",
+    r"\bgit\s+log\b",
+    r"\btail\s+(-n\s*|-)\d{3,}\b",
+]
+# A scan command that already limits its own output stays raw: piped into head/tail/wc/jq,
+# a small numeric limit (git log -5), --oneline, or stdout sent to a file.
+ROUTE_LIMITED_PATTERN = (r"\|\s*(head|tail|wc|jq|grep\s+-c)\b|(^|\s)(-n\s*|--max-count[= ]|-)\d{1,2}(\s|$)|--oneline"
+                         r"|>\s*/dev/null|\s-o\s+\S+|\s>>?\s*\S+")
+ROUTE_BASH_REASON = ("kiasi: the output of `{command}` would only be scanned. Run it through mcp__kiasi__run with the same command: "
+                     "the full output is saved and searchable with mcp__kiasi__search, and only a digest (exit code, head, error lines, tail) "
+                     "enters the conversation. If you need the exact full output here, repeat the same Bash call and it will go through.")
+ROUTE_WEB_REASON = ("kiasi: fetch {url} with mcp__kiasi__fetch instead (url, plus `find` words to pull the matching lines): "
+                    "the page text is saved and searchable with mcp__kiasi__search, and only its head and the hit lines enter the conversation. "
+                    "If you need WebFetch's summarised answer, repeat the same WebFetch call and it will go through.")
 
 SEARCH_DB = LOG_DIR / "search.db"
 SEARCH_DIRS = (OUTPUT_DIR, PASTE_DIR, NOTES_DIR, CHECKPOINT_DIR)
@@ -261,7 +301,7 @@ STORAGE_LIST_ROWS = 200
 STORAGE_HISTORY_ROWS = 100
 # Only files whose names Kiasi itself writes are ever touched; anything else in these folders stays.
 CLEANUP_PATTERNS = {
-    "outputs": r"(toolu_[A-Za-z0-9_-]+|compact-[0-9a-f]{8}-\d{8}-\d{6}|(run|distill)-\d{8}-\d{6}-\d+)\.txt",
+    "outputs": r"(toolu_[A-Za-z0-9_-]+|compact-[0-9a-f]{8}-\d{8}-\d{6}|(run|distill|fetch)-\d{8}-\d{6}-\d+)\.txt",
     "checkpoints": r"[0-9a-f]{8}-\d+\.md",
     "pastes": r"[0-9a-f-]{36}-\d+\.txt",
     "sessions": r"[0-9a-f-]{36}\.json",
@@ -270,7 +310,7 @@ CLEANUP_PATTERNS = {
 
 SYNC_REQUEST = LOG_DIR / "sync.request"
 SYNC_STATUS = LOG_DIR / "sync.json"
-SYNC_SCRIPTS = ("budget.py", "lens.py")
+SYNC_SCRIPTS = ("reports/budget.py", "reports/lens.py")
 
 # SessionStart: rules.md shipped inside the plugin, injected as additionalContext.
 RULES_FILE = PLUGIN_ROOT / "rules.md"
@@ -328,6 +368,22 @@ SYNC_TIMEOUT_SECONDS = 120
 # The dashboard answers only requests addressed to the loopback names it listens on,
 # so a web page cannot reach it through DNS rebinding, and POST /sync only from its own pages.
 DASHBOARD_HOSTS = ("127.0.0.1", "localhost")
+
+# The SessionStart hook makes sure a dashboard server is up (KIASI_DASHBOARD=off
+# disables that), started detached so it outlives the Claude Code session that
+# started it. dashboard.py records where it listens in DASHBOARD_STATE and
+# writes its errors to DASHBOARD_LOG; the hook probes GET /limits on the recorded
+# port, then the default port, and starts a server only when neither answers.
+DASHBOARD_PORT = 8787
+DASHBOARD_PORT_TRIES = 20
+DASHBOARD_AUTOSTART = os.environ.get("KIASI_DASHBOARD", "on").strip().lower() not in ("off", "0", "no", "false")
+DASHBOARD_STATE = LOG_DIR / "dashboard.json"
+DASHBOARD_LOG = LOG_DIR / "dashboard.log"
+DASHBOARD_LOG_MAX_BYTES = 200_000
+DASHBOARD_SERVER = "kiasi-dashboard"
+DASHBOARD_PROBE_SECONDS = 1.0
+DASHBOARD_START_WAIT_SECONDS = 3.0
+DASHBOARD_REBUILD_SECONDS = 30 * 60
 
 # Plan limits come only from the status line: Claude Code hands it rate_limits
 # and the Kiasi wrapper (statusline.py) saves them for the dashboard.

@@ -6,6 +6,7 @@ import {
   SEARCH_TOOL, SEARCH_DESCRIPTION, SEARCH_INPUT_SCHEMA,
   RUN_TOOL, RUN_DESCRIPTION, RUN_INPUT_SCHEMA,
   DISTILL_TOOL, DISTILL_DESCRIPTION, DISTILL_INPUT_SCHEMA,
+  FETCH_TOOL, FETCH_DESCRIPTION, FETCH_INPUT_SCHEMA,
 } from './constants.js';
 
 export function register(on) {
@@ -17,6 +18,7 @@ export function register(on) {
     await $.tool.register({ name: SEARCH_TOOL, description: SEARCH_DESCRIPTION, inputSchema: SEARCH_INPUT_SCHEMA });
     await $.tool.register({ name: RUN_TOOL, description: RUN_DESCRIPTION, inputSchema: RUN_INPUT_SCHEMA });
     await $.tool.register({ name: DISTILL_TOOL, description: DISTILL_DESCRIPTION, inputSchema: DISTILL_INPUT_SCHEMA });
+    await $.tool.register({ name: FETCH_TOOL, description: FETCH_DESCRIPTION, inputSchema: FETCH_INPUT_SCHEMA });
     return next(e);
   });
 }

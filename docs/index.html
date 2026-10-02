@@ -336,7 +336,7 @@ footer a { color: var(--muted); }
 /plugin install kiasi@kiasi</code></pre></div></div></li>
       <li class="reveal" style="--d:1"><div><h3>Add two settings</h3><p>In the <code>env</code> block of <code>~/.claude/settings.json</code>. Kiasi reminds you at session start if either is missing.</p><div class="codebox"><button class="copy" type="button" data-copy="c2">Copy</button><pre><code id="c2">"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "200000",
 "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"</code></pre></div><p>The first is the biggest single lever: compaction happens at 200k instead of the full window. On the machine Kiasi was built on, mean context fell from about 250k to 57k tokens. The second turns on the experimental pruner and search.</p></div></li>
-      <li class="reveal" style="--d:2"><div><h3>Restart, then work as usual</h3><p>Run <code>/kiasi:limits setup</code> once so the dashboard can show your plan limits. After a session or two, run <code>/kiasi:dashboard</code>.</p></div></li>
+      <li class="reveal" style="--d:2"><div><h3>Restart, then work as usual</h3><p>Run <code>/kiasi:limits setup</code> once so the dashboard can show your plan limits. The dashboard starts with every session; after a session or two open <code>http://127.0.0.1:8787/</code> or run <code>/kiasi:dashboard</code> for the URL.</p></div></li>
     </ol>
   </section>
 
@@ -368,7 +368,7 @@ footer a { color: var(--muted); }
     </div>
 
     <div class="sub">
-      <p class="intro reveal">Set these with <code>/config</code>, or as env vars. Every other threshold is a named constant in <code>scripts/constants.py</code> or <code>hooks/constants.js</code>.</p>
+      <p class="intro reveal">Set these with <code>/config</code>, or as env vars. Every other threshold is a named constant in <code>scripts/core/constants.py</code> or <code>hooks/constants.js</code>.</p>
       <div class="table reveal">
         <table>
           <thead><tr><th>Setting</th><th>Env var</th><th>Default</th></tr></thead>
@@ -392,7 +392,7 @@ footer a { color: var(--muted); }
       <details>
         <summary>Data directory</summary>
         <div>
-          <p>All state (event log, saved pastes, outputs, notes and checkpoints, session records, gzipped report JSON, sync status) goes to <code>${CLAUDE_PLUGIN_DATA}</code>, normally under <code>~/.claude/plugins/data/</code>. Scripts run by hand (the dashboard, <code>sync.py</code>, <code>search.py</code>) follow a pointer the session-start hook leaves in <code>~/.claude/kiasi/</code>. Nothing is ever written under the installed plugin code.</p>
+          <p>All state (event log, saved pastes, outputs, notes and checkpoints, session records, gzipped report JSON, sync status) goes to <code>${CLAUDE_PLUGIN_DATA}</code>, normally under <code>~/.claude/plugins/data/</code>. Scripts run by hand (the dashboard, <code>reports/sync.py</code>, <code>search.py</code>) follow a pointer the session-start hook leaves in <code>~/.claude/kiasi/</code>. Nothing is ever written under the installed plugin code.</p>
         </div>
       </details>
       <details>
@@ -417,7 +417,8 @@ footer a { color: var(--muted); }
       <details>
         <summary>Keeping the dashboard up</summary>
         <div>
-          <p>On Linux, use a systemd user unit with <code>ExecStart=/usr/bin/python3 &lt;plugin root&gt;/scripts/dashboard.py 8787</code> and <code>Restart=always</code>, enabled with <code>systemctl --user enable --now</code>. Then bookmark <code>http://127.0.0.1:8787/</code>.</p>
+          <p>Nothing to do: every session start checks for a dashboard on <code>127.0.0.1:8787</code> and starts one detached when none answers, so it outlives the session that started it and keeps rebuilding the reports every 30 minutes. Bookmark <code>http://127.0.0.1:8787/</code>. Set <code>KIASI_DASHBOARD=off</code> in the <code>env</code> block of <code>settings.json</code> to switch this off; <code>dashboard.log</code> in the data directory holds its errors.</p>
+          <p>To have it up before the first session as well, on Linux use a systemd user unit with <code>Environment=CLAUDE_PLUGIN_DATA=&lt;your data directory&gt;</code>, <code>ExecStart=/usr/bin/python3 &lt;plugin root&gt;/scripts/dashboard.py 8787</code> and <code>Restart=always</code>, enabled with <code>systemctl --user enable --now</code>; the hook sees it and starts nothing.</p>
         </div>
       </details>
       <details>

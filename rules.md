@@ -13,6 +13,8 @@ Every turn re-sends the whole conversation, so context size times turns is the r
 - Subagents get a 40-call budget in their brief; scope review subagents to the diff, never the whole repo.
 - A command whose output you will only scan (a build, a test run, a long log, curl) goes through the `mcp__kiasi__run` tool when it is available: the full output is saved and searchable, and only a digest enters the conversation.
 - To count, filter or parse something in big files without reading them, use the `mcp__kiasi__distill` tool when it is available: it runs a short python3 or node script over the paths and only what the script prints enters the conversation.
+- To read a web page, use the `mcp__kiasi__fetch` tool when it is available (url, plus `find` words): the page text is saved and searchable, and only its head and the matching lines enter the conversation. WebFetch is for a summarised answer to a question.
+- While those tools are registered, a raw Bash call that matches a scan-only command, or a raw WebFetch, is refused once with the sandbox call to make instead; repeating the identical call lets it through when the exact full output is needed.
 - To find something in a saved output, paste, note or checkpoint, use the `mcp__kiasi__search` tool if it is available (needs `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1`), or run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/search.py <words>` and read only the file it names, by section, around the hit lines it reports.
 
 ## Compact instructions

@@ -14,13 +14,13 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Agent|Read",
+        "matcher": "Agent|Read|Bash|WebFetch",
         "hooks": [
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/scripts/kiasi.py",
             "timeout": 10,
-            "statusMessage": "Kiasi: subagent policy"
+            "statusMessage": "Kiasi: routing"
           }
         ]
       }

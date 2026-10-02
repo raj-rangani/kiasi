@@ -1,0 +1,230 @@
+import importlib
+import json
+import time
+import unittest
+from pathlib import Path
+
+from helpers import KiasiTestCase
+from core import constants  # noqa: E402
+from core import prompt  # noqa: E402
+
+
+class PromptRows(unittest.TestCase):
+    def test_prompt_rows(self):
+        import importlib.util, pathlib
+        spec = importlib.util.spec_from_file_location("lens", pathlib.Path(__file__).resolve().parents[1] / "scripts" / "reports" / "lens.py")
+        lens = importlib.util.module_from_spec(spec); spec.loader.exec_module(lens)
+        info = {"steps": [100, 110, 120, 130, 140], "contexts": [10, 20, 30, 40, 50], "prompts": [125, 99]}
+        rows = lens.prompt_rows(info)
+        self.assertEqual([r["n"] for r in rows], [1, 2])
+        self.assertEqual((rows[0]["step"], rows[0]["steps"], rows[0]["context"], rows[0]["cost"]), (0, 3, 10, 60))
+        self.assertEqual((rows[1]["step"], rows[1]["steps"], rows[1]["cost"]), (3, 2, 90))
+
+
+class TestLensSignals(KiasiTestCase):
+    def test_miss_cause_and_recall(self):
+        from reports import lens
+        self.assertEqual(lens.miss_cause(10, True, False), "compaction")
+        self.assertEqual(lens.miss_cause(4000, False, False), "idle over 1h")
+        self.assertEqual(lens.miss_cause(10, False, False), "other")
+        events = [(100, {"event": "cap", "session_id": "s", "kind": "bulk", "saved_path": "/d/outputs/a.txt"}),
+                  (100, {"event": "cap", "session_id": "s", "kind": "bulk", "saved_path": "/d/outputs/b.txt"})]
+        sessions = {"s": {"recalls": [(150, '{"file_path": "/d/outputs/a.txt"}'), (50, '{"file_path": "/d/outputs/b.txt"}')]}}
+        self.assertEqual(lens.recall_rows(events, sessions), [{"kind": "bulk", "cuts": 2, "recalled": 1}])
+        misses = [{"t": 200, "prev": 100, "tokens": 30000, "cause": "other", "session": "s"},
+                  {"t": 400, "prev": 300, "tokens": 30000, "cause": "other", "session": "s"},
+                  {"t": 600, "prev": 500, "tokens": 30000, "cause": "other", "session": "s"}]
+        lens.attribute_misses(misses, [(150, {"event": "plugin_compact", "session_id": "s"}),
+                                       (350, {"event": "prompt", "session_id": "s", "config_changed": ["plugins", "settings"]}),
+                                       (550, {"event": "prompt", "session_id": "other-session", "config_changed": ["settings"]})])
+        self.assertEqual([m["cause"] for m in misses], ["compaction", "plugins changed", "other"])
+
+    def test_cache_report_ranks_by_cost_and_compares_windows(self):
+        from reports import lens
+        now = time.time()
+        day = lambda t: lens.local_day(t)
+        per_day = {day(now): {"read": 900, "input": 1000}, day(now - 9 * 86400): {"read": 1, "input": 10}}
+        misses = [{"t": now - 60, "prev": now - 90, "tokens": 30000, "cause": "other", "session": "s", "project": "p"},
+                  {"t": now - 120, "prev": now - 150, "tokens": 90000, "cause": "idle over 1h", "session": "s", "project": "p"},
+                  {"t": now - 180, "prev": now - 200, "tokens": 500000, "cause": "compaction", "session": "s", "project": "p"},
+                  {"t": now - 9 * 86400, "prev": now - 9 * 86400 - 5, "tokens": 30000, "cause": "other", "session": "s", "project": "p"}]
+        report = lens.cache_report(7, per_day, misses, 10_000_000)
+        self.assertEqual(report["hit_rate"], 0.9)
+        self.assertEqual((report["misses"], report["avoidable"], report["prior_avoidable"]), (3, 2, 1))
+        self.assertEqual([row["cause"] for row in report["causes"]], ["idle over 1h", "other", "compaction"], "by cost, compaction last")
+        self.assertEqual(report["extra"], lens.extra_cost(120000))
+
+    def test_config_change_is_logged_from_the_second_prompt(self):
+        cwd = self.tmp / "proj"
+        cwd.mkdir()
+        state = {}
+        self.assertEqual(prompt.config_changes(state, str(cwd)), [])
+        self.assertEqual(prompt.config_changes(state, str(cwd)), [])
+        (cwd / "CLAUDE.md").write_text("rules")
+        self.assertEqual(prompt.config_changes(state, str(cwd)), ["CLAUDE.md"])
+
+
+class TestPostmortem(KiasiTestCase):
+    def setUp(self):
+        super().setUp()
+        from reports import lens
+        self.lens = lens
+
+    def test_findings_are_ranked_by_what_they_cost(self):
+        info = {"contexts": [40_000, 42_000, 90_000, 91_000, 92_000], "steps": [1, 2, 3, 4, 5], "prompts": [0]}
+        acts = [{"kind": "compaction", "label": "", "record": {"context_tokens": 150_000}}]
+        findings = self.lens.postmortem(info, acts, [5], 71_000)
+        labels = [f["label"] for f in findings]
+        self.assertIn("started at 40k", labels[0], "startup × 5 steps = 200k is the biggest cost")
+        self.assertIn("compacted 1 time", labels[1])
+        self.assertIn("step 3 added 48k", labels[2])
+        self.assertTrue(all(f["fix"] for f in findings))
+
+    def test_a_lean_session_has_no_findings(self):
+        info = {"contexts": [8_000, 9_000], "steps": [1, 2], "prompts": [0]}
+        self.assertEqual(self.lens.postmortem(info, [], [2], 8_500), [])
+
+    def test_repeated_bash_caps_get_the_sandbox_advisory(self):
+        info = {"contexts": [8_000, 9_000], "steps": [1, 2], "prompts": [0]}
+        acts = [{"kind": "cap", "label": "", "record": {"kind": "bash"}} for _ in range(3)]
+        findings = self.lens.postmortem(info, acts, [2], 8_500)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("3 long command outputs were capped", findings[0]["label"])
+        self.assertIn("mcp__kiasi__run", findings[0]["fix"])
+
+
+class ReportTestCase(KiasiTestCase):
+    """Synthetic transcripts under a temp TRANSCRIPT_ROOT; timestamps sit at 06:00 UTC
+    yesterday so the UTC day (budget.py) and the local day (lens.py) agree in any zone
+    from UTC-6 to UTC+14."""
+
+    def setUp(self):
+        super().setUp()
+        from reports import budget
+        from reports import lens
+        self.budget, self.lens = budget, lens
+        constants.TRANSCRIPT_ROOT = self.tmp / "projects"
+        self.project = constants.TRANSCRIPT_ROOT / "-home-user-app"
+        self.project.mkdir(parents=True)
+        self.day = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 86400))
+
+    def stamp(self, second, day=None):
+        return f"{day or self.day}T06:00:{second:02d}Z"
+
+    def step(self, request, second, read, create=90, day=None):
+        return {"type": "assistant", "requestId": request, "timestamp": self.stamp(second, day),
+                "message": {"content": [{"type": "text", "text": "ok"}],
+                            "usage": {"input_tokens": 10, "cache_creation_input_tokens": create,
+                                      "cache_read_input_tokens": read, "output_tokens": 5}}}
+
+    def prompt(self, second, text="do it"):
+        return {"type": "user", "timestamp": self.stamp(second), "message": {"role": "user", "content": text}}
+
+    def tool_result(self, second):
+        return {"type": "user", "timestamp": self.stamp(second),
+                "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "done"}]}}
+
+    def write(self, path, entries):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("\n".join(json.dumps(e) for e in entries) + "\n")
+
+
+class TestBudgetReport(ReportTestCase):
+    def test_one_step_per_request_even_when_split_into_blocks(self):
+        """A response is one transcript line per content block; each line repeats the usage."""
+        self.write(self.project / "s1.jsonl", [
+            self.prompt(0), self.step("r1", 1, 1000), self.step("r1", 2, 1000), self.step("r1", 3, 1000),
+            self.tool_result(4), self.step("r2", 5, 3000)])
+        report = self.budget.build(7)
+        [day] = report["per_day"]
+        self.assertEqual(day["turns"], 2)
+        self.assertEqual(day["main"]["cache_read_input_tokens"], 4000)
+        self.assertEqual(day["mean_context"], (1100 + 3100) // 2)
+        [session] = report["sessions"]
+        self.assertEqual((session["turns"], session["peak"], session["steps_per_prompt"]), (2, 3100, 2.0))
+
+    def test_subagent_steps_are_billed_apart_from_main(self):
+        self.write(self.project / "s1.jsonl", [self.prompt(0), self.step("r1", 1, 1000)])
+        self.write(self.project / "s1" / "subagents" / "agent-a.jsonl", [self.step("a1", 2, 500), self.step("a2", 3, 700)])
+        [day] = self.budget.build(7)["per_day"]
+        self.assertEqual((day["turns"], day["sub_turns"]), (1, 2))
+        self.assertEqual((day["main"]["cache_read_input_tokens"], day["sub"]["cache_read_input_tokens"]), (1000, 1200))
+
+    def test_steps_older_than_the_window_are_dropped_by_day_not_file_age(self):
+        old = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 10 * 86400))
+        self.write(self.project / "s1.jsonl", [self.step("old", 1, 9999, day=old), self.prompt(2), self.step("r1", 3, 1000)])
+        days = [row["day"] for row in self.budget.build(7)["per_day"]]
+        self.assertEqual(days, [self.day])
+
+    def test_compaction_is_a_drop_to_under_half_from_over_150k(self):
+        self.write(self.project / "s1.jsonl", [
+            self.prompt(0), self.step("r1", 1, 160_000), self.step("r2", 2, 170_000),
+            self.step("r3", 3, 30_000), self.step("r4", 4, 100_000)])
+        [session] = self.budget.build(7)["sessions"]
+        self.assertEqual(session["compactions"], 1)
+
+
+class TestEmptyReport(ReportTestCase):
+    """The dashboard keys its page-level empty state off these fields."""
+
+    def test_reports_without_transcripts_have_no_days_and_no_sessions(self):
+        lens, budget = self.lens.build(7), self.budget.build(7)
+        self.assertEqual((lens["per_day"], lens["sessions"], lens["totals"]["sessions"]), ([], [], 0))
+        self.assertEqual((budget["per_day"], budget["sessions"]), ([], []))
+        self.assertEqual((lens["days"], budget["days"]), (7, 7))
+
+    def test_one_session_fills_both_reports(self):
+        self.write(self.project / "s1.jsonl", [self.prompt(0), self.step("r1", 1, 1000)])
+        self.assertEqual(len(self.lens.build(7)["per_day"]), 1)
+        self.assertEqual(len(self.budget.build(7)["per_day"]), 1)
+
+
+class TestLensReport(ReportTestCase):
+    def test_sessions_count_steps_once_and_only_typed_prompts(self):
+        self.write(self.project / "s1.jsonl", [
+            self.prompt(0), self.step("r1", 1, 1000), self.step("r1", 2, 1000),
+            self.tool_result(3), self.step("r2", 4, 3000), self.prompt(5, "next"), self.step("r3", 6, 4000)])
+        sessions, bill, main_bill, prompts = self.lens.scan_sessions(7)
+        info = sessions["s1"]
+        self.assertEqual((len(info["steps"]), info["contexts"], info["reread"]), (3, [1100, 3100, 4100], 8000))
+        self.assertEqual(len(info["prompts"]), 2, "a tool result is not a prompt")
+        self.assertEqual(sum(bill.values()), 8000)
+        self.assertEqual(sum(prompts.values()), 2)
+        self.assertEqual(self.lens.steps_until_next_prompt(info["steps"], info["prompts"], info["prompts"][0]), 2)
+        self.assertEqual(self.lens.steps_until_next_prompt(info["steps"], info["prompts"], info["prompts"][1]), 1)
+
+    def test_lens_and_budget_agree_on_steps_and_reread(self):
+        self.write(self.project / "s1.jsonl", [self.prompt(0), self.step("r1", 1, 1000), self.step("r1", 2, 1000), self.step("r2", 3, 2500)])
+        self.write(self.project / "s1" / "subagents" / "agent-a.jsonl", [self.step("a1", 4, 600)])
+        sessions, bill, _, _ = self.lens.scan_sessions(7)
+        [day] = self.budget.build(7)["per_day"]
+        self.assertEqual(len(sessions["s1"]["steps"]), day["turns"])
+        self.assertEqual(sum(bill.values()), day["main"]["cache_read_input_tokens"] + day["sub"]["cache_read_input_tokens"])
+
+    def test_period_metrics_weights_means_by_main_turns(self):
+        rows = [{"turns": 10, "sub_turns": 0, "mean_context": 1000, "high_share": 0.0, "main": {"cache_read_input_tokens": 50_000}},
+                {"turns": 30, "sub_turns": 10, "mean_context": 3000, "high_share": 0.5, "main": {"cache_read_input_tokens": 150_000},
+                 "sub": {"cache_read_input_tokens": 20_000}}]
+        m = self.lens.period_metrics(rows)
+        self.assertEqual((m["turns"], m["reread"], m["reread_per_turn"], m["reread_per_day"]), (50, 220_000, 4400, 110_000))
+        self.assertEqual((m["mean_context"], m["high_share"]), (2500, 0.375))
+        self.assertEqual(self.lens.period_metrics([])["reread_per_turn"], 0)
+
+    def test_since_install_splits_on_install_day_and_computes_factor(self):
+        day = lambda n: time.strftime("%Y-%m-%d", time.localtime(time.time() - n * 86400))
+        row = lambda d, turns, read: {"day": d, "turns": turns, "sub_turns": 0, "mean_context": 0, "high_share": 0,
+                                      "main": {"cache_read_input_tokens": read}}
+        constants.BUDGET_FILE.write_text(json.dumps({"per_day": [
+            row(day(5), 10, 400_000), row(day(4), 10, 400_000),   # before: 40k per turn
+            row(day(3), 10, 999_999),                             # install day: left out of both
+            row(day(2), 10, 100_000), row(day(1), 10, 100_000),   # after: 10k per turn
+            row(day(0), 10, 100_000)]}))                          # today: per turn only
+        constants.EVENT_LOG.write_text(json.dumps({"ts": day(3) + "T09:00:00", "event": "cap"}) + "\n")
+        result = self.lens.since_install()
+        self.assertEqual(result["install_day"], day(3))
+        self.assertEqual((result["before"]["days"], result["before"]["reread_per_turn"]), (2, 40_000))
+        self.assertEqual((result["after"]["days"], result["after"]["reread_per_turn"], result["after"]["turns"]), (2, 10_000, 30))
+        self.assertEqual(result["factor"], 4.0)
+
+    def test_since_install_without_a_log_or_report(self):
+        self.assertEqual(self.lens.since_install(), {"install_day": None, "before": None, "after": None})
