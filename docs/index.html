@@ -59,8 +59,7 @@ h1 em { font-style: italic; color: var(--accent-ink); }
 h2 { font-family: var(--serif); font-weight: 400; font-size: clamp(28px, 4vw, 40px); line-height: 1.12; margin: 0 0 12px; letter-spacing: -0.01em; }
 h3 { font-family: var(--serif); font-weight: 400; font-size: 20px; margin: 0 0 6px; }
 p { margin: 0 0 14px; }
-section { padding: 88px 0 0; }
-main > section + section { margin-top: 88px; border-top: 1px solid var(--rule); }
+body { overflow-x: clip; }
 .lede { font-size: 19px; color: var(--muted); max-width: 54ch; margin: 0 auto 36px; }
 .centered { text-align: center; }
 
@@ -113,7 +112,6 @@ main > section + section { margin-top: 88px; border-top: 1px solid var(--rule); 
 .trust span { font-family: var(--mono); font-size: 12px; color: var(--muted); }
 @media (max-width: 760px) { .trust { grid-template-columns: repeat(2, 1fr); } .trust b { font-size: 26px; } }
 
-.mech { display: block; }
 .loop { min-width: 0; }
 .loop svg { width: 100%; height: auto; display: block; overflow: visible; }
 .loop text { font-family: var(--mono); font-size: 10.5px; fill: var(--muted); }
@@ -144,93 +142,128 @@ main > section + section { margin-top: 88px; border-top: 1px solid var(--rule); 
 .gkey { display: flex; flex-wrap: wrap; gap: 4px 14px; font-family: var(--mono); font-size: 11px; color: var(--muted); margin: 8px 0 0; }
 .gkey i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
 .gkey i.sw { width: 14px; height: 3px; vertical-align: 3px; }
-.sums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; border-top: 1px solid var(--rule); padding-top: 20px; margin-top: 26px; }
-.sums div { padding: 0; }
-.sums b { display: block; font-family: var(--serif); font-weight: 400; font-size: 40px; line-height: 1; letter-spacing: -0.015em; font-variant-numeric: tabular-nums; margin-bottom: 8px; }
-.sums .a b { color: var(--bad); } .sums .b b { color: var(--good); } .sums .c b { color: var(--accent-ink); }
-.sums span { font-family: var(--mono); font-size: 12px; color: var(--muted); }
-.eq { font-family: var(--mono); font-size: 12.5px; color: var(--muted); margin: 18px 0 0; }
-.eq b { color: var(--ink); font-weight: 400; }
+/* ---- page grid: guides, rules, cells ---- */
+.page { position: relative; margin-top: 88px; border-left: 1px solid var(--rule); border-right: 1px solid var(--rule); }
+.page > section, .page > .final, .page > .foot { position: relative; padding: 0; }
+.page > section::before, .page > .final::before, .page > .foot::before { content: ""; position: absolute; top: -1px; left: 50%; width: 100vw; height: 1px; background: var(--rule); transform: translateX(-50%); pointer-events: none; }
+.sec-head { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: 24px 48px; align-items: center; padding: 60px 36px 44px; }
+.sec-head .kicker { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.sec-head .kicker i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 50%, transparent); animation: ping 2.4s var(--ease) infinite; }
+@keyframes ping { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); } 70% { box-shadow: 0 0 0 9px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+.sec-head .kicker .ix { color: var(--muted); letter-spacing: 0.04em; }
+.sec-head h2 { margin-bottom: 14px; }
+.sec-head .lede { margin: 0; max-width: 46ch; font-size: 17px; }
+.sec-head .aside { justify-self: end; max-width: 38ch; font-family: var(--mono); font-size: 12.5px; color: var(--muted); line-height: 1.7; }
+.sec-head .aside b { color: var(--ink); font-weight: 400; }
+.cells { display: grid; gap: 1px; background: var(--rule); border-top: 1px solid var(--rule); margin: 0; padding: 0; list-style: none; }
+.cells + .cells { border-top: 0; margin-top: 1px; }
+.c2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .c3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } .c4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.cell { position: relative; background: var(--paper); padding: 30px 36px 32px; min-width: 0; overflow: hidden; }
+.cell > * { position: relative; }
+.cell::before { content: ""; position: absolute; inset: 0; background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 50%), color-mix(in srgb, var(--accent) 13%, transparent), transparent 62%); opacity: 0; transition: opacity .4s var(--ease); pointer-events: none; }
+.cell::after { content: ""; position: absolute; left: 0; top: 0; width: 100%; height: 2px; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform .5s var(--ease); }
+.cell:hover::before { opacity: 1; } .cell:hover::after { transform: scaleX(1); }
+.cell.quiet::before, .cell.quiet::after { display: none; }
+.cell .ix { display: block; font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+.cell .ix em { font-style: normal; color: var(--muted); }
+.cell h3 { font-size: 21px; margin: 0 0 8px; }
+.cell p { margin: 0; color: var(--muted); font-size: 14.5px; line-height: 1.6; }
+.cell p b { color: var(--ink); font-weight: 600; }
+.cell .tag { display: block; margin-top: 18px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.cell .pain { font-family: var(--serif); font-size: 20px; line-height: 1.3; margin: 0 0 8px; }
+.wide { grid-column: 1 / -1; }
+
+/* cost */
+.sec-head .loop { max-width: 320px; justify-self: end; width: 100%; }
+.chartcell { padding: 26px 36px 24px; }
+.mech-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-family: var(--mono); font-size: 12.5px; color: var(--muted); margin-bottom: 16px; }
+.mech-head b { color: var(--ink); font-weight: 400; }
 .replay { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12px; color: var(--accent-ink); background: none; border: 0; cursor: pointer; padding: 6px 4px; }
 .replay svg { width: 14px; height: 14px; transition: transform .5s var(--ease); }
 .replay:hover svg { transform: rotate(-200deg); }
-.mech-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-family: var(--mono); font-size: 12.5px; color: var(--muted); margin-bottom: 14px; }
-.mech-head b { color: var(--ink); font-weight: 400; }
-.how { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 24px 64px; align-items: center; margin-top: 64px; }
-.how .loop { max-width: 300px; }
-.levers { list-style: none; margin: 0; padding: 0; }
-.lever { display: grid; grid-template-columns: 180px 1fr; gap: 4px 20px; align-items: baseline; border-top: 1px solid var(--rule); padding: 16px 0; }
-.lever .lv { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.04em; text-transform: uppercase; grid-column: 2; }
-.lever h3 { font-size: 19px; margin: 0; grid-row: 1 / span 2; }
-.lever p { margin: 0; font-size: 14.5px; color: var(--muted); line-height: 1.55; grid-column: 2; }
+.eq { font-family: var(--mono); font-size: 12.5px; color: var(--muted); margin: 16px 0 0; }
+.eq b { color: var(--ink); font-weight: 400; }
+.stat b { display: block; font-family: var(--serif); font-weight: 400; font-size: 46px; line-height: 1; letter-spacing: -0.015em; font-variant-numeric: tabular-nums; margin-bottom: 10px; }
+.stat.a b { color: var(--bad); } .stat.b b { color: var(--good); } .stat.c b { color: var(--accent-ink); }
+.stat span { font-family: var(--mono); font-size: 12px; color: var(--muted); }
 
-
-@media (max-width: 760px) { .how { grid-template-columns: 1fr; gap: 24px; } .how .loop { margin: 0 auto; } .sums { grid-template-columns: 1fr; gap: 18px; } .sums b { font-size: 32px; } .lever { grid-template-columns: 1fr; } .lever h3 { grid-row: auto; } .lever .lv, .lever p { grid-column: 1; } .growth text { font-size: 19px; } .replay { margin-left: 0; } }
-
-.leaks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px 40px; }
-.leak { border-top: 1px solid var(--rule); padding: 18px 0 0; display: flex; flex-direction: column; gap: 8px; }
-.leak .n { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); }
-.leak .pain { font-family: var(--serif); font-size: 19px; line-height: 1.3; }
-.leak .rule { font-size: 14.5px; color: var(--muted); margin: 0; }
-.leak .rule b { color: var(--ink); font-weight: 600; }
-.leak .tag { margin-top: 4px; font-family: var(--mono); font-size: 11px; color: var(--accent-ink); }
-@media (max-width: 860px) { .leaks { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 560px) { .leaks { grid-template-columns: 1fr; } }
-
-.proof { display: grid; grid-template-columns: 1.4fr 1fr; gap: 32px; align-items: center; }
-.shot { border-radius: 12px; overflow: hidden; box-shadow: 0 24px 60px -36px rgba(29, 26, 22, .45); margin: 0; }
+/* dashboard */
+.shotcell { padding: 40px 36px; overflow: visible; }
+.shot { margin: 0; border-radius: 10px; border: 1px solid var(--rule); overflow: hidden; box-shadow: 0 30px 70px -40px rgba(29, 26, 22, .55); transition: transform .5s var(--ease), box-shadow .5s var(--ease); transform-style: preserve-3d; }
+.shot:hover { box-shadow: 0 40px 90px -40px rgba(29, 26, 22, .6); }
+.shot .bar { display: flex; align-items: center; gap: 6px; padding: 9px 12px; background: var(--card); border-bottom: 1px solid var(--rule); font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.shot .bar i { width: 9px; height: 9px; border-radius: 50%; background: var(--rule); }
+.shot .bar span { margin-left: 8px; }
 .shot img { display: block; width: 100%; height: auto; }
-.points { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 18px; }
-.points b { display: block; font-family: var(--serif); font-weight: 400; font-size: 19px; }
-.points span { color: var(--muted); font-size: 15px; }
-@media (max-width: 760px) { .proof { grid-template-columns: 1fr; } }
 
-.steps { list-style: none; margin: 0 auto; padding: 0; display: grid; gap: 18px; }
-.steps li { display: grid; grid-template-columns: 40px 1fr; gap: 18px; align-items: start; }
-.steps .num { position: relative; width: 40px; height: 40px; border-radius: 999px; border: 1px solid var(--rule); background: var(--card); color: var(--muted); display: grid; place-items: center; font-family: var(--serif); font-size: 19px; transition: background .4s var(--ease), color .4s, border-color .4s, transform .4s var(--ease); }
-.steps li:not(:last-child) .num::after { content: ""; position: absolute; top: 40px; bottom: -18px; left: 50%; width: 1px; background: var(--rule); }
-.steps li.active .num { background: var(--accent); color: #1d1a16; border-color: var(--accent); transform: scale(1.06); }
-.steps li.copied .num { background: var(--good); border-color: var(--good); color: #fff; }
-.s-card { padding: 6px 0 10px; }
-.s-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
-.eta { font-family: var(--mono); font-size: 11px; color: var(--muted); white-space: nowrap; }
-.steps p { margin: 0 0 10px; color: var(--muted); font-size: 15px; }
-.steps p:last-child { margin-bottom: 0; }
-.codebox { position: relative; background: var(--code); border-radius: 12px; padding: 14px 96px 14px 16px; margin: 0 0 8px; }
+/* install */
+.step h3 { font-size: 20px; }
+.step .n { position: absolute; top: 28px; right: 32px; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--rule); display: grid; place-items: center; font-family: var(--serif); font-size: 17px; color: var(--muted); transition: background .4s var(--ease), color .4s var(--ease), border-color .4s var(--ease); }
+.step.active .n { background: var(--accent); color: #1d1a16; border-color: var(--accent); animation: ring .9s var(--ease) 1; }
+.step.copied .n { background: var(--good); border-color: var(--good); color: #fff; }
+@keyframes ring { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; } }
+.step p { margin: 0 0 12px; }
+.step .codebox { padding: 40px 16px 14px; }
+.step p:last-child { margin-bottom: 0; }
+.codebox { position: relative; background: var(--code); border-radius: 10px; padding: 14px 96px 14px 16px; margin: 0 0 12px; }
 .codebox.plain { padding-right: 16px; }
-.copy { position: absolute; top: 8px; right: 8px; display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12px; background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 5px 10px; cursor: pointer; color: var(--ink); transition: color .2s, border-color .2s; }
+.copy { position: absolute; top: 8px; right: 8px; display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12px; background: var(--paper); border: 1px solid var(--rule); border-radius: 8px; padding: 5px 10px; color: var(--ink); cursor: pointer; transition: border-color .25s, color .25s, transform .25s var(--ease); }
+.copy:hover { transform: translateY(-1px); border-color: var(--muted); }
 .copy svg { width: 13px; height: 13px; }
 .copy .tick { stroke-dasharray: 30; stroke-dashoffset: 30; transition: stroke-dashoffset .35s var(--ease) .05s; }
 .copy.done { color: var(--good); border-color: var(--good); }
 .copy.done .tick { stroke-dashoffset: 0; }
-.after { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 22px; }
-.after div { font-family: var(--mono); font-size: 12px; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 10px; }
-.after b { display: block; font-family: var(--serif); font-weight: 400; font-size: 17px; color: var(--ink); margin-bottom: 2px; }
-@media (max-width: 560px) { .after { grid-template-columns: 1fr; } }
+.after b { display: block; font-family: var(--serif); font-weight: 400; font-size: 18px; margin-bottom: 4px; }
+.after p { font-family: var(--mono); font-size: 12.5px; }
 
-.privacy { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-.privacy div { border-top: 2px solid var(--accent); padding-top: 12px; }
-.privacy b { display: block; font-family: var(--serif); font-weight: 400; font-size: 18px; margin-bottom: 4px; }
-.privacy span { color: var(--muted); font-size: 14.5px; }
-@media (max-width: 760px) { .privacy { grid-template-columns: repeat(2, 1fr); } }
+/* privacy */
+.pv svg { width: 22px; height: 22px; stroke: var(--accent-ink); fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; display: block; margin-bottom: 18px; transition: transform .5s var(--ease); }
+.pv:hover svg { transform: translateY(-3px); }
 
+/* docs */
 table { width: 100%; border-collapse: collapse; font-size: 14.5px; margin: 0 0 8px; }
 th { text-align: left; font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 400; padding: 8px 10px 8px 0; border-bottom: 1px solid var(--rule); }
 td { padding: 9px 10px 9px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
-details { border-top: 1px solid var(--rule); }
-details:last-of-type { border-bottom: 1px solid var(--rule); }
-summary { cursor: pointer; padding: 18px 4px; font-family: var(--serif); font-size: 19px; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.docs { border-top: 1px solid var(--rule); }
+details { border-bottom: 1px solid var(--rule); transition: background .3s; }
+details:hover { background: var(--card); }
+details:last-of-type { border-bottom: 0; }
+summary { cursor: pointer; padding: 20px 36px; font-family: var(--serif); font-size: 19px; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 summary::-webkit-details-marker { display: none; }
-summary::after { content: "+"; font-family: var(--mono); color: var(--accent-ink); transition: transform .25s var(--ease); }
-details[open] summary::after { transform: rotate(45deg); }
-details .in { padding: 0 4px 22px; color: var(--muted); font-size: 15px; }
+summary::after { content: ""; width: 9px; height: 9px; border-right: 1.5px solid var(--accent-ink); border-bottom: 1.5px solid var(--accent-ink); transform: rotate(45deg) translate(-2px, -2px); transition: transform .3s var(--ease); flex: none; }
+details[open] summary::after { transform: rotate(225deg) translate(-2px, -2px); }
+details .in { padding: 0 36px 24px; color: var(--muted); font-size: 15px; animation: drop .35s var(--ease); }
+@keyframes drop { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 details .in p:last-child { margin-bottom: 0; }
 details .in ul { margin: 0 0 12px; padding-left: 20px; }
 
-.final { text-align: center; padding: 88px 0 0; }
-footer { margin-top: 88px; border-top: 1px solid var(--rule); padding: 28px 0 48px; font-family: var(--mono); font-size: 13px; color: var(--muted); }
-footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; }
-footer a { color: var(--muted); }
+/* final + footer */
+.final { text-align: center; padding: 96px 36px 100px !important; overflow: hidden; }
+.final::after { content: ""; position: absolute; left: 50%; bottom: -220px; width: 720px; height: 420px; transform: translateX(-50%); background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 18%, transparent), transparent); pointer-events: none; }
+.final > * { position: relative; z-index: 1; }
+.final .lede { margin: 0 auto 28px; }
+.btn .arr { width: 14px; height: 14px; transition: transform .3s var(--ease); }
+.btn:hover .arr { transform: translateX(4px); }
+.foot { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; padding: 26px 36px 30px; font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.foot a { color: var(--muted); }
+main.wrap { padding-bottom: 0; }
+
+@media (max-width: 860px) { .c3, .c4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) {
+  .page { margin-top: 56px; }
+  .sec-head { grid-template-columns: 1fr; padding: 40px 20px 28px; gap: 20px; }
+  .sec-head .aside { justify-self: start; }
+  .sec-head .loop { justify-self: center; max-width: 300px; }
+  .cell, .chartcell, .shotcell { padding: 22px 20px 24px; }
+  .step .n { top: 20px; right: 18px; }
+  summary { padding: 16px 20px; } details .in { padding: 0 20px 20px; }
+  .final { padding: 72px 20px 80px !important; }
+  .foot { padding: 22px 20px 26px; }
+  .stat b { font-size: 34px; }
+  .growth text { font-size: 19px; }
+  .replay { margin-left: 0; }
+}
+@media (max-width: 560px) { .c2, .c3, .c4 { grid-template-columns: 1fr; } }
 
 .reveal { opacity: 0; transform: translateY(14px); transition: opacity .6s var(--ease), transform .6s var(--ease); transition-delay: calc(var(--d, 0) * 80ms); }
 .reveal.in, .no-js .reveal { opacity: 1; transform: none; }
@@ -294,110 +327,125 @@ footer a { color: var(--muted); }
     <p class="fine" style="margin-top:10px">Measured on the machine Kiasi was built on: 16 days before, 7 days after. Your numbers are on your own dashboard.</p>
   </div>
 
+  <div class="page">
   <section id="cost">
-    <div class="narrow centered">
-      <p class="kicker reveal">How the cost is cut</p>
-      <h2 class="reveal">Less goes in, so less is re-sent.</h2>
-      <p class="lede reveal">Every step sends the whole context back to the model. Your bill is that size added up over the turn. Kiasi shrinks what enters and ends the turn sooner.</p>
-    </div>
-    <div class="mech reveal" id="mech">
-      <div class="mech-head"><span>One turn, 70 steps: <b>an npm install log</b>, a test that fails three times, a few file reads.</span><button type="button" class="replay" id="replay" aria-label="Replay the chart"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M3.2 7a3.8 3.8 0 1 1 1.1 2.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M3.2 3.4V7h3.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>replay</button></div>
-      <div class="growth" id="growth">
-        <svg viewBox="0 0 960 300" role="img" aria-label="Context size per step over an example 70-step turn, with and without Kiasi. The shaded area is the tokens re-sent."></svg>
-        <div class="gkey"><span><i class="sw" style="background:var(--bad)"></i>context without Kiasi</span><span><i class="sw" style="background:var(--good)"></i>with Kiasi</span><span><i style="background:var(--accent)"></i>a tool output lands</span><span><i style="background:var(--bad);opacity:.35"></i>shaded area = tokens re-sent</span></div>
+    <div class="sec-head">
+      <div>
+        <p class="kicker reveal"><i></i><span class="ix">01</span>How the cost is cut</p>
+        <h2 class="reveal">Less goes in, so less is re-sent.</h2>
+        <p class="lede reveal">Every step sends the whole context back to the model. Your bill is that size added up over the turn. Kiasi shrinks what enters and ends the turn sooner.</p>
       </div>
-      <div class="sums" aria-live="polite">
-        <div class="a"><b id="s-a">0</b><span>tokens re-sent without Kiasi</span></div>
-        <div class="b"><b id="s-b">0</b><span>tokens re-sent with Kiasi</span></div>
-        <div class="c"><b id="s-c">0</b><span>kept off your limit, this one turn</span></div>
-      </div>
-      <p class="eq"><b>bill = context at step 1 + … + context at the last step.</b> Kiasi lowers each term and removes the last ones.</p>
-    </div>
-    <div class="how">
-      <div class="loop reveal" id="loop">
+      <div class="loop reveal" id="loop" style="--d:1">
         <svg viewBox="0 0 320 300" role="img" aria-label="The Claude Code loop: context is sent to the model, the model calls a tool, the tool output is appended to the context. Kiasi hooks sit on the output and on the tool call."></svg>
       </div>
-      <ol class="levers">
-        <li class="lever reveal"><h3>Less enters</h3><span class="lv">lowers the line</span><p>Every tool output is cleaned and capped at 12,000 chars before it joins the context. The full text stays on disk.</p></li>
-        <li class="lever reveal" style="--d:1"><h3>Nothing enters twice</h3><span class="lv">lowers the line</span><p>An unchanged file read again becomes a pointer. A long paste becomes a path.</p></li>
-        <li class="lever reveal" style="--d:2"><h3>Fewer steps</h3><span class="lv">shortens the turn</span><p>A warning at 30 tool calls, a stop at 60. Three identical failures tell Claude to rethink.</p></li>
-        <li class="lever reveal" style="--d:3"><h3>A small restart</h3><span class="lv">resets the line</span><p>At compaction old tool output is pruned, your words stay verbatim, and the task state is re-injected.</p></li>
-      </ol>
     </div>
-  </section>
-
-  <section id="rules">
-    <div class="narrow centered">
-      <p class="kicker reveal">What it fixes</p>
-      <h2 class="reveal">Six leaks, six rules.</h2>
-      <p class="lede reveal">Each rule is a Claude Code hook with a fixed threshold you can change. Nothing is decided by a model.</p>
+    <div class="cells mech" id="mech">
+      <div class="cell wide chartcell quiet">
+        <div class="mech-head"><span>One turn, 70 steps: <b>an npm install log</b>, a test that fails three times, a few file reads.</span><button type="button" class="replay" id="replay" aria-label="Replay the chart"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M3.2 7a3.8 3.8 0 1 1 1.1 2.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M3.2 3.4V7h3.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>replay</button></div>
+    <div class="growth" id="growth">
+      <svg viewBox="0 0 960 300" role="img" aria-label="Context size per step over an example 70-step turn, with and without Kiasi. The shaded area is the tokens re-sent."></svg>
+      <div class="gkey"><span><i class="sw" style="background:var(--bad)"></i>context without Kiasi</span><span><i class="sw" style="background:var(--good)"></i>with Kiasi</span><span><i style="background:var(--accent)"></i>a tool output lands</span><span><i style="background:var(--bad);opacity:.35"></i>shaded area = tokens re-sent</span></div>
     </div>
-    <div class="leaks">
-      <div class="leak reveal"><span class="n">01</span><div class="pain">One install log rides along on every step after it.</div><p class="rule"><b>Output cap and cleaning.</b> Over 12,000 chars is cut, progress bars and repeated lines are stripped, the full text is saved.</p><span class="tag">PostToolUse</span></div>
-      <div class="leak reveal" style="--d:1"><span class="n">02</span><div class="pain">A 60-step turn chasing one failing test.</div><p class="rule"><b>Turn budget and loop check.</b> Warned at 30 tool calls, stopped at 60. The same call failing 3 times tells Claude to rethink.</p><span class="tag">PostToolUse · PostToolUseFailure</span></div>
-      <div class="leak reveal" style="--d:2"><span class="n">03</span><div class="pain">The same file, read again, unchanged.</div><p class="rule"><b>Re-read skip.</b> Returns a pointer to the copy already in context instead of the text.</p><span class="tag">PreToolUse</span></div>
-      <div class="leak reveal"><span class="n">04</span><div class="pain">A whole log pasted to ask one question.</div><p class="rule"><b>Paste manager.</b> Over 4,000 chars is saved to disk; over 40,000 is refused and you resend with the path.</p><span class="tag">UserPromptSubmit</span></div>
-      <div class="leak reveal" style="--d:1"><span class="n">05</span><div class="pain">Compaction forgets what you were doing.</div><p class="rule"><b>Pruner and state.</b> Your prompts and Claude's replies stay word for word; task, edited files and failing commands are re-injected.</p><span class="tag">session.compact · experimental</span></div>
-      <div class="leak reveal" style="--d:2"><span class="n">06</span><div class="pain">No idea where the week went.</div><p class="rule"><b>Local dashboard.</b> Every action Kiasi took, the tokens it kept off your limit, and your 5-hour and weekly limits.</p><span class="tag">127.0.0.1:8787</span></div>
-    </div>
-  </section>
-
-  <section id="dashboard">
-    <div class="proof">
-      <figure class="shot reveal"><img src="overview.webp" alt="The Kiasi dashboard overview: before-and-after table, re-read per prompt, cache misses and recall" width="1400" height="1225" loading="lazy"></figure>
-      <div>
-        <p class="kicker reveal">Proof</p>
-        <h2 class="reveal">Your own before and after.</h2>
-        <ul class="points">
-          <li class="reveal"><b>Baseline from your transcripts</b><span>The days before you installed Kiasi are the comparison. No one else's numbers.</span></li>
-          <li class="reveal" style="--d:1"><b>Every action, with its receipt</b><span>Each cut, skip and stop is a row with the file it saved and what it kept out.</span></li>
-          <li class="reveal" style="--d:2"><b>Rebuilt every 30 minutes</b><span>A small local server, started with your session. It never leaves 127.0.0.1.</span></li>
-        </ul>
+        <p class="eq"><b>bill = context at step 1 + … + context at the last step.</b> Kiasi lowers each term and removes the last ones.</p>
       </div>
     </div>
+    <div class="cells c3" aria-live="polite">
+      <div class="cell stat a"><b id="s-a">0</b><span>tokens re-sent without Kiasi</span></div>
+      <div class="cell stat b"><b id="s-b">0</b><span>tokens re-sent with Kiasi</span></div>
+      <div class="cell stat c"><b id="s-c">0</b><span>kept off your limit, this one turn</span></div>
+    </div>
+    <div class="cells c4">
+      <div class="cell reveal"><span class="ix">Lever 01 <em>· lowers the line</em></span><h3>Less enters</h3><p>Every tool output is cleaned and capped at 12,000 chars before it joins the context. The full text stays on disk.</p></div>
+      <div class="cell reveal" style="--d:1"><span class="ix">Lever 02 <em>· lowers the line</em></span><h3>Nothing enters twice</h3><p>An unchanged file read again becomes a pointer. A long paste becomes a path.</p></div>
+      <div class="cell reveal" style="--d:2"><span class="ix">Lever 03 <em>· shortens the turn</em></span><h3>Fewer steps</h3><p>A warning at 30 tool calls, a stop at 60. Three identical failures tell Claude to rethink.</p></div>
+      <div class="cell reveal" style="--d:3"><span class="ix">Lever 04 <em>· resets the line</em></span><h3>A small restart</h3><p>At compaction old tool output is pruned, your words stay verbatim, and the task state is re-injected.</p></div>
+    </div>
   </section>
-
+  <section id="rules">
+    <div class="sec-head">
+      <div>
+        <p class="kicker reveal"><i></i><span class="ix">02</span>What it fixes</p>
+        <h2 class="reveal">Six leaks, six rules.</h2>
+        <p class="lede reveal">Each rule is a Claude Code hook with a fixed threshold you can change. Nothing is decided by a model.</p>
+      </div>
+      <p class="aside reveal" style="--d:1">Every rule is one of the four levers above. The hook it runs on is named under each one. <b>Thresholds are plain constants.</b></p>
+    </div>
+    <div class="cells c3">
+      <div class="cell reveal"><span class="ix">01</span><p class="pain">One install log rides along on every step after it.</p><p><b>Output cap and cleaning.</b> Over 12,000 chars is cut, progress bars and repeated lines are stripped, the full text is saved.</p><span class="tag">PostToolUse</span></div>
+      <div class="cell reveal" style="--d:1"><span class="ix">02</span><p class="pain">A 60-step turn chasing one failing test.</p><p><b>Turn budget and loop check.</b> Warned at 30 tool calls, stopped at 60. The same call failing 3 times tells Claude to rethink.</p><span class="tag">PostToolUse · PostToolUseFailure</span></div>
+      <div class="cell reveal" style="--d:2"><span class="ix">03</span><p class="pain">The same file, read again, unchanged.</p><p><b>Re-read skip.</b> Returns a pointer to the copy already in context instead of the text.</p><span class="tag">PreToolUse</span></div>
+      <div class="cell reveal"><span class="ix">04</span><p class="pain">A whole log pasted to ask one question.</p><p><b>Paste manager.</b> Over 4,000 chars is saved to disk; over 40,000 is refused and you resend with the path.</p><span class="tag">UserPromptSubmit</span></div>
+      <div class="cell reveal" style="--d:1"><span class="ix">05</span><p class="pain">Compaction forgets what you were doing.</p><p><b>Pruner and state.</b> Your prompts and Claude's replies stay word for word; task, edited files and failing commands are re-injected.</p><span class="tag">session.compact · experimental</span></div>
+      <div class="cell reveal" style="--d:2"><span class="ix">06</span><p class="pain">No idea where the week went.</p><p><b>Local dashboard.</b> Every action Kiasi took, the tokens it kept off your limit, and your 5-hour and weekly limits.</p><span class="tag">127.0.0.1:8787</span></div>
+    </div>
+  </section>
+  <section id="dashboard">
+    <div class="sec-head">
+      <div>
+        <p class="kicker reveal"><i></i><span class="ix">03</span>Proof</p>
+        <h2 class="reveal">Your own before and after.</h2>
+        <p class="lede reveal">The days before you installed Kiasi are the baseline. Every cut, skip and stop is a row with its receipt.</p>
+      </div>
+      <p class="aside reveal" style="--d:1">Rebuilt every 30 minutes by a small local server started with your session. <b>It never leaves 127.0.0.1.</b></p>
+    </div>
+    <div class="cells">
+      <div class="cell wide shotcell quiet">
+        <figure class="shot reveal" id="shot"><div class="bar"><i></i><i></i><i></i><span>127.0.0.1:8787 · overview</span></div><img src="overview.webp" alt="The Kiasi dashboard overview: before-and-after table, re-read per prompt, cache misses and recall" width="1400" height="1225" loading="lazy"></figure>
+      </div>
+    </div>
+    <div class="cells c3">
+      <div class="cell reveal"><span class="ix">Baseline</span><h3>From your transcripts</h3><p>The comparison is your own history, not a benchmark machine.</p></div>
+      <div class="cell reveal" style="--d:1"><span class="ix">Receipts</span><h3>Every action, with its file</h3><p>Each cut, skip and stop names the saved file and what it kept out.</p></div>
+      <div class="cell reveal" style="--d:2"><span class="ix">Limits</span><h3>5-hour and weekly</h3><p>With the status line set up, the dashboard shows how much of each limit is left.</p></div>
+    </div>
+  </section>
   <section id="install">
-    <div class="narrow centered">
-      <p class="kicker reveal">Install</p>
-      <h2 class="reveal">Three steps, about a minute.</h2>
-      <p class="lede reveal">Two pastes and a restart. Nothing to build, nothing to sign up for.</p>
+    <div class="sec-head">
+      <div>
+        <p class="kicker reveal"><i></i><span class="ix">04</span>Install</p>
+        <h2 class="reveal">Three steps, about a minute.</h2>
+        <p class="lede reveal">Two pastes and a restart. Nothing to build, nothing to sign up for.</p>
+      </div>
+      <p class="aside reveal" style="--d:1">Requires Claude Code 2.1.283+ and Python 3.8+. <b>Standard library only.</b></p>
     </div>
-    <ol class="steps narrow" id="steps-list">
-      <li class="reveal"><span class="num">1</span><div class="s-card"><div class="s-head"><h3>Install the plugin</h3><span class="eta">20 s</span></div><p>In Claude Code:</p><div class="codebox"><button class="copy" type="button" data-copy="c1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path class="tick" d="M4 12.5l5 5L20 7"/></svg><span>Copy</span></button><pre id="c1">/plugin marketplace add raj-rangani/kiasi
-/plugin install kiasi@kiasi</pre></div></div></li>
-      <li class="reveal" style="--d:1"><span class="num">2</span><div class="s-card"><div class="s-head"><h3>Add two settings</h3><span class="eta">30 s</span></div><p>In the <code>env</code> block of <code>~/.claude/settings.json</code>. Kiasi reminds you at session start if either is missing.</p><div class="codebox"><button class="copy" type="button" data-copy="c2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path class="tick" d="M4 12.5l5 5L20 7"/></svg><span>Copy</span></button><pre id="c2">"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "200000",
-"CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"</pre></div><p>The first compacts at 200k instead of the full window and is the biggest single lever. The second turns on the experimental pruner and search.</p></div></li>
-      <li class="reveal" style="--d:2"><span class="num">3</span><div class="s-card"><div class="s-head"><h3>Restart, then work as usual</h3><span class="eta">10 s</span></div><p>Run <code>/kiasi:limits setup</code> once so the dashboard can show your plan limits. The dashboard starts itself with every session at <a href="http://127.0.0.1:8787/">127.0.0.1:8787</a>.</p></div></li>
+    <ol class="cells c3" id="steps-list">
+      <li class="cell step reveal"><span class="n">1</span><span class="ix">Step 1 <em>· 20 s</em></span><h3>Install the plugin</h3><p>In Claude Code:</p><div class="codebox"><button class="copy" type="button" data-copy="c1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path class="tick" d="M4 12.5l5 5L20 7"/></svg><span>Copy</span></button><pre id="c1">/plugin marketplace add raj-rangani/kiasi
+/plugin install kiasi@kiasi</pre></div></li>
+      <li class="cell step reveal" style="--d:1"><span class="n">2</span><span class="ix">Step 2 <em>· 30 s</em></span><h3>Add two settings</h3><p>In the <code>env</code> block of <code>~/.claude/settings.json</code>.</p><div class="codebox"><button class="copy" type="button" data-copy="c2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path class="tick" d="M4 12.5l5 5L20 7"/></svg><span>Copy</span></button><pre id="c2">"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "200000",
+"CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"</pre></div><p>The first compacts at 200k instead of the full window. The second turns on the experimental pruner and search.</p></li>
+      <li class="cell step reveal" style="--d:2"><span class="n">3</span><span class="ix">Step 3 <em>· 10 s</em></span><h3>Restart, then work as usual</h3><p>Run <code>/kiasi:limits setup</code> once so the dashboard can show your plan limits. The dashboard starts itself with every session at <a href="http://127.0.0.1:8787/">127.0.0.1:8787</a>.</p></li>
     </ol>
-    <div class="after narrow">
-      <div class="reveal"><b>Right away</b>Every long output is capped and cleaned, every paste saved.</div>
-      <div class="reveal" style="--d:1"><b>First compaction</b>Your words kept, old tool output pruned, state re-injected.</div>
-      <div class="reveal" style="--d:2"><b>Next day</b>The dashboard shows your own before and after.</div>
+    <div class="cells c3">
+      <div class="cell after reveal"><b>Right away</b><p>Every long output is capped and cleaned, every paste saved.</p></div>
+      <div class="cell after reveal" style="--d:1"><b>First compaction</b><p>Your words kept, old tool output pruned, state re-injected.</p></div>
+      <div class="cell after reveal" style="--d:2"><b>Next day</b><p>The dashboard shows your own before and after.</p></div>
     </div>
   </section>
-
   <section id="privacy">
-    <div class="narrow centered">
-      <p class="kicker reveal">Privacy</p>
-      <h2 class="reveal">Everything stays on your machine.</h2>
+    <div class="sec-head">
+      <div>
+        <p class="kicker reveal"><i></i><span class="ix">05</span>Privacy</p>
+        <h2 class="reveal">Everything stays on your machine.</h2>
+        <p class="lede reveal">Kiasi reads your local transcripts and writes to its own folder. There is no account and no upload.</p>
+      </div>
     </div>
-    <div class="privacy">
-      <div class="reveal"><b>No network calls</b><span>Not one. It reads your local transcripts and writes to its own folder.</span></div>
-      <div class="reveal" style="--d:1"><b>No prompt text logged</b><span>Reports hold counts and sizes, never what you typed.</span></div>
-      <div class="reveal" style="--d:2"><b>Localhost only</b><span>The dashboard listens on 127.0.0.1 and refuses other host names.</span></div>
-      <div class="reveal" style="--d:3"><b>Nothing lost</b><span>Every cut output and refused paste is saved in full and found again by search.</span></div>
+    <div class="cells c4">
+      <div class="cell pv reveal"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/><path d="M4 4l16 16" stroke="var(--bad)"/></svg><h3>No network calls</h3><p>Not one. Python standard library, no dependencies, nothing phoning home.</p></div>
+      <div class="cell pv reveal" style="--d:1"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.5"/><path d="M4 4l16 16" stroke="var(--bad)"/></svg><h3>No prompt text logged</h3><p>Reports hold counts and sizes, never what you typed.</p></div>
+      <div class="cell pv reveal" style="--d:2"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M7 7h.01M10 7h.01"/><path d="M8 14h8" /></svg><h3>Localhost only</h3><p>The dashboard listens on 127.0.0.1 and refuses other host names.</p></div>
+      <div class="cell pv reveal" style="--d:3"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg><h3>Nothing lost</h3><p>Every cut output and refused paste is saved in full and found again by search.</p></div>
     </div>
   </section>
-
   <section id="docs">
-    <div class="narrow centered">
-      <p class="kicker reveal">Docs</p>
-      <h2 class="reveal">The short reference.</h2>
-      <p class="lede reveal">Open what you need. Everything else is in the <a href="https://github.com/raj-rangani/kiasi#readme">README</a>.</p>
+    <div class="sec-head">
+      <div>
+        <p class="kicker reveal"><i></i><span class="ix">06</span>Docs</p>
+        <h2 class="reveal">The short reference.</h2>
+        <p class="lede reveal">Open what you need. Everything else is in the <a href="https://github.com/raj-rangani/kiasi#readme">README</a>.</p>
+      </div>
     </div>
-    <div class="narrow">
-      <details class="reveal"><summary>Commands</summary><div class="in">
+    <div class="docs">
+    <details class="reveal"><summary>Commands</summary><div class="in">
         <table><thead><tr><th>Command</th><th>What it does</th></tr></thead><tbody>
           <tr><td><code>/kiasi:dashboard</code></td><td>Start the dashboard if it is not up and print its URL</td></tr>
           <tr><td><code>/kiasi:sync</code></td><td>Rebuild the reports now (they also rebuild every 30 minutes)</td></tr>
@@ -406,7 +454,7 @@ footer a { color: var(--muted); }
           <tr><td><code>/kiasi:limits</code></td><td>Show whether the status line is set up and when limits were last saved</td></tr>
         </tbody></table>
       </div></details>
-      <details class="reveal"><summary>Settings</summary><div class="in">
+    <details class="reveal"><summary>Settings</summary><div class="in">
         <p>Set these with <code>/config</code>, or as env vars. Every other threshold is a named constant in <code>scripts/core/constants.py</code> or <code>hooks/constants.js</code>.</p>
         <table><thead><tr><th>Setting</th><th>Env var</th><th>Default</th></tr></thead><tbody>
           <tr><td><code>output_cap_chars</code></td><td><code>CLAUDE_PLUGIN_OPTION_OUTPUT_CAP_CHARS</code></td><td>12000</td></tr>
@@ -415,24 +463,24 @@ footer a { color: var(--muted); }
           <tr><td><code>compaction_window_text</code></td><td><code>CLAUDE_PLUGIN_OPTION_COMPACTION_WINDOW_TEXT</code></td><td>"200000"</td></tr>
         </tbody></table>
       </div></details>
-      <details class="reveal"><summary>Does cutting output make Claude miss things?</summary><div class="in">
+    <details class="reveal"><summary>Does cutting output make Claude miss things?</summary><div class="in">
         <p>Cuts keep the head and tail and leave a <code>[kiasi kept …]</code> or <code>[kiasi trimmed …]</code> marker naming the saved file with the full text. Claude reads that file by path when the cut part matters. File reads, range commands and diffs are never cut, so code quality does not depend on the cap.</p>
       </div></details>
-      <details class="reveal"><summary>Where does the data go, and how long does it stay?</summary><div class="in">
+    <details class="reveal"><summary>Where does the data go, and how long does it stay?</summary><div class="in">
         <p>All state goes to <code>${CLAUDE_PLUGIN_DATA}</code>, normally under <code>~/.claude/plugins/data/</code>: event log, saved pastes and outputs, notes, session records, gzipped reports and a per-day history that outlives Claude Code's own transcript retention.</p>
         <p>A background cleanup moves a saved file, gzipped, to <code>trash/</code> once it and its session have been unused for 7 days (pastes 14), and deletes trash 7 days later. It only reports for its first week, never touches the running session or the last 24 hours, logs every move, and <code>python3 scripts/cleanup.py --restore</code> puts files back. Set <code>KIASI_CLEANUP</code> to <code>report</code>, <code>trash</code> or <code>off</code>.</p>
       </div></details>
-      <details class="reveal"><summary>Keeping the dashboard up</summary><div class="in">
+    <details class="reveal"><summary>Keeping the dashboard up</summary><div class="in">
         <p>Nothing to do: every session start checks for a dashboard on <code>127.0.0.1:8787</code> and starts one detached when none answers, so it outlives the session and keeps rebuilding every 30 minutes. Set <code>KIASI_DASHBOARD=off</code> in the <code>env</code> block to disable that.</p>
         <p>To have it up before the first session, on Linux use a systemd user unit with <code>Environment=CLAUDE_PLUGIN_DATA=&lt;your data directory&gt;</code>, <code>ExecStart=/usr/bin/python3 &lt;plugin root&gt;/scripts/dashboard.py 8787</code> and <code>Restart=always</code>.</p>
       </div></details>
-      <details class="reveal"><summary>Plan limits and the status line</summary><div class="in">
+    <details class="reveal"><summary>Plan limits and the status line</summary><div class="in">
         <p><code>/kiasi:limits setup</code> copies <code>scripts/statusline.py</code> to <code>~/.claude/kiasi/</code> and points <code>statusLine</code> in <code>~/.claude/settings.json</code> at it, backing the file up once. A status line you already had keeps running inside it. Kiasi never calls the usage API itself; the limits come from what Claude Code hands the status line.</p>
       </div></details>
-      <details class="reveal"><summary>Experimental: function hooks</summary><div class="in">
+    <details class="reveal"><summary>Experimental: function hooks</summary><div class="in">
         <p>The compaction pruner and <code>mcp__kiasi__search</code> use Claude Code's early-access function-hook API (2.1.282+), which may break on an engine update. Kiasi is fully useful without it: the seven classic hooks and the dashboard need only Python.</p>
       </div></details>
-      <details class="reveal"><summary>Requirements, tests, uninstall</summary><div class="in">
+    <details class="reveal"><summary>Requirements, tests, uninstall</summary><div class="in">
         <ul>
           <li>Claude Code 2.1.283+</li>
           <li>Python 3.8+, standard library only (tested on 3.10 and 3.11)</li>
@@ -446,25 +494,22 @@ claude plugin validate .                 # manifest, marketplace and hooks.json<
       </div></details>
     </div>
   </section>
-
   <div class="final">
     <h2 class="reveal">Make this week's limit last.</h2>
     <p class="lede reveal">One minute to install. Your first before-and-after shows up the next day.</p>
     <div class="cta reveal">
-      <a class="btn primary" href="#install">Install in a minute</a>
-      <a class="btn" href="https://github.com/raj-rangani/kiasi">Read the source</a>
+      <a class="btn primary" href="#install">Install in a minute <svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+      <a class="btn" href="https://github.com/raj-rangani/kiasi">Read the source <svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
     </div>
   </div>
-</main>
-
-<footer>
-  <div class="wrap">
+  <footer class="foot">
     <span>Kiasi · MIT</span>
     <a href="https://github.com/raj-rangani/kiasi">GitHub</a>
     <a href="https://github.com/raj-rangani/kiasi/blob/main/CHANGELOG.md">Changelog</a>
     <span>Not affiliated with Anthropic.</span>
+  </footer>
   </div>
-</footer>
+</main>
 
 <script>
 (function () {
@@ -651,7 +696,7 @@ claude plugin validate .                 # manifest, marketplace and hooks.json<
     mio.observe(mech);
   }
 
-  var items = document.querySelectorAll('#steps-list li');
+  var items = document.querySelectorAll('#steps-list .step');
   if (still || !('IntersectionObserver' in window)) {
     items.forEach(function (li) { li.classList.add('active'); });
   } else {
@@ -668,13 +713,30 @@ claude plugin validate .                 # manifest, marketplace and hooks.json<
       var done = function (word, ok) {
         label.textContent = word;
         btn.classList.toggle('done', ok);
-        if (ok) btn.closest('li').classList.add('copied');
+        if (ok) btn.closest('.step').classList.add('copied');
         setTimeout(function () { label.textContent = 'Copy'; btn.classList.remove('done'); }, 1800);
       };
       if (navigator.clipboard) navigator.clipboard.writeText(text).then(function () { done('Copied', true); }, function () { done('Select it', false); });
       else done('Select it', false);
     });
   });
+  document.addEventListener('pointermove', function (e) {
+    var cell = e.target.closest && e.target.closest('.cell');
+    if (!cell) return;
+    var r = cell.getBoundingClientRect();
+    cell.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+    cell.style.setProperty('--my', (e.clientY - r.top) + 'px');
+  }, { passive: true });
+
+  var shot = document.getElementById('shot');
+  if (shot && !still && matchMedia('(hover: hover)').matches) {
+    shot.addEventListener('pointermove', function (e) {
+      var r = shot.getBoundingClientRect();
+      var x = (e.clientX - r.left) / r.width - 0.5, y = (e.clientY - r.top) / r.height - 0.5;
+      shot.style.transform = 'perspective(1400px) rotateX(' + (-y * 5).toFixed(2) + 'deg) rotateY(' + (x * 6).toFixed(2) + 'deg) translateY(-2px)';
+    });
+    shot.addEventListener('pointerleave', function () { shot.style.transform = ''; });
+  }
 })();
 </script>
 </body>
