@@ -112,43 +112,58 @@ section { padding: 72px 0 0; }
 .trust span { font-family: var(--mono); font-size: 12px; color: var(--muted); }
 @media (max-width: 760px) { .trust { grid-template-columns: repeat(2, 1fr); } .trust b { font-size: 26px; } }
 
-.waffle { background: var(--card); border: 1px solid var(--rule); border-radius: 18px; padding: 26px 28px 26px; display: grid; grid-template-columns: minmax(220px, 360px) minmax(0, 1fr); gap: 22px 44px; align-items: center; }
-.w-head { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
-.tab { font-family: var(--mono); font-size: 12px; color: var(--muted); background: transparent; border: 1px solid var(--rule); border-radius: 999px; padding: 6px 13px; cursor: pointer; transition: background .2s, color .2s, border-color .2s, transform .2s var(--ease); }
-.tab:hover { transform: translateY(-1px); color: var(--ink); }
-.tab[aria-selected="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.mech { background: var(--card); border: 1px solid var(--rule); border-radius: 18px; padding: 24px 28px 26px; display: grid; grid-template-columns: minmax(240px, 320px) minmax(0, 1fr); gap: 20px 36px; align-items: center; }
+.loop { min-width: 0; }
+.loop svg { width: 100%; height: auto; display: block; overflow: visible; }
+.loop text { font-family: var(--mono); font-size: 10.5px; fill: var(--muted); }
+.loop .ring { fill: none; stroke: var(--rule); stroke-width: 1.5; }
+.loop .node { fill: var(--paper); stroke: var(--rule); }
+.loop .node-t { fill: var(--ink); font-size: 11.5px; }
+.loop .ctx { fill: var(--bad); }
+.loop .arrow { fill: var(--muted); }
+.loop .gate { fill: var(--card); stroke: var(--accent-ink); stroke-width: 1.2; }
+.loop .gate-t { fill: var(--accent-ink); font-size: 10px; }
+.loop .dot { fill: var(--accent); }
+.loop .cap { font-size: 10px; }
+.growth { min-width: 0; }
+.growth svg { width: 100%; height: auto; display: block; overflow: visible; }
+.growth text { font-family: var(--mono); font-size: 10.5px; fill: var(--muted); }
+.growth .axis { stroke: var(--rule); }
+.growth .mark { stroke: var(--rule); stroke-dasharray: 2 4; }
+.growth .area-a { fill: var(--bad); opacity: .16; }
+.growth .area-b { fill: var(--good); opacity: .28; }
+.growth .line-a { fill: none; stroke: var(--bad); stroke-width: 1.6; }
+.growth .line-b { fill: none; stroke: var(--good); stroke-width: 1.8; }
+.growth .land { fill: var(--accent); }
+.growth .end-a { fill: var(--bad); } .growth .end-b { fill: var(--good); }
+.growth .clip { transform-box: fill-box; transform-origin: 0 50%; transform: scaleX(0); transition: transform 2.4s linear; }
+.mech.play .growth .clip { transform: none; }
+.growth .end-a, .growth .end-b, .growth .endlabel { opacity: 0; transition: opacity .4s 2.3s; }
+.mech.play .growth .end-a, .mech.play .growth .end-b, .mech.play .growth .endlabel { opacity: 1; }
+.gkey { display: flex; flex-wrap: wrap; gap: 4px 14px; font-family: var(--mono); font-size: 11px; color: var(--muted); margin: 8px 0 0; }
+.gkey i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.gkey i.sw { width: 14px; height: 3px; vertical-align: 3px; }
+.sums { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; }
+.sums div { background: var(--paper); padding: 12px 16px; }
+.sums b { display: block; font-family: var(--serif); font-weight: 400; font-size: 26px; line-height: 1.1; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.sums .a b { color: var(--bad); } .sums .b b { color: var(--good); } .sums .c b { color: var(--accent-ink); }
+.sums span { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.eq { grid-column: 1 / -1; font-family: var(--mono); font-size: 12px; color: var(--muted); margin: 0; }
+.eq b { color: var(--ink); font-weight: 400; }
 .replay { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12px; color: var(--accent-ink); background: none; border: 0; cursor: pointer; padding: 6px 4px; }
 .replay svg { width: 14px; height: 14px; transition: transform .5s var(--ease); }
 .replay:hover svg { transform: rotate(-200deg); }
-.grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 5px; aspect-ratio: 1; perspective: 700px; }
-.cell { border-radius: 3px; background: var(--code); opacity: 0; transform: rotateY(0deg); transition: background-color .45s var(--ease), transform .45s var(--ease), opacity .25s; transition-delay: calc(var(--i) * 7ms); }
-.cell.bill { opacity: 1; background: var(--bad); }
-.cell.off { background: var(--good); transform: rotateY(180deg); transition-delay: calc(var(--i) * 11ms); }
-.gkey { display: flex; flex-wrap: wrap; gap: 4px 14px; font-family: var(--mono); font-size: 11px; color: var(--muted); margin: 12px 0 0; }
-.gkey i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
-.w-copy { min-width: 0; display: flex; flex-direction: column; gap: 18px; }
-.big { font-family: var(--serif); font-size: clamp(26px, 3.3vw, 36px); line-height: 1.15; margin: 0; letter-spacing: -0.01em; }
-.big b { font-weight: 400; color: var(--accent-ink); font-variant-numeric: tabular-nums; }
-.slope { display: grid; grid-template-columns: auto minmax(60px, 1fr) auto; gap: 0 16px; align-items: stretch; }
-.pt.pre { align-self: start; }
-.pt.post { align-self: end; }
-.pt { font-family: var(--mono); font-size: 11.5px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
-.pt b { display: block; font-family: var(--serif); font-size: 30px; font-weight: 400; color: var(--bad); line-height: 1.05; letter-spacing: -0.01em; text-transform: none; letter-spacing: 0; font-variant-numeric: tabular-nums; margin-top: 4px; }
-.pt.post { text-align: right; }
-.pt.post b { color: var(--good); }
-.slope svg { width: 100%; max-width: 240px; height: 86px; overflow: visible; display: block; margin: 0 auto; }
-.slope .base { stroke: var(--rule); stroke-dasharray: 2 4; }
-.slope .ln { stroke: var(--ink); stroke-width: 1.5; fill: none; stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset .9s var(--ease) .2s; }
-.slope .dot { fill: var(--ink); }
-.slope .dot.end { fill: var(--good); opacity: 0; transition: opacity .3s .9s; }
-.slope .drop { font-family: var(--mono); font-size: 12px; fill: var(--accent-ink); opacity: 0; transition: opacity .4s 1s; }
-.waffle.done .slope .ln { stroke-dashoffset: 0; }
-.waffle.done .slope .dot.end, .waffle.done .slope .drop { opacity: 1; }
-.facts { font-family: var(--mono); font-size: 12px; color: var(--muted); margin: 0; line-height: 1.8; }
-.facts b { color: var(--ink); font-weight: 400; }
-.w-foot { grid-column: 1 / -1; font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin: 0; }
-@media (max-width: 760px) { .waffle { grid-template-columns: 1fr; padding: 18px; gap: 18px; } .grid { max-width: 320px; } .replay { margin-left: 0; } .big { font-size: 24px; } .pt b { font-size: 26px; } }
+.mech-head { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.mech-head b { color: var(--ink); font-weight: 400; }
+.levers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 18px; }
+.lever { background: var(--card); border: 1px solid var(--rule); border-radius: 16px; padding: 18px 18px 16px; display: flex; flex-direction: column; gap: 8px; }
+.lever .lv { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.04em; text-transform: uppercase; }
+.lever h3 { font-size: 19px; margin: 0; }
+.lever p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.55; }
+.lever .tag { margin-top: auto; align-self: flex-start; font-family: var(--mono); font-size: 11px; color: var(--accent-ink); border: 1px solid var(--rule); border-radius: 999px; padding: 2px 9px; }
+.mech-foot { font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: center; margin: 18px 0 0; }
+@media (max-width: 960px) { .levers { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 760px) { .mech { grid-template-columns: 1fr; padding: 18px; gap: 18px; } .loop { max-width: 320px; margin: 0 auto; } .sums { grid-template-columns: 1fr; } .levers { grid-template-columns: 1fr; } .growth text { font-size: 13px; } .replay { margin-left: 0; } }
 
 .leaks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .leak { background: var(--card); border: 1px solid var(--rule); border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 8px; }
@@ -279,34 +294,33 @@ footer a { color: var(--muted); }
 
   <section id="cost">
     <div class="narrow centered">
-      <p class="kicker reveal">The cost</p>
-      <h2 class="reveal">One noisy output, counted in squares.</h2>
-      <p class="lede reveal">Claude Code re-sends the whole conversation on every step. Each square is one percent of what a single tool output costs you over a turn. Watch how much of it Kiasi never sends.</p>
+      <p class="kicker reveal">How the cost is cut</p>
+      <h2 class="reveal">Less goes in, so less is re-sent.</h2>
+      <p class="lede reveal">Claude Code is a loop. Every step sends the whole context to the model, runs one tool, appends the output, and goes again. Your bill is the context size added up over every step. Kiasi hooks into that loop in two places: what enters the context, and how long the turn runs.</p>
     </div>
-    <div class="waffle reveal" id="waffle">
-      <div class="w-head">
-        <div class="tabs" role="tablist" aria-label="Scenario">
-          <button type="button" class="tab" role="tab" aria-selected="true" data-name="npm install log" data-chars="40000" data-at="3" data-steps="40">npm install</button>
-          <button type="button" class="tab" role="tab" aria-selected="false" data-name="failing test run" data-chars="60000" data-at="8" data-steps="70">failing test run</button>
-          <button type="button" class="tab" role="tab" aria-selected="false" data-name="pasted log" data-chars="80000" data-at="1" data-steps="120">pasted log</button>
-        </div>
-        <button type="button" class="replay" id="replay" aria-label="Replay the animation"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M3.2 7a3.8 3.8 0 1 1 1.1 2.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M3.2 3.4V7h3.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>replay</button>
+    <div class="mech reveal" id="mech">
+      <div class="mech-head"><span>An example turn: <b>an npm install log</b>, a test run that fails three times, a few file reads, 70 steps.</span><button type="button" class="replay" id="replay" aria-label="Replay the chart"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M3.2 7a3.8 3.8 0 1 1 1.1 2.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M3.2 3.4V7h3.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>replay</button></div>
+      <div class="loop" id="loop">
+        <svg viewBox="0 0 320 300" role="img" aria-label="The Claude Code loop: context is sent to the model, the model calls a tool, the tool output is appended to the context. Kiasi hooks sit on the output and on the tool call."></svg>
       </div>
-      <div>
-        <div class="grid" id="grid" role="img" aria-label="A hundred squares, one per percent of the re-read cost. Green squares are kept off your limit."></div>
-        <div class="gkey"><span><i style="background:var(--good)"></i>kept off your limit</span><span><i style="background:var(--bad)"></i>still re-sent</span></div>
+      <div class="growth" id="growth">
+        <svg viewBox="0 0 640 250" role="img" aria-label="Context size per step over an example 70-step turn, with and without Kiasi. The shaded area is the tokens re-sent."></svg>
+        <div class="gkey"><span><i class="sw" style="background:var(--bad)"></i>context without Kiasi</span><span><i class="sw" style="background:var(--good)"></i>with Kiasi</span><span><i style="background:var(--accent)"></i>a tool output lands</span><span><i style="background:var(--bad);opacity:.35"></i>shaded area = tokens re-sent</span></div>
       </div>
-      <div class="w-copy" aria-live="polite">
-        <p class="big"><b id="w-pct">0</b> of every 100 tokens this output would cost you <span id="w-verb">never reach your limit.</span></p>
-        <div class="slope">
-          <div class="pt pre">without<b id="w-before">0</b></div>
-          <svg viewBox="0 0 200 72" aria-hidden="true"><line class="base" x1="0" x2="200" y1="8" y2="8"/><line class="ln" id="w-line" x1="0" y1="8" x2="200" y2="60" pathLength="1"/><circle class="dot" cx="0" cy="8" r="3"/><circle class="dot end" id="w-dot" cx="200" cy="60" r="3.5"/><text class="drop" id="w-drop" x="100" y="22" text-anchor="middle">0%</text></svg>
-          <div class="pt post">with Kiasi<b id="w-after">0</b></div>
-        </div>
-        <p class="facts" id="w-facts"></p>
+      <div class="sums" aria-live="polite">
+        <div class="a"><b id="s-a">0</b><span>tokens re-sent without Kiasi</span></div>
+        <div class="b"><b id="s-b">0</b><span>tokens re-sent with Kiasi</span></div>
+        <div class="c"><b id="s-c">0</b><span>kept off your limit, this one turn</span></div>
       </div>
-      <p class="w-foot">Tokens re-sent for this one output across the turn. Kiasi caps an output at 12,000 chars (the full text is saved to disk) and stops a turn at 60 tool calls. About 4 chars per token.</p>
+      <p class="eq"><b>bill = context at step 1 + context at step 2 + … + context at the last step.</b> Kiasi lowers each term and removes the last ones. Nothing is summarised by a model and nothing leaves your machine.</p>
     </div>
+    <div class="levers">
+      <div class="lever reveal"><span class="lv">Lever 1 · lowers the line</span><h3>Less enters</h3><p>Every tool output is cleaned of progress bars and repeated lines and capped at 12,000 chars before it joins the context. The full text goes to disk with its path.</p><span class="tag">PostToolUse</span></div>
+      <div class="lever reveal" style="--d:1"><span class="lv">Lever 2 · lowers the line</span><h3>Nothing enters twice</h3><p>An unchanged file read again gets a pointer to the copy already in context. A paste over 4,000 chars is saved and referred to by path.</p><span class="tag">PreToolUse · UserPromptSubmit</span></div>
+      <div class="lever reveal" style="--d:2"><span class="lv">Lever 3 · shortens the turn</span><h3>Fewer steps</h3><p>A warning at 30 tool calls and a stop at 60. The same call failing three times tells Claude to rethink instead of retry.</p><span class="tag">PostToolUse · PostToolUseFailure</span></div>
+      <div class="lever reveal" style="--d:3"><span class="lv">Lever 4 · resets the line</span><h3>Small restart</h3><p>At compaction old tool output is pruned, your words and Claude's replies stay verbatim, and the task state is re-injected so the thread is not lost.</p><span class="tag">PreCompact · SessionStart</span></div>
+    </div>
+    <p class="mech-foot reveal">Every rule in the next section is one of these four levers. The dashboard adds up what they kept off your limit.</p>
   </section>
 
   <section id="rules">
@@ -506,77 +520,132 @@ claude plugin validate .                 # manifest, marketplace and hooks.json<
     setInterval(play, 500 + lines.length * 1100 + 5000);
   }
 
-  var CAP = 12000, STOP = 60, CPT = 4;
-  var waffle = document.getElementById('waffle'), grid = document.getElementById('grid'), tabs = document.querySelectorAll('.tab');
-  var W = {};
-  ['pct', 'verb', 'before', 'after', 'facts', 'line', 'dot', 'drop'].forEach(function (k) { W[k] = document.getElementById('w-' + k); });
-  var cells = [];
-  for (var ci = 0; ci < 100; ci++) {
-    var cell = document.createElement('i');
-    cell.className = 'cell';
-    cell.style.setProperty('--i', ci);
-    grid.appendChild(cell);
-    cells.push(cell);
-  }
-  var scene = { name: '', chars: 40000, at: 3, steps: 40 }, timers = [], raf = null;
-  var compute = function () {
-    var later = Math.max(0, scene.steps - scene.at);
-    var without = scene.chars / CPT * later;
-    var withK = Math.min(scene.chars, CAP) / CPT * Math.max(0, Math.min(scene.steps, STOP) - scene.at);
-    var pct = without ? Math.round((1 - withK / without) * 100) : 0;
-    return { without: without, withK: withK, pct: pct, later: later };
+  var STOP = 60, WARN = 30, CPT = 4, BASE = 2000, STEPS = 70, NS = 'http://www.w3.org/2000/svg';
+  var EVENTS = { 3: [40000, 2100], 6: [8000, 8000], 9: [60000, 12000], 12: [8000, 300], 15: [25000, 12000], 24: [60000, 12000], 27: [60000, 12000], 30: [60000, 12000], 41: [8000, 300], 48: [60000, 12000], 55: [30000, 12000], 62: [60000, 12000] };
+  var mech = document.getElementById('mech');
+  var mk = function (tag, attrs, parent) {
+    var el = document.createElementNS(NS, tag);
+    for (var k in attrs) el.setAttribute(k, attrs[k]);
+    parent.appendChild(el);
+    return el;
   };
-  var showNumbers = function (t, k) {
-    W.pct.textContent = Math.round(t.pct * k);
-    W.before.textContent = fmt(t.without);
-    W.after.textContent = fmt(Math.round(t.without - (t.without - t.withK) * k));
+  var txt = function (parent, x, y, t, attrs) {
+    var e = mk('text', attrs || {}, parent); e.setAttribute('x', x); e.setAttribute('y', y); e.textContent = t; return e;
+  };
+  var series = function (idx, limit) {
+    var ctx = 0, pts = [], sums = [0];
+    for (var i = 1; i <= limit; i++) { ctx += BASE + (EVENTS[i] ? EVENTS[i][idx] : 0); pts.push(ctx / CPT); sums.push(sums[i - 1] + ctx / CPT); }
+    return { pts: pts, sums: sums };
+  };
+  var A = series(0, STEPS), B = series(1, STOP);
+
+  var loop = document.querySelector('#loop svg');
+  (function () {
+    var cx = 160, cy = 150, r = 98;
+    var at = function (deg) { var a = deg * Math.PI / 180; return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; };
+    mk('circle', { 'class': 'ring', cx: cx, cy: cy, r: r }, loop);
+    [250, 10, 130].forEach(function (deg) {
+      var p = at(deg), a = (deg + 90) * Math.PI / 180;
+      var tip = [p[0] + 7 * Math.cos(a), p[1] + 7 * Math.sin(a)], l = [p[0] - 5 * Math.sin(a) - 4 * Math.cos(a), p[1] + 5 * Math.cos(a) - 4 * Math.sin(a)], rr = [p[0] + 5 * Math.sin(a) - 4 * Math.cos(a), p[1] - 5 * Math.cos(a) - 4 * Math.sin(a)];
+      mk('path', { 'class': 'arrow', d: 'M' + tip.join(',') + 'L' + l.join(',') + 'L' + rr.join(',') + 'Z' }, loop);
+    });
+    var node = function (deg, lines, w) {
+      var p = at(deg), g = mk('g', {}, loop), h = 14 + lines.length * 13;
+      mk('rect', { 'class': 'node', x: p[0] - w / 2, y: p[1] - h / 2, width: w, height: h, rx: 8 }, g);
+      lines.forEach(function (t, i) { txt(g, p[0], p[1] - h / 2 + 15 + i * 13, t, { 'class': 'node-t', 'text-anchor': 'middle' }); });
+      return p;
+    };
+    node(180, ['context'], 76);
+    node(300, ['model'], 70);
+    node(60, ['tool'], 64);
+    var c = at(180);
+    [0, 1, 2, 3, 4].forEach(function (i) { mk('rect', { 'class': 'ctx', x: c[0] - 26 + i * 11, y: c[1] + 24, width: 8, height: 6 + i * 3, rx: 1 }, loop); });
+    txt(loop, c[0], c[1] + 56, 'grows every step', { 'text-anchor': 'middle', 'class': 'cap' });
+    txt(loop, 120, 44, 'whole context, every step', { 'text-anchor': 'middle' });
+    txt(loop, 292, 150, 'one call', { 'text-anchor': 'middle' });
+    txt(loop, 130, 272, 'output appended', { 'text-anchor': 'middle' });
+    var gate = function (x, y, t, w) {
+      var g = mk('g', {}, loop);
+      mk('rect', { 'class': 'gate', x: x - w / 2, y: y - 10, width: w, height: 20, rx: 10 }, g);
+      txt(g, x, y + 4, t, { 'class': 'gate-t', 'text-anchor': 'middle' });
+    };
+    var g1 = at(118), g2 = at(2), g3 = at(236);
+    gate(g1[0] - 4, g1[1] + 2, 'cap · clean · skip repeats', 180);
+    gate(g2[0] + 2, g2[1] - 22, 'budget · loop check', 118);
+    gate(g3[0] - 36, g3[1] + 26, 'prune at compaction', 122);
+    if (!still) {
+      var dot = mk('circle', { 'class': 'dot', r: 5 }, loop);
+      var am = mk('animateMotion', { dur: '4s', repeatCount: 'indefinite', path: 'M' + (cx + r) + ',' + cy + ' A' + r + ',' + r + ' 0 1,1 ' + (cx - r) + ',' + cy + ' A' + r + ',' + r + ' 0 1,1 ' + (cx + r) + ',' + cy }, dot);
+      void am;
+    }
+  })();
+
+  var growth = document.querySelector('#growth svg');
+  (function () {
+    var W = 640, H = 250, L = 46, R = 10, T = 16, BM = 30, pw = W - L - R, ph = H - T - BM;
+    var ymax = Math.max.apply(null, A.pts) * 1.06;
+    var x = function (i) { return L + (i - 1) / (STEPS - 1) * pw; };
+    var y = function (v) { return T + ph - ph * v / ymax; };
+    var stair = function (pts) {
+      var d = 'M' + x(1) + ',' + y(pts[0]);
+      for (var i = 1; i < pts.length; i++) d += 'H' + x(i + 1) + 'V' + y(pts[i]);
+      return d;
+    };
+    var defs = mk('defs', {}, growth);
+    var cp = mk('clipPath', { id: 'grow' }, defs);
+    mk('rect', { 'class': 'clip', x: L, y: 0, width: pw + R, height: H }, cp);
+    var tick = Math.pow(10, Math.floor(Math.log10(ymax))) * 5 / 10; while (ymax / tick > 5) tick *= 2;
+    for (var v = tick; v < ymax; v += tick) { mk('line', { 'class': 'mark', x1: L, x2: L + pw, y1: y(v), y2: y(v) }, growth); txt(growth, L - 6, y(v) + 4, fmt(v), { 'text-anchor': 'end' }); }
+    txt(growth, L - 6, y(0) + 4, '0', { 'text-anchor': 'end' });
+    mk('line', { 'class': 'axis', x1: L, x2: L + pw, y1: y(0) + 0.5, y2: y(0) + 0.5 }, growth);
+    [[WARN, 'warn 30'], [STOP, 'stop 60']].forEach(function (m) {
+      mk('line', { 'class': 'mark', x1: x(m[0]), x2: x(m[0]), y1: T, y2: y(0) }, growth);
+      txt(growth, x(m[0]), T - 4, m[1], { 'text-anchor': 'middle' });
+    });
+    txt(growth, x(1), y(0) + 18, 'step 1', { 'text-anchor': 'start' });
+    txt(growth, x(STEPS), y(0) + 18, 'step 70', { 'text-anchor': 'end' });
+    txt(growth, L - 6, T - 4, 'context', { 'text-anchor': 'end' });
+    var g = mk('g', { 'clip-path': 'url(#grow)' }, growth);
+    mk('path', { 'class': 'area-a', d: stair(A.pts) + 'V' + y(0) + 'H' + x(1) + 'Z' }, g);
+    mk('path', { 'class': 'area-b', d: stair(B.pts) + 'V' + y(0) + 'H' + x(1) + 'Z' }, g);
+    mk('path', { 'class': 'line-a', d: stair(A.pts) }, g);
+    mk('path', { 'class': 'line-b', d: stair(B.pts) }, g);
+    Object.keys(EVENTS).forEach(function (k) { mk('rect', { 'class': 'land', x: x(+k) - 1.5, y: y(0) + 2, width: 3, height: 6, rx: 1 }, g); });
+    var ea = A.pts[STEPS - 1], eb = B.pts[STOP - 1];
+    mk('circle', { 'class': 'end-a', cx: x(STEPS), cy: y(ea), r: 3.5 }, growth);
+    mk('circle', { 'class': 'end-b', cx: x(STOP), cy: y(eb), r: 3.5 }, growth);
+    txt(growth, x(STEPS) - 6, y(ea) + 16, fmt(ea) + ' tokens per step', { 'class': 'endlabel', 'text-anchor': 'end', style: 'fill:var(--bad)' });
+    txt(growth, x(STOP) - 6, y(eb) - 8, fmt(eb) + ', turn stopped', { 'class': 'endlabel', 'text-anchor': 'end', style: 'fill:var(--good)' });
+  })();
+
+  var S = { a: document.getElementById('s-a'), b: document.getElementById('s-b'), c: document.getElementById('s-c') }, raf = null;
+  var show = function (k) {
+    var i = Math.round(k * STEPS), a = A.sums[i], b = B.sums[Math.min(i, STOP)];
+    S.a.textContent = fmt(a); S.b.textContent = fmt(b); S.c.textContent = fmt(a - b);
   };
   var play = function () {
-    timers.forEach(clearTimeout); timers = [];
     if (raf) cancelAnimationFrame(raf);
-    var t = compute();
-    waffle.classList.remove('done');
-    cells.forEach(function (c) { c.classList.remove('bill', 'off'); });
-    void grid.offsetWidth;
-    W.verb.textContent = t.pct ? 'never reach your limit.' : 'are already inside the cap, nothing to cut.';
-    W.facts.innerHTML = '<b>' + fmt(scene.chars) + '-char ' + scene.name + '</b> lands at step <b>' + scene.at + '</b> and is re-sent on <b>' + t.later + '</b> of <b>' + scene.steps + '</b> steps.' + (scene.steps > STOP ? ' With Kiasi the turn stops at <b>60</b>.' : '');
-    var y2 = t.without ? 8 + 52 * (1 - t.withK / t.without) : 8;
-    W.line.setAttribute('y2', y2); W.dot.setAttribute('cy', y2);
-    W.drop.textContent = '\u2212' + t.pct + '%';
-    W.drop.setAttribute('y', Math.max(20, (8 + y2) / 2 - 6));
-    showNumbers(t, 0);
-    var finish = function () { showNumbers(t, 1); waffle.classList.add('done'); };
-    if (still) {
-      cells.forEach(function (c, i) { c.classList.add('bill'); if (i < t.pct) c.classList.add('off'); });
-      finish();
-      return;
-    }
-    cells.forEach(function (c) { c.classList.add('bill'); });
-    timers.push(setTimeout(function () {
-      cells.forEach(function (c, i) { if (i < t.pct) c.classList.add('off'); });
-      var dur = t.pct * 11 + 450, t0 = performance.now();
-      var tick = function (now) {
-        var k = Math.max(0, Math.min(1, (now - t0) / dur));
-        showNumbers(t, 1 - Math.pow(1 - k, 2));
-        if (k < 1) raf = requestAnimationFrame(tick); else { raf = null; finish(); }
-      };
-      raf = requestAnimationFrame(tick);
-    }, 900));
+    mech.classList.remove('play');
+    void mech.offsetWidth;
+    if (still) { mech.classList.add('play'); show(1); return; }
+    show(0);
+    mech.classList.add('play');
+    var t0 = performance.now();
+    var tick = function (now) {
+      var k = Math.max(0, Math.min(1, (now - t0) / 2400));
+      show(k);
+      if (k < 1) raf = requestAnimationFrame(tick); else raf = null;
+    };
+    raf = requestAnimationFrame(tick);
   };
-  var pick = function (tab) {
-    tabs.forEach(function (x) { x.setAttribute('aria-selected', x === tab ? 'true' : 'false'); });
-    scene = { name: tab.dataset.name, chars: +tab.dataset.chars, at: +tab.dataset.at, steps: +tab.dataset.steps };
-    play();
-  };
-  tabs.forEach(function (x) { x.addEventListener('click', function () { pick(x); }); });
   document.getElementById('replay').addEventListener('click', play);
-  scene.name = tabs[0].dataset.name;
   if (still || !('IntersectionObserver' in window)) play();
   else {
-    var wio = new IntersectionObserver(function (entries) {
-      if (entries.some(function (e) { return e.isIntersecting; })) { wio.disconnect(); play(); }
-    }, { threshold: 0.35 });
-    wio.observe(waffle);
+    show(0);
+    var mio = new IntersectionObserver(function (entries) {
+      if (entries.some(function (e) { return e.isIntersecting; })) { mio.disconnect(); play(); }
+    }, { threshold: 0.3 });
+    mio.observe(mech);
   }
 
   var items = document.querySelectorAll('#steps-list li');
