@@ -112,20 +112,37 @@ section { padding: 72px 0 0; }
 .trust span { font-family: var(--mono); font-size: 12px; color: var(--muted); }
 @media (max-width: 760px) { .trust { grid-template-columns: repeat(2, 1fr); } .trust b { font-size: 26px; } }
 
-.calc { background: var(--card); border: 1px solid var(--rule); border-radius: 18px; padding: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 28px 40px; align-items: start; }
-.calc .controls label { display: block; font-family: var(--mono); font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
-.calc .controls output { float: right; color: var(--ink); text-transform: none; letter-spacing: 0; font-variant-numeric: tabular-nums; }
-.calc .controls input[type=range] { width: 100%; accent-color: var(--accent-ink); margin: 0 0 22px; }
-.calc .result .row { margin-bottom: 18px; }
-.calc .result .row small { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 12px; color: var(--muted); margin-bottom: 6px; }
-.calc .result .row small b { color: var(--ink); font-weight: 400; font-variant-numeric: tabular-nums; }
-.calc .fill { height: 18px; border-radius: 6px; background: var(--code); overflow: hidden; }
-.calc .fill i { display: block; height: 100%; background: var(--bad); width: 100%; transition: width .4s var(--ease); }
-.calc .fill.good i { background: var(--good); }
-.calc .verdict { font-family: var(--serif); font-size: 24px; line-height: 1.25; margin: 6px 0 4px; }
-.calc .verdict b { font-weight: 400; color: var(--accent-ink); }
-.calc .note { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin: 0; }
-@media (max-width: 760px) { .calc { grid-template-columns: 1fr; padding: 20px; } }
+.calc { background: var(--card); border: 1px solid var(--rule); border-radius: 18px; padding: 24px 28px 28px; display: grid; grid-template-columns: 1fr 1.15fr; gap: 22px 40px; align-items: start; }
+.presets { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.presets span { margin-right: 4px; }
+.chip { font: inherit; color: var(--ink); background: var(--code); border: 1px solid transparent; border-radius: 999px; padding: 5px 12px; cursor: pointer; transition: background .2s, border-color .2s, transform .2s var(--ease); }
+.chip:hover { transform: translateY(-1px); }
+.chip.on { background: var(--accent); color: #1d1a16; }
+.ctl { margin-bottom: 18px; }
+.ctl label { display: flex; justify-content: space-between; align-items: baseline; font-family: var(--mono); font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+.ctl output { font-family: var(--mono); font-size: 12px; color: var(--ink); text-transform: none; letter-spacing: 0; background: var(--code); border-radius: 6px; padding: 2px 8px; font-variant-numeric: tabular-nums; transition: transform .2s var(--ease); display: inline-block; }
+.ctl output.bump { transform: scale(1.12); }
+.ctl input[type=range] { width: 100%; margin: 0; accent-color: var(--accent-ink); }
+.ctl .scale { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 2px; }
+.result .row { margin-bottom: 16px; }
+.result .row small { display: flex; justify-content: space-between; align-items: baseline; font-family: var(--mono); font-size: 12px; color: var(--muted); margin-bottom: 7px; }
+.result .row small b { color: var(--ink); font-weight: 400; font-size: 15px; font-variant-numeric: tabular-nums; }
+.strip { display: flex; gap: 1px; height: 22px; border-radius: 6px; overflow: hidden; background: var(--code); }
+.strip i { flex: 1 1 0; min-width: 1px; background: var(--rule); transition: background-color .35s var(--ease); }
+.strip i.land { background: var(--accent); }
+.strip i.hit { background: var(--bad); }
+.strip i.cap { background: var(--good); }
+.strip i.stop { background: repeating-linear-gradient(135deg, var(--rule) 0 3px, transparent 3px 6px); }
+.key { display: flex; flex-wrap: wrap; gap: 4px 14px; font-family: var(--mono); font-size: 11px; color: var(--muted); margin: -6px 0 14px; }
+.key i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; vertical-align: -1px; margin-right: 5px; }
+.delta { display: flex; align-items: flex-start; gap: 14px; margin: 4px 0 6px; }
+.badge { flex: none; font-family: var(--mono); font-size: 13px; color: #1d1a16; background: var(--accent); border-radius: 999px; padding: 4px 11px; font-variant-numeric: tabular-nums; }
+.badge.pop { animation: pop .45s var(--ease); }
+@keyframes pop { 0% { transform: scale(.7); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
+.verdict { font-family: var(--serif); font-size: 22px; line-height: 1.3; margin: 0; }
+.verdict b { font-weight: 400; color: var(--accent-ink); }
+.note { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin: 0; }
+@media (max-width: 760px) { .calc { grid-template-columns: 1fr; padding: 20px; gap: 18px; } .verdict { font-size: 19px; } }
 
 .leaks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .leak { background: var(--card); border: 1px solid var(--rule); border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 8px; }
@@ -145,15 +162,29 @@ section { padding: 72px 0 0; }
 .points span { color: var(--muted); font-size: 15px; }
 @media (max-width: 760px) { .proof { grid-template-columns: 1fr; } }
 
-.steps { list-style: none; counter-reset: step; margin: 0; padding: 0; display: grid; gap: 14px; }
-.steps li { counter-increment: step; display: grid; grid-template-columns: 40px 1fr; gap: 18px; align-items: start; background: var(--card); border: 1px solid var(--rule); border-radius: 16px; padding: 20px; }
-.steps li::before { content: counter(step); width: 40px; height: 40px; border-radius: 999px; background: var(--accent); color: #1d1a16; display: grid; place-items: center; font-family: var(--serif); font-size: 20px; }
+.steps { list-style: none; margin: 0 auto; padding: 0; display: grid; gap: 14px; }
+.steps li { display: grid; grid-template-columns: 40px 1fr; gap: 18px; align-items: start; }
+.steps .num { position: relative; width: 40px; height: 40px; border-radius: 999px; border: 1px solid var(--rule); background: var(--card); color: var(--muted); display: grid; place-items: center; font-family: var(--serif); font-size: 19px; transition: background .4s var(--ease), color .4s, border-color .4s, transform .4s var(--ease); }
+.steps li:not(:last-child) .num::after { content: ""; position: absolute; top: 40px; bottom: -14px; left: 50%; width: 1px; background: var(--rule); }
+.steps li.active .num { background: var(--accent); color: #1d1a16; border-color: var(--accent); transform: scale(1.06); }
+.steps li.copied .num { background: var(--good); border-color: var(--good); color: #fff; }
+.s-card { background: var(--card); border: 1px solid var(--rule); border-radius: 16px; padding: 18px 20px; transition: border-color .4s; }
+.steps li.active .s-card { border-color: color-mix(in srgb, var(--accent) 55%, var(--rule)); }
+.s-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.eta { font-family: var(--mono); font-size: 11px; color: var(--muted); border: 1px solid var(--rule); border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
 .steps p { margin: 0 0 10px; color: var(--muted); font-size: 15px; }
 .steps p:last-child { margin-bottom: 0; }
-.codebox { position: relative; background: var(--code); border-radius: 12px; padding: 14px 92px 14px 16px; margin: 0 0 8px; }
+.codebox { position: relative; background: var(--code); border-radius: 12px; padding: 14px 96px 14px 16px; margin: 0 0 8px; }
 .codebox.plain { padding-right: 16px; }
-.copy { position: absolute; top: 8px; right: 8px; font-family: var(--mono); font-size: 12px; background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 5px 10px; cursor: pointer; color: var(--ink); }
+.copy { position: absolute; top: 8px; right: 8px; display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12px; background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 5px 10px; cursor: pointer; color: var(--ink); transition: color .2s, border-color .2s; }
+.copy svg { width: 13px; height: 13px; }
+.copy .tick { stroke-dasharray: 30; stroke-dashoffset: 30; transition: stroke-dashoffset .35s var(--ease) .05s; }
 .copy.done { color: var(--good); border-color: var(--good); }
+.copy.done .tick { stroke-dashoffset: 0; }
+.after { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 22px; }
+.after div { font-family: var(--mono); font-size: 12px; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 10px; }
+.after b { display: block; font-family: var(--serif); font-weight: 400; font-size: 17px; color: var(--ink); margin-bottom: 2px; }
+@media (max-width: 560px) { .after { grid-template-columns: 1fr; } }
 
 .privacy { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 .privacy div { border-top: 2px solid var(--accent); padding-top: 12px; }
@@ -244,22 +275,26 @@ footer a { color: var(--muted); }
     <div class="narrow centered">
       <p class="kicker reveal">The cost</p>
       <h2 class="reveal">What does one noisy output cost you?</h2>
-      <p class="lede reveal">Claude Code has no memory between steps. A tool output lands in context once and is re-sent on every step after it. Drag the sliders.</p>
+      <p class="lede reveal">Claude Code has no memory between steps. A tool output lands in context once and is re-sent on every step after it. Pick a case or drag the sliders.</p>
     </div>
     <div class="calc reveal" id="calc">
+      <div class="presets" role="group" aria-label="Typical cases"><span>Try</span>
+        <button type="button" class="chip on" data-chars="40000" data-at="3" data-steps="40">npm install</button>
+        <button type="button" class="chip" data-chars="60000" data-at="8" data-steps="70">failing test run</button>
+        <button type="button" class="chip" data-chars="25000" data-at="2" data-steps="20">git log</button>
+        <button type="button" class="chip" data-chars="80000" data-at="1" data-steps="120">pasted log</button>
+      </div>
       <div class="controls">
-        <label for="chars">Tool output size <output id="chars-out">40,000 chars</output></label>
-        <input type="range" id="chars" min="2000" max="80000" step="1000" value="40000">
-        <label for="at">Lands at step <output id="at-out">3</output></label>
-        <input type="range" id="at" min="1" max="30" step="1" value="3">
-        <label for="steps">Steps in the turn <output id="steps-out">40</output></label>
-        <input type="range" id="steps" min="5" max="120" step="1" value="40">
+        <div class="ctl"><label for="chars">Tool output size <output id="chars-out">40,000 chars</output></label><input type="range" id="chars" min="2000" max="80000" step="1000" value="40000"><div class="scale"><span>2k</span><span>cap 12k</span><span>80k</span></div></div>
+        <div class="ctl"><label for="at">Lands at step <output id="at-out">3</output></label><input type="range" id="at" min="1" max="30" step="1" value="3"><div class="scale"><span>1</span><span>30</span></div></div>
+        <div class="ctl"><label for="steps">Steps in the turn <output id="steps-out">40</output></label><input type="range" id="steps" min="5" max="120" step="1" value="40"><div class="scale"><span>5</span><span>stop 60</span><span>120</span></div></div>
       </div>
       <div class="result" aria-live="polite">
-        <div class="row"><small>Without Kiasi <b id="without">0</b></small><div class="fill"><i id="without-bar"></i></div></div>
-        <div class="row"><small>With Kiasi <b id="with">0</b></small><div class="fill good"><i id="with-bar"></i></div></div>
-        <p class="verdict" id="verdict"></p>
-        <p class="note">Re-read tokens for this one output. Kiasi caps output at 12,000 chars (the full text is saved to disk) and stops a turn at 60 tool calls. About 4 chars per token.</p>
+        <div class="row"><small><span>Without Kiasi</span><b id="without">0</b></small><div class="strip" id="strip-without" aria-hidden="true"></div></div>
+        <div class="row"><small><span>With Kiasi</span><b id="with">0</b></small><div class="strip" id="strip-with" aria-hidden="true"></div></div>
+        <div class="key"><span><i style="background:var(--accent)"></i>lands</span><span><i style="background:var(--bad)"></i>re-sent in full</span><span><i style="background:var(--good)"></i>re-sent capped</span><span><i style="background:repeating-linear-gradient(135deg,var(--rule) 0 3px,transparent 3px 6px)"></i>turn stopped</span></div>
+        <div class="delta"><span class="badge" id="badge">0%</span><p class="verdict" id="verdict"></p></div>
+        <p class="note">Re-read tokens for this one output, one cell per step. Kiasi caps output at 12,000 chars (the full text is saved to disk) and stops a turn at 60 tool calls. About 4 chars per token.</p>
       </div>
     </div>
   </section>
@@ -299,14 +334,20 @@ footer a { color: var(--muted); }
     <div class="narrow centered">
       <p class="kicker reveal">Install</p>
       <h2 class="reveal">Three steps, about a minute.</h2>
+      <p class="lede reveal">Two pastes and a restart. Nothing to build, nothing to sign up for.</p>
     </div>
-    <ol class="steps narrow">
-      <li class="reveal"><div><h3>Install the plugin</h3><p>In Claude Code:</p><div class="codebox"><button class="copy" type="button" data-copy="c1">Copy</button><pre id="c1">/plugin marketplace add raj-rangani/kiasi
+    <ol class="steps narrow" id="steps-list">
+      <li class="reveal"><span class="num">1</span><div class="s-card"><div class="s-head"><h3>Install the plugin</h3><span class="eta">20 s</span></div><p>In Claude Code:</p><div class="codebox"><button class="copy" type="button" data-copy="c1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path class="tick" d="M4 12.5l5 5L20 7"/></svg><span>Copy</span></button><pre id="c1">/plugin marketplace add raj-rangani/kiasi
 /plugin install kiasi@kiasi</pre></div></div></li>
-      <li class="reveal" style="--d:1"><div><h3>Add two settings</h3><p>In the <code>env</code> block of <code>~/.claude/settings.json</code>. Kiasi reminds you at session start if either is missing.</p><div class="codebox"><button class="copy" type="button" data-copy="c2">Copy</button><pre id="c2">"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "200000",
+      <li class="reveal" style="--d:1"><span class="num">2</span><div class="s-card"><div class="s-head"><h3>Add two settings</h3><span class="eta">30 s</span></div><p>In the <code>env</code> block of <code>~/.claude/settings.json</code>. Kiasi reminds you at session start if either is missing.</p><div class="codebox"><button class="copy" type="button" data-copy="c2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path class="tick" d="M4 12.5l5 5L20 7"/></svg><span>Copy</span></button><pre id="c2">"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "200000",
 "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"</pre></div><p>The first compacts at 200k instead of the full window and is the biggest single lever. The second turns on the experimental pruner and search.</p></div></li>
-      <li class="reveal" style="--d:2"><div><h3>Restart, then work as usual</h3><p>Run <code>/kiasi:limits setup</code> once so the dashboard can show your plan limits. The dashboard starts itself with every session at <a href="http://127.0.0.1:8787/">127.0.0.1:8787</a>.</p></div></li>
+      <li class="reveal" style="--d:2"><span class="num">3</span><div class="s-card"><div class="s-head"><h3>Restart, then work as usual</h3><span class="eta">10 s</span></div><p>Run <code>/kiasi:limits setup</code> once so the dashboard can show your plan limits. The dashboard starts itself with every session at <a href="http://127.0.0.1:8787/">127.0.0.1:8787</a>.</p></div></li>
     </ol>
+    <div class="after narrow">
+      <div class="reveal"><b>Right away</b>Every long output is capped and cleaned, every paste saved.</div>
+      <div class="reveal" style="--d:1"><b>First compaction</b>Your words kept, old tool output pruned, state re-injected.</div>
+      <div class="reveal" style="--d:2"><b>Next day</b>The dashboard shows your own before and after.</div>
+    </div>
   </section>
 
   <section id="privacy">
@@ -457,35 +498,91 @@ claude plugin validate .                 # manifest, marketplace and hooks.json<
 
   var CAP = 12000, STOP = 60, CHARS_PER_TOKEN = 4;
   var chars = document.getElementById('chars'), at = document.getElementById('at'), steps = document.getElementById('steps');
+  var outs = { chars: document.getElementById('chars-out'), at: document.getElementById('at-out'), steps: document.getElementById('steps-out') };
+  var shown = { without: 0, with: 0 };
+  var tween = function (el, key, to) {
+    var from = shown[key]; shown[key] = to;
+    if (still || from === to) { el.textContent = fmt(to) + ' tokens'; return; }
+    var t0 = performance.now();
+    var tick = function (now) {
+      var k = Math.max(0, Math.min(1, (now - t0) / 420));
+      el.textContent = fmt(Math.round(from + (to - from) * (1 - Math.pow(1 - k, 3)))) + ' tokens';
+      if (k < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
+  var strip = function (id, s, a, kind) {
+    var el = document.getElementById(id);
+    while (el.children.length > s) el.removeChild(el.lastChild);
+    while (el.children.length < s) el.appendChild(document.createElement('i'));
+    for (var i = 1; i <= s; i++) {
+      var c = '';
+      if (i === a) c = 'land';
+      else if (i > a) c = (kind === 'with' && i > STOP) ? 'stop' : (kind === 'with' && +chars.value > CAP) ? 'cap' : 'hit';
+      el.children[i - 1].className = c;
+    }
+  };
+  var bump = function (el) { el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); };
+  var lastPct = null;
   var calc = function () {
     var c = +chars.value, a = +at.value, s = +steps.value;
-    document.getElementById('chars-out').textContent = c.toLocaleString() + ' chars';
-    document.getElementById('at-out').textContent = a;
-    document.getElementById('steps-out').textContent = s;
+    outs.chars.textContent = c.toLocaleString() + ' chars';
+    outs.at.textContent = a;
+    outs.steps.textContent = s;
     var later = Math.max(0, s - a);
     var without = Math.round(c / CHARS_PER_TOKEN * later);
     var withK = Math.round(Math.min(c, CAP) / CHARS_PER_TOKEN * Math.max(0, Math.min(s, STOP) - a));
-    document.getElementById('without').textContent = fmt(without) + ' tokens';
-    document.getElementById('with').textContent = fmt(withK) + ' tokens';
-    document.getElementById('without-bar').style.width = '100%';
-    document.getElementById('with-bar').style.width = (without ? Math.max(1.5, withK / without * 100) : 0) + '%';
+    tween(document.getElementById('without'), 'without', without);
+    tween(document.getElementById('with'), 'with', withK);
+    strip('strip-without', s, a, 'without');
+    strip('strip-with', s, a, 'with');
+    var pct = without ? Math.round((1 - withK / without) * 100) : 0;
+    var badge = document.getElementById('badge');
+    badge.textContent = '−' + pct + '%';
+    if (pct !== lastPct && !still) { badge.classList.remove('pop'); void badge.offsetWidth; badge.classList.add('pop'); }
+    lastPct = pct;
     var v = document.getElementById('verdict');
     if (!without) v.innerHTML = 'Nothing re-sent yet: the output lands on the last step.';
     else if (withK >= without) v.innerHTML = 'Under the cap and inside the budget, so <b>nothing to cut</b> here.';
-    else v.innerHTML = 'Kiasi keeps <b>' + fmt(without - withK) + ' tokens</b> off your limit, <b>' + Math.round((1 - withK / without) * 100) + '%</b> of what this output would have cost.';
+    else v.innerHTML = 'Kiasi keeps <b>' + fmt(without - withK) + ' tokens</b> off your limit for this one output.';
   };
-  [chars, at, steps].forEach(function (el) { el.addEventListener('input', calc); });
+  var chips = document.querySelectorAll('.chip');
+  var syncChips = function () {
+    chips.forEach(function (ch) { ch.classList.toggle('on', ch.dataset.chars === chars.value && ch.dataset.at === at.value && ch.dataset.steps === steps.value); });
+  };
+  [chars, at, steps].forEach(function (el) {
+    el.addEventListener('input', function () { bump(outs[el.id]); calc(); syncChips(); });
+  });
+  chips.forEach(function (ch) {
+    ch.addEventListener('click', function () {
+      chars.value = ch.dataset.chars; at.value = ch.dataset.at; steps.value = ch.dataset.steps;
+      Object.keys(outs).forEach(function (k) { bump(outs[k]); });
+      calc(); syncChips();
+    });
+  });
   calc();
 
+  var items = document.querySelectorAll('#steps-list li');
+  if (still || !('IntersectionObserver' in window)) {
+    items.forEach(function (li) { li.classList.add('active'); });
+  } else {
+    var so = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('active'); so.unobserve(e.target); } });
+    }, { threshold: 0.6 });
+    items.forEach(function (li) { so.observe(li); });
+  }
+
   document.querySelectorAll('.copy').forEach(function (btn) {
+    var label = btn.querySelector('span');
     btn.addEventListener('click', function () {
       var text = document.getElementById(btn.dataset.copy).textContent;
-      var done = function (label, ok) {
-        btn.textContent = label;
+      var done = function (word, ok) {
+        label.textContent = word;
         btn.classList.toggle('done', ok);
-        setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('done'); }, 1600);
+        if (ok) btn.closest('li').classList.add('copied');
+        setTimeout(function () { label.textContent = 'Copy'; btn.classList.remove('done'); }, 1800);
       };
-      if (navigator.clipboard) navigator.clipboard.writeText(text).then(function () { done('Copied ✓', true); }, function () { done('Select it', false); });
+      if (navigator.clipboard) navigator.clipboard.writeText(text).then(function () { done('Copied', true); }, function () { done('Select it', false); });
       else done('Select it', false);
     });
   });
