@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- Landing page (docs/index.html) rebuilt around one story: hero with an animated session demo, a re-read cost calculator, six leaks and rules, dashboard proof, three-step install, privacy, and a collapsed reference. Same palette, no external requests. Dashboard screenshot refreshed.
 - Per-day history: budget.py merges every build into `history.json` in the data dir, so days outlive the report window and Claude Code's transcript retention; the Overview before-and-after block reads it and no longer disappears a week after install. Report window `BUDGET_DAYS` raised from 7 to 30 days and used by the dashboard's rebuild too.
 
 - Restructured the plugin layout, no behaviour change: `scripts/kiasi.py` is now a thin hook dispatcher over the `scripts/core/` package (constants, events, transcript, caps, prompt, turn, reads, session, launch); the report builders moved to `scripts/reports/` (`budget.py`, `lens.py`, `sync.py`); `limits.py` is `statusline_install.py` and `usage_limits.py` is `limits_data.py`; the slash commands became skills under `skills/` (still `/kiasi:dashboard`, `/kiasi:sync`, `/kiasi:limits`); the five redirect stubs in `dashboard/` are gone; `SHIPPING.md` moved to `docs/dev-notes.md`; `tests/test_kiasi.py` is split into one test file per module with a shared `tests/helpers.py`; `scripts/README.md` describes the scripts.
