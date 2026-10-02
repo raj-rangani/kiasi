@@ -3,8 +3,6 @@
   <img src="docs/logo-light.svg" alt="Kiasi" width="150">
 </picture>
 
-**Make your Claude Code limit last.**
-
 Kiasi is a Claude Code plugin that makes your weekly limit last longer. Every step of Claude Code re-sends the whole conversation, so one noisy tool output is paid for again on every step after it. Kiasi keeps that noise out with fixed rules, on your machine, with no model calls and no network.
 
 On the machine it was built on, context re-sent per step went from 201k to 31k tokens, 6.5× less, and steps over 200k context went from 52% to 0%. Your own before-and-after is on the local dashboard the day after you install.
