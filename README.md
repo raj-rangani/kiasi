@@ -20,12 +20,20 @@ On the machine it was built on, context re-sent per step went from 201k to 31k t
 
 ## Quick start
 
-In Claude Code:
+In the Claude Code terminal:
 
 ```
 /plugin marketplace add raj-rangani/kiasi
 /plugin install kiasi@kiasi
 ```
+
+In the VS Code extension, where `/plugin` does not exist, open this link (GitHub shows it as plain text, so copy it into the browser's address bar). It opens the Claude Code panel on Kiasi, adds the marketplace if needed and asks for a scope:
+
+```
+vscode://anthropic.claude-code/install-plugin?plugin=kiasi&marketplace=raj-rangani/kiasi
+```
+
+Or type `/plugins` in the prompt box, add `raj-rangani/kiasi` in the Marketplaces tab, then install Kiasi from the Plugins tab. From any shell, `claude plugin marketplace add raj-rangani/kiasi` and `claude plugin install kiasi@kiasi` do the same without a dialog.
 
 Add two settings to the `env` block of `~/.claude/settings.json`. Kiasi reminds you at session start if either is missing.
 
@@ -62,6 +70,7 @@ The days before you installed Kiasi are the baseline, built from your own transc
 | Command | What it does |
 |---|---|
 | `/kiasi:dashboard` | Start the dashboard if it is not up and print its URL |
+| `/kiasi:dashboard autostart on` | Run the dashboard from login, with no Claude Code session needed (systemd user service or XDG autostart on Linux, LaunchAgent on macOS, Startup folder on Windows); `off` removes it, `status` shows it |
 | `/kiasi:sync` | Rebuild the reports now |
 | `/kiasi:limits setup` | Install the Kiasi status line, the only source of your plan limits |
 | `/kiasi:limits remove` | Put your previous status line back |
@@ -91,7 +100,7 @@ Set these with `/config` or as env vars. Every other threshold is a named consta
 
 - Claude Code 2.1.283+
 - Python 3.8+, standard library only
-- Linux (tested) or macOS (expected to work). Windows is not supported.
+- Linux (tested), macOS (expected to work) or Windows with Git Bash, which Claude Code needs anyway (hooks run through `scripts/run.sh`, which picks `py -3`, `python` or `python3`; the dashboard and cleanup detach without POSIX calls; not yet tested on a Windows machine, reports welcome)
 - Node 18+ only for the experimental function hooks
 
 ## Development
