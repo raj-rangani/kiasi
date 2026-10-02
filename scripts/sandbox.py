@@ -84,7 +84,7 @@ def run(args):
 
 
 def distill(args):
-    argv = {"python": ["python3", "-c"], "node": ["node", "-e"]}[args.language] + [args.code] + args.file
+    argv = {"python": [sys.executable, "-c"], "node": ["node", "-e"]}[args.language] + [args.code] + args.file
     try:
         proc = subprocess.run(argv, capture_output=True, text=True, errors="replace", timeout=args.timeout)
     except subprocess.TimeoutExpired:

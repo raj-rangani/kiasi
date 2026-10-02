@@ -1,3 +1,4 @@
+import { interpreterOrder, withInterpreter, looksMissing, rememberInterpreter } from './python.js';
 import {
   SANDBOX_SCRIPT, SANDBOX_DEFAULT_TIMEOUT_S, SANDBOX_MAX_TIMEOUT_S, SANDBOX_EXTRA_MS,
   RUN_TOOL_FULL_NAME, DISTILL_TOOL_FULL_NAME, FETCH_TOOL_FULL_NAME,
@@ -43,7 +44,7 @@ async function runSandbox($, input, build, missing) {
   const session = await $.session.id().catch(() => null);
   if (session) argv.push('--session', session);
   const timeoutMs = timeoutOf(input) * 1000 + SANDBOX_EXTRA_MS;
-  const { exitCode, stdout, stderr } = await $.process.run(argv, { timeoutMs });
+  const { exitCode, stdout, stderr } = await runPython($, argv, { timeoutMs });
   if (exitCode !== 0 && !stdout.trim()) return { result: `sandbox failed (exit ${exitCode}): ${stderr.trim()}`, isError: true };
   return { result: stdout.trim(), isError: exitCode !== 0 };
 }
@@ -52,4 +53,17 @@ export function registerSandbox(on) {
   on('tool.call', { tool: RUN_TOOL_FULL_NAME }, ($, e) => runSandbox($, e, runArgv, 'run needs a command'));
   on('tool.call', { tool: DISTILL_TOOL_FULL_NAME }, ($, e) => runSandbox($, e, distillArgv, 'distill needs code'));
   on('tool.call', { tool: FETCH_TOOL_FULL_NAME }, ($, e) => runSandbox($, e, fetchArgv, 'fetch needs a url'));
+}
+
+// argv[0] is a placeholder: tries python3, python and py -3 until one exists, then sticks with it.
+async function runPython($, argv, opts) {
+  let last;
+  for (const candidate of interpreterOrder()) {
+    last = await $.process.run(withInterpreter(argv, candidate), opts);
+    if (!looksMissing(last)) {
+      rememberInterpreter(candidate);
+      return last;
+    }
+  }
+  return last;
 }

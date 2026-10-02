@@ -3,6 +3,7 @@ import sys
 
 from core import constants
 from core.events import log_event
+from core.procs import detached_kwargs
 
 
 def launch_cleanup(session_id):
@@ -13,7 +14,7 @@ def launch_cleanup(session_id):
         import subprocess
         subprocess.Popen([sys.executable, str(constants.PLUGIN_ROOT / "scripts" / "cleanup.py"), "--if-due", "--quiet", "--session", session_id],
                          env={**os.environ, "CLAUDE_PLUGIN_DATA": str(constants.DATA_DIR)},  # same data folder as this hook, never another
-                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **detached_kwargs())
     except OSError as exc:
         sys.stderr.write(f"kiasi: cleanup not started: {exc}\n")
 

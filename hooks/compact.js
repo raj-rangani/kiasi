@@ -1,4 +1,5 @@
 import { pruneTranscript } from './prune.js';
+import { interpreterOrder, withInterpreter, looksMissing, rememberInterpreter } from './python.js';
 import { CHARS_PER_TOKEN, KIASI_SCRIPT, LOG_EVENT_NAME, TOAST_MS, ARCHIVE_PATH_EVENT_NAME, ARCHIVE_EVENT_NAME } from './constants.js';
 
 const tokens = (chars) => Math.round(chars / CHARS_PER_TOKEN);
@@ -6,7 +7,7 @@ const tokens = (chars) => Math.round(chars / CHARS_PER_TOKEN);
 async function runKiasi($, eventName, record) {
   const payload = JSON.stringify({ hook_event_name: eventName, ...record });
   try {
-    return await $.process.run(['python3', `${$.plugin.root}/scripts/${KIASI_SCRIPT}`], { stdin: payload });
+    return await runPython($, ['python3', `${$.plugin.root}/scripts/${KIASI_SCRIPT}`], { stdin: payload });
   } catch (error) {
     $.ui.log(`kiasi ${eventName} failed: ${error.message}`, { to: 'debug' });
     return null;
@@ -54,4 +55,17 @@ export function registerCompact(on) {
     }
     return { messages: result.messages };
   });
+}
+
+// argv[0] is a placeholder: tries python3, python and py -3 until one exists, then sticks with it.
+async function runPython($, argv, opts) {
+  let last;
+  for (const candidate of interpreterOrder()) {
+    last = await $.process.run(withInterpreter(argv, candidate), opts);
+    if (!looksMissing(last)) {
+      rememberInterpreter(candidate);
+      return last;
+    }
+  }
+  return last;
 }

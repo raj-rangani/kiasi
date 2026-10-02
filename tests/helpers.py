@@ -38,6 +38,8 @@ class KiasiTestCase(unittest.TestCase):
         constants.LENS_FILE = data_dir / "lens.json.gz"
         constants.HOME_DIR = data_dir / "home"
         constants.DATA_DIR_POINTER = constants.HOME_DIR / "data-dir"
+        constants.PLUGIN_ROOT_POINTER = constants.HOME_DIR / "plugin-root"
+        constants.DASHBOARD_LAUNCHER = constants.HOME_DIR / "dashboard-launcher.py"
         constants.LEGACY_HOME_DIR = data_dir / "legacy-home"
         constants.DASHBOARD_STATE = data_dir / "dashboard.json"
         constants.DASHBOARD_LOG = data_dir / "dashboard.log"

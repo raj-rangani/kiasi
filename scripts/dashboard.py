@@ -27,6 +27,7 @@ from datetime import datetime
 from pathlib import Path
 
 from core import constants
+from core.procs import detached_kwargs
 import limits_data
 
 PLUGIN_ROOT = constants.PLUGIN_ROOT
@@ -121,7 +122,41 @@ def start_detached():
     with open(constants.DASHBOARD_LOG, mode) as log:
         subprocess.Popen([sys.executable, str(Path(__file__).resolve()), str(constants.DASHBOARD_PORT)],
                          env={**os.environ, "CLAUDE_PLUGIN_DATA": str(constants.DATA_DIR)},
-                         stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, close_fds=True)
+                         stdin=subprocess.DEVNULL, stdout=log, stderr=log, **detached_kwargs())
+
+
+def wait_for_url():
+    """The URL of a dashboard that answers within DASHBOARD_START_WAIT_SECONDS, else None."""
+    deadline = time.monotonic() + constants.DASHBOARD_START_WAIT_SECONDS
+    while time.monotonic() < deadline:
+        url = running_url()
+        if url:
+            return url
+        time.sleep(0.1)
+    return None
+
+
+def stop_running():
+    """Stop the dashboard recorded in DASHBOARD_STATE, if it is ours and still answering. Returns True when something was stopped."""
+    if not running_url():
+        return False
+    try:
+        pid = int(json.loads(constants.DASHBOARD_STATE.read_text()).get("pid") or 0)
+    except (OSError, ValueError, AttributeError):
+        return False
+    if not pid or pid == os.getpid():
+        return False
+    try:
+        if sys.platform == "win32":
+            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, timeout=10)
+        else:
+            os.kill(pid, 15)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    deadline = time.monotonic() + constants.DASHBOARD_START_WAIT_SECONDS
+    while time.monotonic() < deadline and running_url():
+        time.sleep(0.1)
+    return True
 
 
 def ensure():
@@ -243,6 +278,10 @@ class ThreadingServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
 
 
 def main():
+    if "--autostart" in sys.argv[1:]:
+        import autostart
+        rest = [arg for arg in sys.argv[1:] if arg != "--autostart"]
+        sys.exit(autostart.main([sys.argv[0]] + rest))
     if "--ensure" in sys.argv[1:]:
         url, started = ensure()
         if not url:

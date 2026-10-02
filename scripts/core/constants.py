@@ -14,6 +14,9 @@ PLUGIN_ROOT = Path(__file__).resolve().parents[2]
 PLUGIN_NAME = "kiasi"
 HOME_DIR = Path.home() / ".claude" / PLUGIN_NAME
 DATA_DIR_POINTER = HOME_DIR / "data-dir"
+PLUGIN_ROOT_POINTER = HOME_DIR / "plugin-root"
+DASHBOARD_LAUNCHER = HOME_DIR / "dashboard-launcher.py"
+AUTOSTART_NAME = "kiasi-dashboard"
 
 # The plugin was called Ankush until 2026-09-29. The SessionStart hook moves
 # the old data and home directories to the new names and leaves a link at the

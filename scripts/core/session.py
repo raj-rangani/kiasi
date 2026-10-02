@@ -109,6 +109,20 @@ def rules_text():
         return ""
 
 
+def record_plugin_root():
+    """Keep HOME_DIR/plugin-root pointing at the installed plugin so the login-time dashboard launcher finds the current version."""
+    try:
+        if constants.PLUGIN_ROOT_POINTER.read_text().strip() == str(constants.PLUGIN_ROOT):
+            return
+    except OSError:
+        pass
+    try:
+        constants.PLUGIN_ROOT_POINTER.parent.mkdir(parents=True, exist_ok=True)
+        constants.PLUGIN_ROOT_POINTER.write_text(str(constants.PLUGIN_ROOT) + "\n")
+    except OSError:
+        pass
+
+
 def record_data_dir():
     if not os.environ.get("CLAUDE_PLUGIN_DATA"):
         return
@@ -235,6 +249,7 @@ def state_block(payload):
 def handle_session_start(payload):
     migrate_legacy_data()
     record_data_dir()
+    record_plugin_root()
     launch_cleanup(payload.get("session_id", ""))
     dashboard_line = ensure_dashboard(payload.get("session_id", ""))
     note = last_note(payload.get("cwd") or "")

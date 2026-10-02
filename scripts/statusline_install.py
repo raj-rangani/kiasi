@@ -72,7 +72,7 @@ def setup():
     write_json(chain_file(), {"previous": previous, "data_dir": str(constants.DATA_DIR)})
     backup = backup_settings(settings_file)
     settings["statusLine"] = {**(current if is_ours(current) else {}), "type": "command",
-                              "command": f'python3 "{installed_script()}"'}
+                              "command": f'"{sys.executable}" "{installed_script()}"'}
     write_json(settings_file, settings)
     kept = f"; your previous status line still runs first: {previous.get('command')}" if previous else ""
     return f"Kiasi status line set up in {settings_file} (backup at {backup}){kept}. It shows from the next status line update."

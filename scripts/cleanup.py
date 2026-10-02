@@ -16,18 +16,24 @@ Safety rules:
 Usage: cleanup.py [--dry-run] [--if-due] [--session ID] [--quiet] | cleanup.py --restore [NAME ...]
 """
 import argparse
-import fcntl
 import gzip
 import json
 import os
 import re
 import signal
 import sys
+import threading
 import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from core import constants
+
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
+    import msvcrt
 
 DAY = 86400
 TS_FORMAT = "%Y-%m-%dT%H:%M:%S"
@@ -313,6 +319,28 @@ def timed_out(signum, frame):
     raise TimeoutError(f"no result after {constants.CLEANUP_TIMEOUT_SECONDS}s")
 
 
+def arm_timeout():
+    """Give up after CLEANUP_TIMEOUT_SECONDS: an alarm signal where there is one, a timer thread on Windows."""
+    if hasattr(signal, "SIGALRM"):
+        signal.signal(signal.SIGALRM, timed_out)
+        signal.alarm(constants.CLEANUP_TIMEOUT_SECONDS)
+        return
+    def bail():
+        sys.stderr.write(f"cleanup: no result after {constants.CLEANUP_TIMEOUT_SECONDS}s\n")
+        os._exit(1)
+    timer = threading.Timer(constants.CLEANUP_TIMEOUT_SECONDS, bail)
+    timer.daemon = True
+    timer.start()
+
+
+def try_lock(handle):
+    """Take the cleanup lock without waiting; raises OSError when another cleanup holds it."""
+    if fcntl:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    else:
+        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Move Kiasi data files no session uses any more to trash.")
     parser.add_argument("--dry-run", action="store_true", help="list what would be moved, change nothing")
@@ -325,11 +353,10 @@ def main():
         return 0
     if args.restore is None and not args.dry_run and (constants.CLEANUP_MODE == "off" or (args.if_due and not due())):
         return 0
-    signal.signal(signal.SIGALRM, timed_out)
-    signal.alarm(constants.CLEANUP_TIMEOUT_SECONDS)
+    arm_timeout()
     with open(constants.CLEANUP_LOCK, "w") as lock:
         try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            try_lock(lock)
         except OSError:
             return 0
         if args.restore is not None:
