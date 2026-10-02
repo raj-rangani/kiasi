@@ -164,6 +164,34 @@ class TestBudgetReport(ReportTestCase):
         self.assertEqual(session["compactions"], 1)
 
 
+class TestHistory(ReportTestCase):
+    def days_ago(self, n):
+        return time.strftime("%Y-%m-%d", time.gmtime(time.time() - n * 86400))
+
+    def row(self, day, turns, read):
+        return {"day": day, "turns": turns, "sub_turns": 0, "mean_context": read, "high_share": 0.0,
+                "main": {"cache_read_input_tokens": read * turns}, "sub": {}}
+
+    def test_days_outside_the_window_survive_a_rebuild(self):
+        constants.HISTORY_FILE.write_text(json.dumps({"per_day": [self.row(self.days_ago(20), 50, 200_000), self.row(self.day, 50, 200_000)]}))
+        self.write(self.project / "s1.jsonl", [self.prompt(2), self.step("r1", 3, 1000)])
+        report = self.budget.build(7)
+        kept = json.loads(constants.HISTORY_FILE.read_text())["per_day"]
+        self.assertEqual([(r["day"], r["turns"]) for r in kept], [(self.days_ago(20), 50), (self.day, 1)])
+        self.assertEqual(report["history_days"], 2)
+
+    def test_baseline_older_than_the_window_still_compares(self):
+        constants.EVENT_LOG.write_text(json.dumps({"ts": f"{self.days_ago(5)}T10:00:00", "event": "cap"}) + "\n")
+        constants.HISTORY_FILE.write_text(json.dumps({"per_day": [self.row(self.days_ago(20), 100, 200_000)]}))
+        self.write(self.project / "s1.jsonl", [self.prompt(2), self.step("r1", 3, 50_000)])
+        self.budget.build(7)
+        since = self.lens.since_install()
+        self.assertEqual((since["install_day"], since["first_day"], since["history_days"]), (self.days_ago(5), self.days_ago(20), 2))
+        self.assertEqual((since["before"]["days"], since["before"]["reread_per_turn"]), (1, 200_000))
+        self.assertEqual((since["after"]["days"], since["after"]["reread_per_turn"]), (1, 50_000))
+        self.assertEqual(since["factor"], 4.0)
+
+
 class TestEmptyReport(ReportTestCase):
     """The dashboard keys its page-level empty state off these fields."""
 

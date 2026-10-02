@@ -487,17 +487,26 @@ def period_metrics(rows):
     }
 
 
+def history_rows():
+    """Per-day rows from HISTORY_FILE, which keeps every day budget.py ever built; budget.json's window when there is none yet."""
+    for path in (constants.HISTORY_FILE, constants.BUDGET_FILE):
+        try:
+            return json.loads(path.read_text()).get("per_day") or []
+        except (OSError, ValueError, AttributeError):
+            continue
+    return []
+
+
 def since_install():
-    """Before-and-after comparison built from budget.json's per-day rows.
+    """Before-and-after comparison built from the per-day history, so the baseline
+    survives the report window and Claude Code's transcript retention.
 
     Days before the install day are the baseline; the install day itself and today
     (partial) are left out of the per-day averages but today counts per turn."""
     day = install_day()
-    try:
-        budget = json.loads(constants.BUDGET_FILE.read_text())
-    except (OSError, ValueError):
+    rows = history_rows()
+    if not rows:
         return {"install_day": day, "before": None, "after": None}
-    rows = budget.get("per_day") or []
     today = local_day(time.time())
     if not day:
         return {"install_day": None, "before": period_metrics([r for r in rows if r["day"] < today]), "after": None}
@@ -509,7 +518,8 @@ def since_install():
     after["reread_per_turn"], after["turns"], after["mean_context"], after["high_share"] = per_turn["reread_per_turn"], per_turn["turns"], per_turn["mean_context"], per_turn["high_share"]
     b = period_metrics(before)
     factor = round(b["reread_per_turn"] / after["reread_per_turn"], 1) if b["reread_per_turn"] and after["reread_per_turn"] else None
-    return {"install_day": day, "before": b if before else None, "after": after if after_all else None, "factor": factor}
+    return {"install_day": day, "before": b if before else None, "after": after if after_all else None, "factor": factor,
+            "first_day": rows[0]["day"], "history_days": len(rows)}
 
 
 def storage_growth(files, now):

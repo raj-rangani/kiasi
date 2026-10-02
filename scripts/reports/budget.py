@@ -32,6 +32,26 @@ def install_day():
     return None
 
 
+def merge_history(rows, days):
+    """Merge this build's per-day rows into HISTORY_FILE and return every row ever kept, oldest first.
+
+    Days the window covers in full replace the stored row; the partly covered first day and
+    days outside the window keep the stored row unless the new one counts more steps."""
+    try:
+        history = {r["day"]: r for r in json.loads(constants.HISTORY_FILE.read_text())["per_day"]}
+    except (OSError, ValueError, KeyError, TypeError):
+        history = {}
+    first_full_day = time.strftime("%Y-%m-%d", time.gmtime(time.time() - (days - 1) * 86400))
+    for row in rows:
+        stored = history.get(row["day"])
+        steps = row["turns"] + row["sub_turns"]
+        if row["day"] >= first_full_day or stored is None or steps >= stored.get("turns", 0) + stored.get("sub_turns", 0):
+            history[row["day"]] = row
+    kept = [history[day] for day in sorted(history)]
+    constants.HISTORY_FILE.write_text(json.dumps({"updated": time.strftime("%Y-%m-%dT%H:%M:%S"), "per_day": kept}, indent=1))
+    return kept
+
+
 def project_of(path):
     return Path(path).relative_to(constants.TRANSCRIPT_ROOT).parts[0]
 
@@ -235,6 +255,7 @@ def build(days):
                      "turn_stop_steps": constants.TURN_STOP_STEPS, "turn_stop_tokens": constants.TURN_STOP_TOKENS, "big_output_chars": constants.BUDGET_BIG_OUTPUT_CHARS},
     }
     constants.LOG_DIR.mkdir(parents=True, exist_ok=True)
+    report["history_days"] = len(merge_history(days_out, days))
     constants.BUDGET_FILE.write_text(json.dumps(report, indent=1))
     return report
 

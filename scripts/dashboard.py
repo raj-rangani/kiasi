@@ -51,7 +51,7 @@ def run_sync_background():
 
 def _run_sync():
     try:
-        subprocess.run([sys.executable, str(SYNC_SCRIPT), "7"], check=False, timeout=180)
+        subprocess.run([sys.executable, str(SYNC_SCRIPT), str(constants.BUDGET_DAYS)], check=False, timeout=180)
     except Exception as exc:  # noqa: BLE001
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         (DATA_DIR / "sync.json").write_text(json.dumps({"state": "failed", "error": str(exc)}))
