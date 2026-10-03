@@ -497,6 +497,32 @@ def history_rows():
     return []
 
 
+def merge_savings(actions, days):
+    """Merge this build's per-day savings into SAVINGS_FILE and return the totals over every day ever kept.
+
+    Days the window covers in full replace the stored row; the partly covered first day and
+    days outside the window keep the stored row unless the new one counts more actions."""
+    try:
+        stored = {r["day"]: r for r in json.loads(constants.SAVINGS_FILE.read_text())["per_day"]}
+    except (OSError, ValueError, KeyError, TypeError):
+        stored = {}
+    rows = {}
+    for a in actions:
+        row = rows.setdefault(a["ts"][:10], {"day": a["ts"][:10], "saved": 0, "kept_out": 0, "actions": 0, "caps": 0})
+        row["saved"] += a["saved"]
+        row["kept_out"] += a["kept_out"]
+        row["actions"] += 1
+        row["caps"] += a["kind"] == "cap"
+    first_full_day = local_day(time.time() - (days - 1) * 86400)
+    for day, row in rows.items():
+        if day >= first_full_day or day not in stored or row["actions"] >= stored[day].get("actions", 0):
+            stored[day] = row
+    kept = [stored[day] for day in sorted(stored)]
+    constants.SAVINGS_FILE.write_text(json.dumps({"updated": time.strftime("%Y-%m-%dT%H:%M:%S"), "per_day": kept}, indent=1))
+    return {"first_day": kept[0]["day"] if kept else None, "days": len(kept),
+            **{key: sum(r.get(key, 0) for r in kept) for key in ("saved", "kept_out", "actions", "caps")}}
+
+
 def since_install():
     """Before-and-after comparison built from the per-day history, so the baseline
     survives the report window and Claude Code's transcript retention.
@@ -654,6 +680,8 @@ def build(days):
     for miss in misses_all:
         misses[local_day(miss["t"])][miss["cause"]] += 1
         miss_tokens[local_day(miss["t"])] += miss["tokens"]
+    constants.LOG_DIR.mkdir(parents=True, exist_ok=True)
+    all_time = merge_savings(actions, days)
     report = {
         "generated": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "days": days,
@@ -665,6 +693,7 @@ def build(days):
                    "reads_skipped": by_kind["read_skipped"]["count"], "reads_retried": by_kind["read_retry"]["count"]},
         "by_kind": dict(by_kind),
         "since": since_install(),
+        "all_time": all_time,
         "per_day": [{"day": day, "paid": bill.get(day, 0), "prompts": prompts.get(day, 0), "reread_per_prompt": int(main_bill.get(day, 0) / max(1, prompts.get(day, 0))),
                      "sessions": len(startups.get(day, [])), "startup": int(sum(startups.get(day, [])) / max(1, len(startups.get(day, [])))),
                      "cache_misses": dict(misses.get(day, {})), "cache_miss_tokens": miss_tokens.get(day, 0),

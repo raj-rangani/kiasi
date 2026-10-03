@@ -54,6 +54,8 @@ BUDGET_FILE = LOG_DIR / "budget.json"
 # Every per-day row budget.py ever built, merged on each build so a day outlives the report window and
 # Claude Code's own transcript retention; the Overview before-and-after block is built from it.
 HISTORY_FILE = LOG_DIR / "history.json"
+# What Kiasi avoided per day, merged on each lens.py build the same way; the Overview's all-time avoided figure is its sum.
+SAVINGS_FILE = LOG_DIR / "savings.json"
 TRANSCRIPT_ROOT = Path.home() / ".claude" / "projects"
 
 TRANSCRIPT_TAIL_BYTES = 400_000
@@ -185,7 +187,7 @@ NOTE_MAX_AGE_DAYS = 14
 NOTE_MIN_INTERVAL_MINUTES = 10
 NOTE_MESSAGE_HEAD_CHARS = 400
 
-BUDGET_DAYS = 30  # report window in days for sync, dashboard rebuilds and the hand-run report scripts
+BUDGET_DAYS = 7  # report window in days for sync, dashboard rebuilds and the hand-run report scripts
 BUDGET_TOP_SESSIONS = 8
 BUDGET_TOP_OUTPUTS = 8
 BUDGET_BIG_OUTPUT_CHARS = 20_000
