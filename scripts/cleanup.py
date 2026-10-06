@@ -28,12 +28,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from core import constants
-
-try:
-    import fcntl
-except ImportError:
-    fcntl = None
-    import msvcrt
+from core.events import try_lock
 
 DAY = 86400
 TS_FORMAT = "%Y-%m-%dT%H:%M:%S"
@@ -331,14 +326,6 @@ def arm_timeout():
     timer = threading.Timer(constants.CLEANUP_TIMEOUT_SECONDS, bail)
     timer.daemon = True
     timer.start()
-
-
-def try_lock(handle):
-    """Take the cleanup lock without waiting; raises OSError when another cleanup holds it."""
-    if fcntl:
-        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    else:
-        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
 
 
 def main():

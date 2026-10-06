@@ -3,6 +3,7 @@ import sys
 
 from core import constants
 from core.caps import handle_archive, handle_archive_path
+from core.events import session_lock
 from core.prompt import handle_prompt
 from core.reads import handle_pre_tool
 from core.session import handle_plugin_compact, handle_plugin_quiet, handle_pre_compact, handle_session_start, handle_stop
@@ -32,7 +33,8 @@ def main():
         return
     if payload.get("hook_event_name") == "PreToolUse" and payload.get("tool_name") not in constants.PRE_TOOL_HOOKED:
         return
-    output = handler(payload)
+    with session_lock(payload.get("session_id", "")):
+        output = handler(payload)
     if output:
         print(json.dumps(output))
 

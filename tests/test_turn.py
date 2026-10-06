@@ -1,8 +1,12 @@
 
 
 import json
+import os
+import subprocess
+import sys
+import time
 
-from helpers import KiasiTestCase
+from helpers import SCRIPTS, KiasiTestCase
 from core import constants  # noqa: E402
 from core import events  # noqa: E402
 from core import prompt  # noqa: E402
@@ -107,3 +111,36 @@ class TestLoopCheck(KiasiTestCase):
     def test_interrupts_are_ignored(self):
         payload = {"hook_event_name": "PostToolUseFailure", "tool_name": "Bash", "session_id": "s-loop", "is_interrupt": True, "tool_input": {"command": "x"}}
         self.assertIsNone(turn.handle_tool_failure(payload))
+
+
+class TestSessionLock(KiasiTestCase):
+    SID = "0c1d2e3f-0000-4000-8000-000000000001"
+
+    def test_parallel_hooks_keep_every_count(self):
+        # Each hook process pauses between loading the session and saving it, as a slow hook does:
+        # without the lock all six load the same state and every save but the last is lost.
+        script = ("import sys, time; sys.path.insert(0, sys.argv[1]); from core import turn; load = turn.load_session; "
+                  "turn.load_session = lambda sid: (load(sid), time.sleep(0.2))[0]; import kiasi; kiasi.main()")
+        payload = self.tmp / "payload.json"
+        payload.write_text(json.dumps({"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": self.SID,
+                                       "transcript_path": str(self.tmp / "parallel.jsonl"), "tool_input": {"command": "true"}}))
+        env = {**os.environ, "CLAUDE_PLUGIN_DATA": str(self.tmp)}
+        hooks = []
+        for _ in range(6):
+            with open(payload) as stdin:
+                hooks.append(subprocess.Popen([sys.executable, "-c", script, str(SCRIPTS)], stdin=stdin, stdout=subprocess.DEVNULL,
+                                              stderr=subprocess.PIPE, env=env, text=True))
+        self.assertEqual([hook.communicate(timeout=60)[1] for hook in hooks], [""] * 6)
+        self.assertEqual([t["steps"] for t in events.load_session(self.SID)["turns"].values()], [6])
+
+    def test_a_busy_lock_is_given_up_instead_of_hanging_the_hook(self):
+        self.addCleanup(setattr, constants, "SESSION_LOCK_WAIT_SECONDS", constants.SESSION_LOCK_WAIT_SECONDS)
+        constants.SESSION_LOCK_WAIT_SECONDS = 0.2
+        with events.session_lock(self.SID) as first:
+            started = time.monotonic()
+            with events.session_lock(self.SID) as second:
+                waited = time.monotonic() - started
+        with events.session_lock(self.SID) as third:
+            pass
+        self.assertEqual((first, second, third), (True, False, True))
+        self.assertLess(waited, 2)

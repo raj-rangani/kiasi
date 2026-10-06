@@ -46,6 +46,8 @@ ROOT = PLUGIN_ROOT  # kept for readability at call sites that mean "plugin code"
 LOG_DIR = DATA_DIR
 EVENT_LOG = LOG_DIR / "kiasi.jsonl"
 SESSION_DIR = LOG_DIR / "sessions"
+# A hook holds its session's lock file in SESSION_DIR while it runs; it waits this long for it, then goes ahead without it.
+SESSION_LOCK_WAIT_SECONDS = 3
 PASTE_DIR = LOG_DIR / "pastes"
 OUTPUT_DIR = LOG_DIR / "outputs"
 NOTES_DIR = LOG_DIR / "notes"
@@ -312,7 +314,7 @@ CLEANUP_PATTERNS = {
     "outputs": r"(toolu_[A-Za-z0-9_-]+|compact-[0-9a-f]{8}-\d{8}-\d{6}|(run|distill|fetch)-\d{8}-\d{6}-\d+)\.txt",
     "checkpoints": r"[0-9a-f]{8}-\d+(-\d+)?\.md",
     "pastes": r"[0-9a-f-]{36}-\d+\.txt",
-    "sessions": r"[0-9a-f-]{36}\.json",
+    "sessions": r"[0-9a-f-]{36}\.(json|lock)",
     "notes": r"[A-Za-z0-9-]+\.jsonl",
 }
 

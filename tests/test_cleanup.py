@@ -36,12 +36,14 @@ class TestCleanup(KiasiTestCase):
         stranger = self.put(constants.OUTPUT_DIR / "notes-by-hand.txt", self.old)
         current = self.put(constants.CHECKPOINT_DIR / f"{self.SID[:8]}-3.md", self.old)
         numbered = self.put(constants.CHECKPOINT_DIR / f"{self.SID[:8]}-3-2.md", self.old)
+        lock = self.put(constants.SESSION_DIR / f"{self.SID}.lock", self.old, text="")
         self.put(constants.TRANSCRIPT_ROOT / "p" / f"{self.SID}.jsonl", self.old)
         self.put(constants.TRANSCRIPT_ROOT / "p" / f"{self.LIVE}.jsonl")  # touched now
         found = {row[1] for row in self.cleanup.candidates(time.time(), "")}
         self.assertIn(idle, found)
         self.assertIn(current, found)
         self.assertIn(numbered, found, "a numbered checklist from the same turn is Kiasi's too")
+        self.assertIn(lock, found, "a session's lock file goes with its state")
         self.assertNotIn(live, found, "a session active today keeps its files")
         self.assertNotIn(stranger, found, "files Kiasi did not name are never touched")
         found = {row[1] for row in self.cleanup.candidates(time.time(), self.SID)}
