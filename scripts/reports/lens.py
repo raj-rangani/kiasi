@@ -74,7 +74,7 @@ def recall_texts(message):
     if not isinstance(content, list):
         return []
     texts = (json.dumps(block.get("input") or {}, ensure_ascii=False) for block in content if isinstance(block, dict) and block.get("type") == "tool_use")
-    return [text for text in texts if any(mark in text for mark in constants.LENS_READBACK_MARKS)]
+    return [text for text in texts if any(mark in text.replace("\\\\", "/") for mark in constants.LENS_READBACK_MARKS)]
 
 
 def miss_cause(gap, compacted, switched):
@@ -481,7 +481,7 @@ def period_metrics(rows):
         "turns": turns,
         "reread": reread,
         "reread_per_turn": int(reread / turns) if turns else 0,
-        "reread_per_day": int(reread / len(rows)) if rows else 0,
+        "reread_per_day": int(reread / len(rows)) if rows else None,
         "mean_context": int(sum(r.get("mean_context", 0) * r.get("turns", 0) for r in rows) / main_turns) if main_turns else 0,
         "high_share": round(sum(r.get("high_share", 0) * r.get("turns", 0) for r in rows) / main_turns, 3) if main_turns else 0,
     }

@@ -18,7 +18,7 @@ function renderSince(d) {
     ['Context re-sent per step', fmtK(b.reread_per_turn), fmtK(a.reread_per_turn), change(b.reread_per_turn, a.reread_per_turn)],
     ['Mean context per turn', fmtK(b.mean_context), fmtK(a.mean_context), change(b.mean_context, a.mean_context)],
     ['Turns over 200 k', pct(b.high_share), pct(a.high_share), change(b.high_share, a.high_share)],
-    ['Re-read tokens per day', fmtM(b.reread_per_day), fmtM(a.reread_per_day), change(b.reread_per_day, a.reread_per_day)],
+    ['Re-read tokens per day', fmtM(b.reread_per_day), a.reread_per_day == null ? '–' : fmtM(a.reread_per_day), change(b.reread_per_day, a.reread_per_day)],
   ];
   const headline = s.factor && s.factor >= 1.1
     ? `Each step costs <b>${s.factor}×</b> less than before`
@@ -35,7 +35,7 @@ function renderSince(d) {
 }
 
 function change(before, after) {
-  if (!before) return '–';
+  if (!before || after == null) return '–';
   const r = (after - before) / before;
   return `${r < 0 ? '−' : '+'}${Math.abs(Math.round(r * 100))}%`;
 }

@@ -2,7 +2,8 @@ import importlib
 import json
 import time
 import unittest
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
+from unittest import mock
 
 from helpers import KiasiTestCase
 from core import constants  # noqa: E402
@@ -38,6 +39,15 @@ class TestLensSignals(KiasiTestCase):
                                        (350, {"event": "prompt", "session_id": "s", "config_changed": ["plugins", "settings"]}),
                                        (550, {"event": "prompt", "session_id": "other-session", "config_changed": ["settings"]})])
         self.assertEqual([m["cause"] for m in misses], ["compaction", "plugins changed", "other"])
+
+    def test_read_back_by_a_windows_path_counts(self):
+        from reports import lens
+        saved = r"C:\Users\sachin\.claude\plugins\data\kiasi-kiasi\outputs\run-20261006-1.txt"
+        texts = lens.recall_texts({"content": [{"type": "tool_use", "name": "Read", "input": {"file_path": saved}}]})
+        self.assertEqual(len(texts), 1, "a Read of a saved output by its Windows path is a read-back")
+        events = [(100, {"event": "cap", "session_id": "s", "kind": "bulk", "saved_path": saved})]
+        with mock.patch.object(lens, "Path", PureWindowsPath):
+            self.assertEqual(lens.recall_rows(events, {"s": {"recalls": [(150, texts[0])]}}), [{"kind": "bulk", "cuts": 1, "recalled": 1}])
 
     def test_cache_report_ranks_by_cost_and_compares_windows(self):
         from reports import lens
@@ -260,6 +270,15 @@ class TestLensReport(ReportTestCase):
         self.assertEqual((result["before"]["days"], result["before"]["reread_per_turn"]), (2, 40_000))
         self.assertEqual((result["after"]["days"], result["after"]["reread_per_turn"], result["after"]["turns"]), (2, 10_000, 30))
         self.assertEqual(result["factor"], 4.0)
+
+    def test_since_install_has_no_per_day_figure_before_a_full_day(self):
+        day = lambda n: time.strftime("%Y-%m-%d", time.localtime(time.time() - n * 86400))
+        row = lambda d, read: {"day": d, "turns": 10, "sub_turns": 0, "mean_context": 0, "high_share": 0, "main": {"cache_read_input_tokens": read}}
+        constants.BUDGET_FILE.write_text(json.dumps({"per_day": [row(day(3), 400_000), row(day(1), 999_999), row(day(0), 100_000)]}))
+        constants.EVENT_LOG.write_text(json.dumps({"ts": day(1) + "T09:00:00", "event": "cap"}) + "\n")
+        result = self.lens.since_install()
+        self.assertEqual((result["after"]["days"], result["after"]["turns"]), (0, 10))
+        self.assertIsNone(result["after"]["reread_per_day"], "with no full day since the install, 0 per day reads as a 100% drop")
 
     def test_since_install_without_a_log_or_report(self):
         self.assertEqual(self.lens.since_install(), {"install_day": None, "before": None, "after": None})
