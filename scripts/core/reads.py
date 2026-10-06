@@ -4,7 +4,7 @@ import re
 from core import constants
 from core.caps import response_text
 from core.events import load_session, log_event, save_session
-from core.transcript import transcript_key
+from core.transcript import caller_key
 
 
 def handle_agent(payload):
@@ -23,7 +23,8 @@ def handle_agent(payload):
         if not tool_input.get("model"):
             updated["model"] = constants.AGENT_DEFAULT_MODEL.get(agent_type, constants.AGENT_FALLBACK_MODEL)
             record["model_set"] = updated["model"]
-        suffix = constants.SUBAGENT_BRIEF_SUFFIX.format(steps=constants.SUBAGENT_STEP_LIMIT)
+        budget = "" if constants.TURN_BUDGET_MODE == "off" else constants.SUBAGENT_BRIEF_BUDGET.format(steps=constants.SUBAGENT_STEP_LIMIT)
+        suffix = budget + constants.SUBAGENT_BRIEF_SUFFIX
         if suffix not in prompt:
             updated["prompt"] = prompt.rstrip() + "\n\n" + suffix
             record["brief_suffix"] = True
@@ -33,10 +34,6 @@ def handle_agent(payload):
         record["long_prompt"] = True
     log_event(record)
     return output if len(specific) > 1 else None
-
-
-def reader_key(payload):
-    return payload.get("agent_id") or transcript_key(payload.get("transcript_path"))
 
 
 def read_key(tool_input):
@@ -67,7 +64,7 @@ def read_nudge(payload, tool_input, session_id, state):
     stamp = file_stamp(path)
     if not stamp or stamp[1] < constants.READ_NUDGE_CHARS:
         return None
-    nudges = state.setdefault("read_nudges", {}).setdefault(reader_key(payload), [])
+    nudges = state.setdefault("read_nudges", {}).setdefault(caller_key(payload), [])
     if path in nudges:
         nudges.remove(path)
         save_session(session_id, state)
@@ -83,7 +80,7 @@ def handle_read_check(payload):
     tool_input = payload.get("tool_input") or {}
     session_id = payload.get("session_id", "")
     state = load_session(session_id)
-    reads = state.setdefault("reads", {}).setdefault(reader_key(payload), {})
+    reads = state.setdefault("reads", {}).setdefault(caller_key(payload), {})
     key = read_key(tool_input)
     entry = reads.get(key)
     if not entry:
@@ -123,7 +120,7 @@ def track_reads(payload, capped):
         text = response_text(tool_name, payload.get("tool_response"))
         if capped or len(text) < constants.READ_SKIP_MIN_CHARS:
             return
-        reads.setdefault(reader_key(payload), {})[read_key(tool_input)] = {"stamp": file_stamp(path), "chars": len(text)}
+        reads.setdefault(caller_key(payload), {})[read_key(tool_input)] = {"stamp": file_stamp(path), "chars": len(text)}
     save_session(session_id, state)
 
 
@@ -140,7 +137,7 @@ def is_scan_command(command):
 def route_once(payload, target, key, label, reason):
     session_id = payload.get("session_id", "")
     state = load_session(session_id)
-    routed = state.setdefault("routed", {}).setdefault(reader_key(payload), [])
+    routed = state.setdefault("routed", {}).setdefault(caller_key(payload), [])
     record = {"session_id": session_id, "tool_name": payload.get("tool_name"), "target": target, "label": label, "agent_id": payload.get("agent_id")}
     if key in routed:
         routed.remove(key)

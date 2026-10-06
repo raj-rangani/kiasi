@@ -14,7 +14,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Agent|Read|Bash|WebFetch",
+        "matcher": "",
         "hooks": [
           {
             "type": "command",

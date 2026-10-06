@@ -74,7 +74,7 @@ def recall_texts(message):
     if not isinstance(content, list):
         return []
     texts = (json.dumps(block.get("input") or {}, ensure_ascii=False) for block in content if isinstance(block, dict) and block.get("type") == "tool_use")
-    return [text for text in texts if any(mark in text for mark in constants.LENS_READBACK_MARKS)]
+    return [text for text in texts if any(mark in text.replace("\\\\", "/") for mark in constants.LENS_READBACK_MARKS)]
 
 
 def miss_cause(gap, compacted, switched):
@@ -286,12 +286,24 @@ def classify(t, record, sessions):
         return action(record, "summary", f"pruning could not reach the target ({before // 1000}k → {after // 1000}k), built-in summary used")
     if event == "compact":
         return action(record, "compaction", f"{record.get('trigger')} compaction at {record.get('context_tokens', 0) // 1000}k context")
+    if event in ("turn_warn", "turn_stop", "turn_over") and record.get("subagent"):
+        return None  # a subagent's budget is not the turn budget, and its pause is not followed by the next prompt
     if event == "turn_warn":
         return action(record, "turn_warn", f"warned at {record.get('steps')} steps, {record.get('reread', 0) / 1e6:.1f}M re-read")
     if event == "turn_stop" and record.get("first"):
         after = steps_until_next_prompt(info["steps"], info["prompts"], t)
-        return action(record, "turn_stop", f"stopped at {record.get('steps')} steps, {after} more before the next prompt", 0, after, 0,
-                      f"steps between the stop and the next prompt: {after} (complies under {constants.LENS_COMPLY_STEPS})")
+        return action(record, "turn_stop", f"paused at {record.get('steps')} steps, {after} more before the next prompt", 0, after, 0,
+                      f"steps between the pause and the next prompt: {after} (complies under {constants.LENS_COMPLY_STEPS})")
+    if event == "turn_over":
+        after = steps_until_next_prompt(info["steps"], info["prompts"], t)
+        return action(record, "turn_over", f"reached the budget at {record.get('steps')} steps in warn mode, {after} more before the next prompt", 0, after, 0,
+                      f"steps between reaching the budget and the next prompt: {after}")
+    if event == "turn_resume":
+        where = " in a new session" if record.get("paused_session") not in (None, "", session) else ""
+        if record.get("mode") == "resume":
+            source = "from its checklist" if record.get("checklist") else "from its task and edited files, no checklist written"
+            return action(record, "turn_resume", f"turn paused at {record.get('steps')} steps resumed with continue{where}, {source}")
+        return action(record, "turn_moved_on", f"the first prompt after a pause at {record.get('steps')} steps was not continue{where}; Claude was pointed to the saved work")
     if event == "loop":
         return action(record, "loop", f"{record.get('label', '')} failed {record.get('count')} times in one turn, Claude told to stop retrying")
     if event == "state" and (record.get("task") or record.get("files") or record.get("failures") or record.get("outputs") or record.get("checklists")):
@@ -481,7 +493,7 @@ def period_metrics(rows):
         "turns": turns,
         "reread": reread,
         "reread_per_turn": int(reread / turns) if turns else 0,
-        "reread_per_day": int(reread / len(rows)) if rows else 0,
+        "reread_per_day": int(reread / len(rows)) if rows else None,
         "mean_context": int(sum(r.get("mean_context", 0) * r.get("turns", 0) for r in rows) / main_turns) if main_turns else 0,
         "high_share": round(sum(r.get("high_share", 0) * r.get("turns", 0) for r in rows) / main_turns, 3) if main_turns else 0,
     }
@@ -621,7 +633,7 @@ def storage(recalls=()):
     except (OSError, ValueError):
         pass
     first = cleanup.parse_ts(last.get("first_run"))
-    managed = [(name, path, stat) for name, (folder, _) in cleanup.folders().items() for path, stat in cleanup.own_files(name, folder)]
+    managed = [(name, path, stat) for name, folder, _ in cleanup.managed_folders() for path, stat in cleanup.own_files(name, folder)]
     managed += [("notes", path, stat) for path, stat in cleanup.own_files("notes", constants.NOTES_DIR)]
     report_end = first + constants.CLEANUP_REPORT_DAYS * 86400 if first and constants.CLEANUP_MODE == "auto" and first + constants.CLEANUP_REPORT_DAYS * 86400 > now else None
     cleaned, report_moves = storage_folders(cleanup, recalls, now, report_end)
@@ -662,9 +674,12 @@ def build(days):
         if item["kind"] in ("paste_saved", "paste_refused"):
             pastes.append({"ts": item["ts"], "session": item["session"][:8], "chars": record.get("prompt_chars", 0), "blocked": item["kind"] == "paste_refused",
                            "path": record.get("paste_saved") or record.get("paste_blocked") or ""})
-        if item["kind"] in ("turn_warn", "turn_stop"):
-            budget_rows.append({"ts": item["ts"], "session": item["session"][:8], "kind": item["kind"], "steps": record.get("steps"), "reread": record.get("reread", 0),
-                                "after": item["later_steps"] if item["kind"] == "turn_stop" else None})
+        if item["kind"] in ("turn_warn", "turn_stop", "turn_over", "turn_resume", "turn_moved_on"):
+            follow_up = item["kind"] in ("turn_resume", "turn_moved_on")
+            budget_rows.append({"ts": item["ts"], "session": item["session"][:8], "kind": item["kind"], "steps": record.get("steps"),
+                                "reread": None if follow_up else record.get("reread", 0),
+                                "after": item["later_steps"] if item["kind"] in ("turn_stop", "turn_over") else None,
+                                "note": ("checklist written" if record.get("checklist") else "no checklist written") if follow_up else ""})
     first_day = local_day(time.time() - days * 86400)
     days_seen = sorted(day for day in set(bill) | set(per_day) if day >= first_day)
     stops = [a for a in actions if a["kind"] == "turn_stop"]
@@ -687,7 +702,8 @@ def build(days):
         "days": days,
         "totals": {"saved": sum(a["saved"] for a in actions), "actions": len(actions), "kept_out": sum(a["kept_out"] for a in actions), "paid": sum(bill.values()),
                    "pruned": by_kind["pruned"]["count"], "summaries": by_kind["summary"]["count"], "compactions": by_kind["compaction"]["count"],
-                   "stops": len(stops), "stops_complied": complied, "mean_steps_after_stop": round(sum(a["later_steps"] for a in stops) / max(1, len(stops)), 1),
+                   "stops": len(stops), "stops_complied": complied, "resumed": by_kind["turn_resume"]["count"], "skipped": by_kind["turn_moved_on"]["count"],
+                   "over_budget": by_kind["turn_over"]["count"], "mean_steps_after_stop": round(sum(a["later_steps"] for a in stops) / max(1, len(stops)), 1),
                    "sessions": len(sessions), "prompts": total_prompts, "steps": total_steps, "mean_steps": round(total_steps / max(1, total_prompts), 1),
                    "reread_per_prompt": int(sum(main_bill.values()) / max(1, total_prompts)), "startup_mean": int(sum(all_startups) / max(1, len(all_startups))),
                    "reads_skipped": by_kind["read_skipped"]["count"], "reads_retried": by_kind["read_retry"]["count"]},
@@ -710,8 +726,8 @@ def build(days):
         "pastes": list(reversed(pastes)),
         "budget_rows": list(reversed(budget_rows)),
         "actions": list(reversed(actions))[: constants.LENS_MAX_ACTIONS],
-        "settings": {"warn_tokens": constants.CONTEXT_WARN_TOKENS, "hard_tokens": constants.CONTEXT_HARD_TOKENS, "turn_warn_steps": constants.TURN_WARN_STEPS,
-                     "turn_stop_steps": constants.TURN_STOP_STEPS, "comply_steps": constants.LENS_COMPLY_STEPS, "saving_kinds": SAVING_KINDS},
+        "settings": {"warn_tokens": constants.CONTEXT_WARN_TOKENS, "hard_tokens": constants.CONTEXT_HARD_TOKENS, "turn_warn_steps": constants.turn_warn_steps(),
+                     "turn_stop_steps": constants.TURN_STOP_STEPS, "turn_budget_mode": constants.TURN_BUDGET_MODE, "comply_steps": constants.LENS_COMPLY_STEPS, "saving_kinds": SAVING_KINDS},
     }
     constants.LOG_DIR.mkdir(parents=True, exist_ok=True)
     constants.LENS_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -725,8 +741,8 @@ def build(days):
 def print_report(report):
     t = report["totals"]
     print(f"last {report['days']} days: {t['actions']} kiasi actions, {t['saved'] / 1e6:.1f}M re-read tokens avoided against {t['paid'] / 1e6:.0f}M paid, "
-          f"{t['kept_out'] // 1000}k tokens kept out, {t['pruned']} compactions pruned / {t['summaries']} summarised, {t['stops']} turns stopped "
-          f"({t['stops_complied']} complied, mean {t['mean_steps_after_stop']} steps after), {t['sessions']} sessions, {t['mean_steps']} steps per prompt")
+          f"{t['kept_out'] // 1000}k tokens kept out, {t['pruned']} compactions pruned / {t['summaries']} summarised, {t['stops']} turns paused "
+          f"({t['resumed']} resumed, {t['stops_complied']} complied, mean {t['mean_steps_after_stop']} steps after), {t['sessions']} sessions, {t['mean_steps']} steps per prompt")
     for kind, row in sorted(report["by_kind"].items(), key=lambda x: -x[1]["saved"]):
         print(f"  {kind:14} {row['count']:4}  saved {row['saved'] / 1e6:6.1f}M")
 

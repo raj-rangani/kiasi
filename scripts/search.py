@@ -6,16 +6,25 @@ scan of all of it takes milliseconds, so a stored index would only be a second c
 """
 import argparse
 import math
+import os
 import re
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from core import constants
+from core.events import checklist_folder
+
+
+def search_dirs():
+    """Kiasi's data folders, and the checklist folder of the project the search runs in."""
+    folders = list(constants.SEARCH_DIRS)
+    project = checklist_folder(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
+    return folders if project in folders else folders + [project]
 
 
 def iter_files():
-    for folder in constants.SEARCH_DIRS:
+    for folder in search_dirs():
         if not folder.is_dir():
             continue
         for path in sorted(folder.rglob("*")):
@@ -133,7 +142,7 @@ def main():
     parser.add_argument("-n", "--limit", type=int, default=constants.SEARCH_RESULTS)
     args = parser.parse_args()
     if not args.words:
-        print(f"{sum(1 for _ in iter_files())} files searchable in {', '.join(str(d) for d in constants.SEARCH_DIRS)}")
+        print(f"{sum(1 for _ in iter_files())} files searchable in {', '.join(str(d) for d in search_dirs())}")
         return
     rows, total = search(args.words, args.limit)
     if not rows:

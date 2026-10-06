@@ -1,4 +1,6 @@
+import os
 from pathlib import Path
+from unittest import mock
 
 from helpers import KiasiTestCase
 from core import constants  # noqa: E402
@@ -10,12 +12,22 @@ class TestSearch(KiasiTestCase):
         import search
         self.search = search
         constants.SEARCH_DIRS = (constants.OUTPUT_DIR, constants.PASTE_DIR, constants.NOTES_DIR, constants.CHECKPOINT_DIR)
+        # search.py also reads the checklists of the project it runs in; pin it so a real one never leaks in.
+        environ = mock.patch.dict(os.environ, {"CLAUDE_PROJECT_DIR": str(self.tmp / "project")})
+        environ.start()
+        self.addCleanup(environ.stop)
         (constants.OUTPUT_DIR / "toolu_a.txt").write_text("FAIL tests/login.test.ts\nTimeout waiting for the login form\n" + "noise " * 200)
         (constants.OUTPUT_DIR / "toolu_b.txt").write_text("all tests passed, build ok\n" + "noise " * 200)
         (constants.NOTES_DIR / "proj.jsonl").write_text('{"task": "fix the login redirect"}\n')
 
     def paths(self, *words):
         return [Path(path).name for path, *_ in self.search.search(list(words), 8)[0]]
+
+    def test_checklists_in_the_project_are_searched(self):
+        checklist = self.tmp / "project" / ".kiasi" / "checkpoints" / "abcdef12-1.md"
+        checklist.parent.mkdir(parents=True)
+        checklist.write_text("- [ ] migrate the invoice exporter\n")
+        self.assertEqual(self.paths("invoice", "exporter"), ["abcdef12-1.md"])
 
     def test_all_words_must_appear_and_endings_match(self):
         self.assertEqual(self.paths("login", "timeout"), ["toolu_a.txt"])

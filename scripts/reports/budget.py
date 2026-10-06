@@ -208,9 +208,13 @@ def kiasi_actions(days):
             elif event == "prompt" and (record.get("reread_check") or {}).get("mode") == "delegate":
                 actions["delegations instructed"] += 1
             elif event == "turn_warn":
-                actions["turn budget warnings"] += 1
+                actions["subagent budget warnings" if record.get("subagent") else "turn budget warnings"] += 1
             elif event == "turn_stop" and record.get("first"):
-                actions["turns stopped"] += 1
+                actions["subagents paused" if record.get("subagent") else "turns paused"] += 1
+            elif event == "turn_over":
+                actions["subagents over budget" if record.get("subagent") else "turns over budget"] += 1
+            elif event == "turn_resume":
+                actions["pauses resumed" if record.get("mode") == "resume" else "pauses skipped"] += 1
             elif event == "agent" and record.get("model_set"):
                 actions["subagent models set"] += 1
             elif event == "agent" and record.get("decision") == "ask":
@@ -252,7 +256,7 @@ def build(days):
         "big_outputs": sorted(big_outputs, key=lambda o: -o["chars"])[: constants.BUDGET_TOP_OUTPUTS],
         "kiasi": kiasi_actions(days),
         "settings": {"warn_tokens": constants.CONTEXT_WARN_TOKENS, "hard_tokens": constants.CONTEXT_HARD_TOKENS, "high_context_tokens": constants.BUDGET_HIGH_CONTEXT_TOKENS,
-                     "turn_stop_steps": constants.TURN_STOP_STEPS, "turn_stop_tokens": constants.TURN_STOP_TOKENS, "big_output_chars": constants.BUDGET_BIG_OUTPUT_CHARS},
+                     "turn_budget_mode": constants.TURN_BUDGET_MODE, "turn_stop_steps": constants.TURN_STOP_STEPS, "turn_stop_tokens": constants.TURN_STOP_TOKENS, "big_output_chars": constants.BUDGET_BIG_OUTPUT_CHARS},
     }
     constants.LOG_DIR.mkdir(parents=True, exist_ok=True)
     report["history_days"] = len(merge_history(days_out, days))

@@ -6,10 +6,11 @@ import time
 
 from core import constants
 from core.caps import failure_label
-from core.events import ensure_dirs, load_session, log_event, now_iso, save_session
+from core.events import checklist_folder, ensure_dirs, load_session, log_event, now_iso, project_slug, save_session
 from core.launch import ensure_dashboard, launch_cleanup
 from core.reads import forget_reads
 from core.transcript import current_context_tokens, edited_files, failing_commands, fmt_k, fmt_m, last_task_prompt, tail_entries, tool_uses, transcript_key
+from core.turn import pause_elsewhere, pause_reminder
 
 
 def handle_pre_compact(payload):
@@ -36,10 +37,6 @@ def handle_plugin_quiet(payload):
     return None
 
 
-def project_slug(cwd):
-    return re.sub(r"[^A-Za-z0-9]+", "-", cwd or "unknown").strip("-") or "unknown"
-
-
 def write_note(session_id, cwd, task, files, last_message, state, force=False):
     if not task:
         return False
@@ -61,7 +58,7 @@ def handle_stop(payload):
     written = write_note(session_id, payload.get("cwd") or "", last_task_prompt(entries), edited_files(entries), payload.get("last_assistant_message") or "", state)
     turn = state.get("turns", {}).get(transcript_key(payload.get("transcript_path")), {})
     log_event({"event": "stop", "session_id": session_id, "context_tokens": current_context_tokens(entries), "note_written": written, "steps": turn.get("steps", 0), "reread": turn.get("reread", 0), "stopped": bool(turn.get("stopped"))})
-    return None
+    return pause_reminder(payload)
 
 
 def budget_line():
@@ -104,9 +101,25 @@ def env_warning():
 
 def rules_text():
     try:
-        return constants.RULES_FILE.read_text().strip()
+        text = constants.RULES_FILE.read_text().strip()
     except OSError:
         return ""
+    lines = (budget_rule(line) for line in text.splitlines())
+    return "\n".join(line for line in lines if line is not None)
+
+
+def budget_rule(line):
+    """rules.md states the default budgets: fit its two budget lines to the settings, and drop the turn's when the budget is off."""
+    if line.startswith(constants.TURN_RULE_PREFIX):
+        template = constants.TURN_RULES.get(constants.TURN_BUDGET_MODE)
+    elif line.startswith(constants.SUBAGENT_RULE_PREFIX):
+        template = constants.SUBAGENT_RULES.get(constants.TURN_BUDGET_MODE)
+    else:
+        return line
+    if template is None:
+        return None
+    return template.format(steps=constants.TURN_STOP_STEPS, tokens=f"{round(constants.TURN_STOP_TOKENS / 1_000_000, 1):g}M",
+                           margin=constants.TURN_STOP_STEPS - constants.turn_warn_steps(), subagent_steps=constants.SUBAGENT_STEP_LIMIT)
 
 
 def record_plugin_root():
@@ -228,7 +241,9 @@ def state_block(payload):
     files = edited_files(entries)[-constants.STATE_MAX_FILES:]
     failures = open_failures(entries)
     outputs = list(dict.fromkeys(r.get("saved_path") for r in session_events(session_id, "cap") if r.get("saved_path")))[-constants.STATE_MAX_OUTPUTS:]
-    checklists = sorted(constants.CHECKPOINT_DIR.glob(f"{transcript_key(payload.get('transcript_path'))[:8]}-*.md"), key=lambda p: p.stat().st_mtime)[-constants.STATE_MAX_CHECKLISTS:]
+    pattern = f"{transcript_key(payload.get('transcript_path'))[:8]}-*.md"
+    found = {path for folder in (checklist_folder(payload.get("cwd")), constants.CHECKPOINT_DIR) for path in folder.glob(pattern)}
+    checklists = sorted(found, key=lambda p: p.stat().st_mtime)[-constants.STATE_MAX_CHECKLISTS:]
     log_event({"event": "state", "session_id": session_id, "task": bool(task), "files": len(files), "failures": len(failures), "outputs": len(outputs), "checklists": len(checklists)})
     lines = []
     if task:
@@ -253,12 +268,19 @@ def handle_session_start(payload):
     launch_cleanup(payload.get("session_id", ""))
     dashboard_line = ensure_dashboard(payload.get("session_id", ""))
     note = last_note(payload.get("cwd") or "")
+    paused = pause_elsewhere(payload)
     log_event({"event": "session_start", "session_id": payload.get("session_id", ""), "source": payload.get("source"), "note": bool(note)})
     lines = [rules_text(), env_warning(), budget_line(), dashboard_line, state_block(payload) if payload.get("source") == "compact" else ""]
     if note and note.get("session_id") != payload.get("session_id"):
         files = ", ".join(note.get("files") or []) or "none recorded"
         lines.append(f"Last session note for this project ({note['ts'][:16]}): task was \"{note['task']}\". Files edited: {files}. It ended with: {note.get('last_message', '')[:200]}")
+    if paused:
+        lines.append(f"The last session in this project was paused by kiasi at {paused['steps']} tool calls; its remaining work is in "
+                     f"{paused['checkpoint']}. If the developer says continue, read that file and resume from its first open item.")
     text = "\n".join(line for line in lines if line)
     if not text:
         return None
-    return {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}}
+    output = {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}}
+    if paused:
+        output["systemMessage"] = f"Kiasi: the last session paused with work left in {paused['checkpoint']}. Reply continue to resume it."
+    return output

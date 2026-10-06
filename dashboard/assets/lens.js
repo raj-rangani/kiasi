@@ -18,7 +18,7 @@ function renderSince(d) {
     ['Context re-sent per step', fmtK(b.reread_per_turn), fmtK(a.reread_per_turn), change(b.reread_per_turn, a.reread_per_turn)],
     ['Mean context per turn', fmtK(b.mean_context), fmtK(a.mean_context), change(b.mean_context, a.mean_context)],
     ['Turns over 200 k', pct(b.high_share), pct(a.high_share), change(b.high_share, a.high_share)],
-    ['Re-read tokens per day', fmtM(b.reread_per_day), fmtM(a.reread_per_day), change(b.reread_per_day, a.reread_per_day)],
+    ['Re-read tokens per day', fmtM(b.reread_per_day), a.reread_per_day == null ? '–' : fmtM(a.reread_per_day), change(b.reread_per_day, a.reread_per_day)],
   ];
   const headline = s.factor && s.factor >= 1.1
     ? `Each step costs <b>${s.factor}×</b> less than before`
@@ -35,7 +35,7 @@ function renderSince(d) {
 }
 
 function change(before, after) {
-  if (!before) return '–';
+  if (!before || after == null) return '–';
   const r = (after - before) / before;
   return `${r < 0 ? '−' : '+'}${Math.abs(Math.round(r * 100))}%`;
 }
@@ -60,7 +60,7 @@ function renderStats(d) {
     [startup.mean && startup.today > startup.mean ? 'warn' : '', fmtK(startup.today), '<small>/ session</small>', versus(startup, 'first-request context per new session')],
     ['', fmtM(all.saved), `<small>${est('avoided')}</small>`, `re-read tokens avoided in all, since ${all.first_day || 'today'}, by ${all.caps} caps (${fmtM(all.kept_out)} kept out); grows with session length, so read it next to the two figures before it`],
     [t.summaries ? 'warn' : '', String(t.pruned), `<small>/ ${t.pruned + t.summaries} plugin</small>`, `compactions pruned instead of summarised; ${t.compactions} compactions in all`],
-    [t.stops && t.stops_complied < t.stops ? 'warn' : '', String(t.stops), '<small>stops</small>', `turns stopped at the budget, ${t.stops ? `${t.stops_complied} complied` : 'none yet'}, mean ${t.mean_steps_after_stop} steps after`],
+    [t.stops && t.stops_complied < t.stops ? 'warn' : '', String(t.stops), '<small>pauses</small>', `turns paused at the budget, ${t.stops ? `${t.resumed || 0} resumed with continue, ${t.stops_complied} complied` : 'none yet'}, mean ${t.mean_steps_after_stop} steps after`],
   ].map(([cls, big, small, text]) => `<div class="stat ${cls}"><b>${big}${small}</b><span>${esc(text)}</span></div>`).join('');
 }
 

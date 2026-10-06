@@ -49,8 +49,9 @@ export const SEARCH_INPUT_SCHEMA = {
 
 export const SANDBOX_SCRIPT = 'sandbox.py';
 export const SANDBOX_DEFAULT_TIMEOUT_S = 120;
-export const SANDBOX_MAX_TIMEOUT_S = 600;
 export const SANDBOX_EXTRA_MS = 10000;
+export const PROCESS_RUN_MAX_TIMEOUT_MS = 600000;
+export const SANDBOX_MAX_TIMEOUT_S = Math.floor((PROCESS_RUN_MAX_TIMEOUT_MS - SANDBOX_EXTRA_MS) / 1000);
 export const RUN_TOOL = 'run';
 export const RUN_TOOL_FULL_NAME = 'mcp__kiasi__run';
 export const RUN_DESCRIPTION = 'Run a shell command out of context: the full output is saved to kiasi\'s outputs folder (searchable with mcp__kiasi__search) and only a digest — exit code, head, error lines, tail, saved path — enters the conversation. Use it for commands whose output you would only scan: builds, test runs, long logs, curl. Use plain Bash when you need the exact full output or the command changes files you will edit next.';

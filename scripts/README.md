@@ -27,7 +27,7 @@ Python 3.10 or newer, standard library only. No install step.
 
 The data directory is `${CLAUDE_PLUGIN_DATA}`, or the one recorded in `~/.claude/kiasi/data-dir`.
 
-- `kiasi.py` (via `core/`): `kiasi.jsonl`, `sessions/`, `pastes/`, `outputs/`, `notes/`, `checkpoints/`
+- `kiasi.py` (via `core/`): `kiasi.jsonl`, `sessions/`, `pastes/`, `outputs/`, `notes/`, `checkpoints/`. Turn checklists go to `.kiasi/checkpoints/` in the project, a folder git ignores; `checkpoints/` here holds those of a session without a writable project folder.
 - `reports/budget.py`: `budget.json`
 - `reports/lens.py`: `lens.json.gz`
 - `reports/sync.py`: `sync.json`

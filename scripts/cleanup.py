@@ -3,12 +3,14 @@
 
 Safety rules:
 - Only files whose names Kiasi writes (constants.CLEANUP_PATTERNS) are touched, only as regular
-  files directly inside Kiasi's own folders, never through a symlink.
+  files directly inside Kiasi's own folders, never through a symlink. Those are its data folder and
+  the .kiasi/checkpoints folders in projects that its turn events named for a checklist.
 - A file goes only when the file and its session have both been unused for CLEANUP_IDLE_DAYS
   (pastes: CLEANUP_PASTE_IDLE_DAYS). The current session and anything used in the last
   CLEANUP_RECENT_HOURS are never touched. A notes file goes only when its newest entry is older
   than CLEANUP_NOTE_DAYS. The event log is never rewritten.
-- Files are moved to trash/ and deleted CLEANUP_TRASH_DAYS later; --restore puts them back.
+- Files are moved to trash/ and deleted CLEANUP_TRASH_DAYS later; --restore puts them back, a project's
+  checklists into their project folder.
 - Mode auto (default) only reports for the first CLEANUP_REPORT_DAYS; KIASI_CLEANUP=report|trash|off
   overrides it. Over CLEANUP_MAX_BYTES the trash is emptied oldest first, then it only warns.
 - Every move, delete and restore is written to cleanup.jsonl. Errors are recorded, never raised.
@@ -28,12 +30,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from core import constants
-
-try:
-    import fcntl
-except ImportError:
-    fcntl = None
-    import msvcrt
+from core.events import try_lock
 
 DAY = 86400
 TS_FORMAT = "%Y-%m-%dT%H:%M:%S"
@@ -123,6 +120,41 @@ def output_owners():
     return owners
 
 
+def project_checklist_folder(folder):
+    """True for a real .kiasi/checkpoints folder in a project, never one reached through a symlink."""
+    return (folder.parts[-2:] == constants.PROJECT_CHECKLIST_DIR.parts and folder.is_dir()
+            and not folder.is_symlink() and not folder.parent.is_symlink())
+
+
+def checklist_folders():
+    """The project checklist folders that turn events named, each once however its path was spelled."""
+    named = set()
+    try:
+        with open(constants.EVENT_LOG, errors="replace") as fh:
+            for line in fh:
+                if '"checkpoint"' not in line:
+                    continue
+                try:
+                    path = json.loads(line).get("checkpoint")
+                except (ValueError, AttributeError):
+                    continue
+                if isinstance(path, str) and path:
+                    named.add(Path(path).parent)
+    except OSError:
+        pass
+    found = {}
+    for folder in sorted(named):
+        if project_checklist_folder(folder):
+            found.setdefault(folder.resolve(), folder)
+    return list(found.values())
+
+
+def managed_folders():
+    """(folder name, path, idle days) for every per-session folder, the project checklist folders included."""
+    rows = [(name, folder, days) for name, (folder, days) in folders().items()]
+    return rows + [("checkpoints", folder, constants.CLEANUP_IDLE_DAYS) for folder in checklist_folders()]
+
+
 def owner(name, path, owners):
     if name == "outputs":
         match = re.match(r"compact-([0-9a-f]{8})-", path.name)
@@ -160,7 +192,7 @@ def schedule(current):
     owners = output_owners()
     recent = constants.CLEANUP_RECENT_HOURS * 3600
     rows = []
-    for name, (folder, days) in folders().items():
+    for name, folder, days in managed_folders():
         for path, stat in own_files(name, folder):
             session = owner(name, path, owners)
             if same_session(session, current):
@@ -287,16 +319,41 @@ def run(current, dry_run):
     return result, found
 
 
+def trashed_from():
+    """Trash path -> the path its file was moved from, from the manifest."""
+    origins = {}
+    try:
+        with open(constants.CLEANUP_MANIFEST, errors="replace") as fh:
+            for line in fh:
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(row, dict) and row.get("action") == "trash" and row.get("to"):
+                    origins[row["to"]] = row.get("path") or ""
+    except OSError:
+        pass
+    return origins
+
+
+def restore_path(path, origins):
+    """Where a trashed file goes back: the project checklist folder it came from while that folder is there, else Kiasi's own folder."""
+    origin = Path(origins.get(str(path)) or "")
+    if project_checklist_folder(origin.parent):
+        return origin
+    return constants.LOG_DIR / path.parent.name / plain_name(path)
+
+
 def restore(names):
     restored = 0
+    origins = trashed_from()
     for path, stat in trash_files():
         if path.name.endswith(".tmp") or (names and path.name not in names and plain_name(path) not in names):
             continue
-        home = constants.LOG_DIR / path.parent.name
-        dest = home / plain_name(path)
+        dest = restore_path(path, origins)
         if dest.exists():
             continue
-        home.mkdir(parents=True, exist_ok=True)
+        dest.parent.mkdir(parents=True, exist_ok=True)
         if path.name.endswith(".gz"):
             tmp = dest.with_name(dest.name + ".tmp")
             tmp.write_bytes(gzip.decompress(path.read_bytes()))
@@ -331,14 +388,6 @@ def arm_timeout():
     timer = threading.Timer(constants.CLEANUP_TIMEOUT_SECONDS, bail)
     timer.daemon = True
     timer.start()
-
-
-def try_lock(handle):
-    """Take the cleanup lock without waiting; raises OSError when another cleanup holds it."""
-    if fcntl:
-        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    else:
-        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
 
 
 def main():

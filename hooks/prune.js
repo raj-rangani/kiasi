@@ -16,8 +16,13 @@ function archived(archive, text, dropped) {
   return { index: archive.items.length, path: archive.path };
 }
 
+function alreadyCut(text) {
+  const end = text.trimEnd();
+  return end.slice(end.lastIndexOf('\n') + 1).startsWith(MARKER_PREFIX);
+}
+
 function head(text, keep, archive) {
-  if (text.length <= keep || text.includes(MARKER_PREFIX)) return text;
+  if (text.length <= keep || alreadyCut(text)) return text;
   const dropped = text.length - keep;
   return `${text.slice(0, keep)}\n${marker(dropped, archived(archive, text, dropped))}`;
 }

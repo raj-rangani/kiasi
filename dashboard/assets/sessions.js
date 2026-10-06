@@ -44,7 +44,7 @@ let allPrompts = false;
 
 function actionRows(rows) {
   return rows.map((a, i) => `<div class="action click ${openAction === i ? 'open' : ''}" data-i="${i}"><span class="when">${esc(stamp(a.ts))}</span><span>${pill(a.kind)}</span><span class="what">${esc(a.label)}</span>
-    <span class="saved${a.saved ? '' : ' zero'}">${a.saved ? fmtM(a.saved) : '·'}</span><span class="steps">${a.kind === 'turn_stop' ? `${a.later_steps} after` : a.later_steps ? `× ${a.later_steps}` : ''}</span></div>${openAction === i ? `<div class="detail"><p>${esc(a.formula || 'no token effect is attributed to this row; it is counted')}</p><pre>${esc(JSON.stringify(a.record, null, 1))}</pre></div>` : ''}`).join('');
+    <span class="saved${a.saved ? '' : ' zero'}">${a.saved ? fmtM(a.saved) : '·'}</span><span class="steps">${['turn_stop', 'turn_over'].includes(a.kind) ? `${a.later_steps} after` : a.later_steps ? `× ${a.later_steps}` : ''}</span></div>${openAction === i ? `<div class="detail"><p>${esc(a.formula || 'no token effect is attributed to this row; it is counted')}</p><pre>${esc(JSON.stringify(a.record, null, 1))}</pre></div>` : ''}`).join('');
 }
 
 function postmortemList(s) {
@@ -56,7 +56,7 @@ function postmortemList(s) {
 
 function billSplit(s, d) {
   const rows = s.prompt_rows || [];
-  const bands = [['under the warning', r => r.steps < d.settings.turn_warn_steps, 'hist'], ['warned', r => r.steps >= d.settings.turn_warn_steps && r.steps < d.settings.turn_stop_steps, 'delegated'], ['stopped', r => r.steps >= d.settings.turn_stop_steps, 'red']];
+  const bands = [['under the warning', r => r.steps < d.settings.turn_warn_steps, 'hist'], ['warned', r => r.steps >= d.settings.turn_warn_steps && r.steps < d.settings.turn_stop_steps, 'delegated'], [(d.settings.turn_budget_mode || 'pause') === 'pause' ? 'paused' : 'over budget', r => r.steps >= d.settings.turn_stop_steps, 'red']];
   const total = rows.reduce((t, r) => t + r.cost, 0) || 1;
   const parts = bands.map(([name, test, cls]) => { const cost = rows.filter(test).reduce((t, r) => t + r.cost, 0); return { name, cls, cost, share: cost / total }; }).filter(p => p.cost);
   if (!parts.length) return '<div class="empty">No prompt timing was logged for this session.</div>';
@@ -69,7 +69,7 @@ function promptTable(s, d) {
   if (!rows.length) return '';
   const shown = allPrompts ? rows : rows.slice(0, PROMPT_ROWS);
   const maxCost = Math.max(...rows.map(r => r.cost)) || 1;
-  const flag = r => r.steps >= d.settings.turn_stop_steps ? pill('turn_stop', 'stopped') : r.steps >= d.settings.turn_warn_steps ? pill('turn_warn', 'warned') : '';
+  const flag = r => r.steps >= d.settings.turn_stop_steps ? pill('turn_stop', (d.settings.turn_budget_mode || 'pause') === 'pause' ? 'paused' : 'over budget') : r.steps >= d.settings.turn_warn_steps ? pill('turn_warn', 'warned') : '';
   return `<table class="prompts"><thead><tr><th class="num">#</th><th>when</th><th class="num">context at start</th><th class="num">steps</th><th>cost of this prompt</th><th></th></tr></thead><tbody>${shown.map(r => `
     <tr><td class="num">${r.n}</td><td class="mono">${esc(stamp(r.ts))}</td><td class="num${r.context >= d.settings.warn_tokens ? ' warn' : ''}">${fmtK(r.context)}</td><td class="num">${r.steps}</td><td class="cost"><div class="fillbar" title="${fmtM(r.cost)}"><i style="width:${(r.cost / maxCost * 100).toFixed(1)}%"></i></div><span>${fmtM(r.cost)}</span></td><td>${flag(r)}</td></tr>`).join('')}</tbody></table>
     ${rows.length > PROMPT_ROWS ? `<p class="more"><a href="#sessions" id="toggle-prompts">${allPrompts ? `show the first ${PROMPT_ROWS}` : `show all ${rows.length} prompts`}</a></p>` : ''}`;

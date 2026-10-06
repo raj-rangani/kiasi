@@ -17,11 +17,31 @@
       "default": 12000,
       "min": 1000
     },
+    "turn_budget_mode": {
+      "type": "string",
+      "title": "Turn budget mode",
+      "description": "pause (the default): at the budget kiasi pauses the turn, refuses further calls and saves the remaining work, so replying continue resumes it. warn: kiasi only warns, before and at the budget. off: no budget; calls are only counted. Subagent budgets follow the same mode.",
+      "default": "pause"
+    },
     "turn_call_budget": {
       "type": "number",
       "title": "Turn call budget",
-      "description": "Tool calls allowed in one turn before kiasi blocks further calls and asks Claude to checkpoint and stop or delegate.",
+      "description": "Tool calls allowed in one turn before kiasi pauses it (see Turn budget mode). The warning comes 10 calls earlier.",
       "default": 60,
+      "min": 5
+    },
+    "turn_token_budget": {
+      "type": "number",
+      "title": "Turn token budget",
+      "description": "Tokens one turn may re-read before kiasi pauses it, whichever of this and the call budget comes first. The warning comes at 80%.",
+      "default": 8000000,
+      "min": 100000
+    },
+    "subagent_call_budget": {
+      "type": "number",
+      "title": "Subagent call budget",
+      "description": "Tool calls one subagent may make before kiasi pauses it and it hands the remaining work back to its caller.",
+      "default": 40,
       "min": 5
     },
     "paste_refusal_chars": {

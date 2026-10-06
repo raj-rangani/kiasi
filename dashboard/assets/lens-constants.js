@@ -44,7 +44,7 @@ const SESSION_ROWS = 10;
 const KIND_LABELS = {
   cap: 'output cap', paste_refused: 'paste refused', delegated: 'delegation', pruned: 'compaction pruned', summary: 'compaction summarised',
   compaction: 'compaction', reread_check: 're-read check', paste_saved: 'paste saved', nudge: 'context nudge', turn_warn: 'turn warning',
-  turn_stop: 'turn stopped', read_skipped: 're-read skipped', read_retry: 're-read let through', agent_model: 'subagent model', review_asked: 'review round asked', note: 'session note', recall: 'note recalled', loop: 'loop stopped', state: 'state re-injected',
+  turn_stop: 'turn paused', turn_over: 'turn over budget', turn_resume: 'pause resumed', turn_moved_on: 'pause skipped', read_skipped: 're-read skipped', read_retry: 're-read let through', agent_model: 'subagent model', review_asked: 'review round asked', note: 'session note', recall: 'note recalled', loop: 'loop stopped', state: 'state re-injected',
   routed: 'routed to sandbox', route_retry: 'routing let through',
 };
 const KIND_STRIP_DAYS = 8;
@@ -56,7 +56,10 @@ const KIND_SHORT = {
   read_skipped: 'unchanged file range not read twice',
   turn_warn: 'passed the warning step or re-read budget',
   reread_check: 'here-vs-subagent estimate shown to Claude',
-  turn_stop: 'blocked at the stop budget until checkpoint',
+  turn_stop: 'paused at the budget: calls refused, the rest saved to resume',
+  turn_over: 'reached the budget in warn mode; nothing refused',
+  turn_resume: '"continue" picked a paused turn back up',
+  turn_moved_on: 'the first prompt after a pause was something else',
   summary: "prune missed the ceiling; built-in summary ran",
   loop: 'same failing call stopped after repeats',
   routed: 'raw Bash or WebFetch pointed at the sandbox tool',
@@ -75,7 +78,10 @@ const KIND_HELP = {
   paste_saved: 'a prompt over 4 k chars was saved so later turns can refer to the path',
   nudge: 'a message asked to compact or clear',
   turn_warn: 'the turn passed the warning step or re-read budget',
-  turn_stop: 'the turn was blocked at the stop budget until it checkpointed',
+  turn_stop: 'the turn reached its budget and was paused: further calls were refused and the remaining work was saved to resume',
+  turn_over: 'the turn reached its budget in warn mode; Kiasi said so and refused nothing',
+  turn_resume: 'the developer replied "continue" after a pause and Claude got the saved work back',
+  turn_moved_on: 'the first prompt after a pause was not "continue", so Claude was only told where the saved work is',
   agent_model: 'a subagent got its model set by type',
   review_asked: 'a repeated review round became a permission prompt',
   note: 'a session note was written for recall',
@@ -170,7 +176,7 @@ const RULES = [
   { key: 'cap', name: 'Output cap', kinds: ['cap'], what: 'A tool result over its cap is cut and the full text saved to disk; the conversation keeps a marker with the path.' },
   { key: 'route', name: 'Sandbox routing', kinds: ['routed', 'route_retry'], what: 'While the sandbox tools are registered, a Bash command whose output would only be scanned (tests, builds, installs, curl, git log) or a WebFetch is refused once with the mcp__kiasi__run or mcp__kiasi__fetch call to make instead; repeating the same call lets it through.' },
   { key: 'pruner', name: 'Compaction pruner', kinds: ['pruned', 'summary'], what: 'At compaction the plugin prunes the transcript deterministically instead of calling the summariser; it falls back only if the prune cannot get under the ceiling.' },
-  { key: 'turn', name: 'Turn budget', kinds: ['turn_warn', 'turn_stop'], what: 'A prompt that runs too many steps is warned, then stopped until the remaining work is written down.' },
+  { key: 'turn', name: 'Turn budget', kinds: ['turn_warn', 'turn_stop', 'turn_over', 'turn_resume', 'turn_moved_on'], what: 'A prompt that runs too many steps is warned, then paused with the remaining work written down; "continue" resumes it.' },
   { key: 'reread', name: 'Re-read check', kinds: ['reread_check', 'delegated'], what: 'Shows what the rest of the turn will cost here against in a subagent, and lets Claude delegate.' },
   { key: 'reads', name: 'Re-read skip', kinds: ['read_skipped', 'read_retry'], what: 'A Read of a file range already in context and unchanged on disk gets a pointer to the earlier copy instead of the text; repeating the Read lets it through.' },
   { key: 'loop', name: 'Loop check', kinds: ['loop'], what: 'A command or edit that fails three times in one turn, or one command failing five times with different arguments, gets a note to stop retrying and check the assumption. Failed calls also count toward the turn budget.' },
@@ -181,7 +187,7 @@ const DETAIL_HEIGHT = 340;
 const PROMPT_ROWS = 20;
 const RULE_CHART_HEIGHT = 200;
 const PANEL_MS = 260;
-const JUMP_LABELS = { 'Which tools get capped': 'Tools', 'How much each cut kept out': 'Cut sizes', 'Every compaction the pruner handled': 'Compactions', 'Every warning and stop': 'Warnings', 'Every check shown': 'Checks', 'Every paste handled': 'Pastes' };
+const JUMP_LABELS = { 'Which tools get capped': 'Tools', 'How much each cut kept out': 'Cut sizes', 'Every compaction the pruner handled': 'Compactions', 'Every warning, pause and resume': 'Warnings', 'Every check shown': 'Checks', 'Every paste handled': 'Pastes' };
 const OFFENDER_ROWS = 5;
 const OFFENDER_LABEL_CHARS = 48;
 

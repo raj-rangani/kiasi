@@ -87,6 +87,14 @@ class TestStateBlock(KiasiTestCase):
         path.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
         return path
 
+    def test_checklists_in_the_project_are_listed_after_compaction(self):
+        path = self.transcript()
+        checklist = self.tmp / ".kiasi" / "checkpoints" / "abcdef12-7.md"
+        checklist.parent.mkdir(parents=True)
+        checklist.write_text("- [ ] ship the exporter")
+        payload = {"session_id": "abcdef12-0000", "cwd": str(self.tmp), "transcript_path": str(path), "source": "compact"}
+        self.assertIn(str(checklist), session.handle_session_start(payload)["hookSpecificOutput"]["additionalContext"])
+
     def test_injected_only_after_compaction(self):
         path = self.transcript()
         events.log_event({"event": "cap", "session_id": "abcdef12-0000", "saved_path": "/data/outputs/t9.txt"})

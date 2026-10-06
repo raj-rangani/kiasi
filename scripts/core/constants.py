@@ -46,10 +46,15 @@ ROOT = PLUGIN_ROOT  # kept for readability at call sites that mean "plugin code"
 LOG_DIR = DATA_DIR
 EVENT_LOG = LOG_DIR / "kiasi.jsonl"
 SESSION_DIR = LOG_DIR / "sessions"
+# A hook holds its session's lock file in SESSION_DIR while it runs; it waits this long for it, then goes ahead without it.
+SESSION_LOCK_WAIT_SECONDS = 3
 PASTE_DIR = LOG_DIR / "pastes"
 OUTPUT_DIR = LOG_DIR / "outputs"
 NOTES_DIR = LOG_DIR / "notes"
 CHECKPOINT_DIR = LOG_DIR / "checkpoints"
+# Turn checklists go in the project, in a folder git ignores: Claude Code refuses Claude's writes anywhere under
+# ~/.claude, this data folder included, as edits to a sensitive file. CHECKPOINT_DIR is for a session without one.
+PROJECT_CHECKLIST_DIR = Path(".kiasi") / "checkpoints"
 BUDGET_FILE = LOG_DIR / "budget.json"
 # Every per-day row budget.py ever built, merged on each build so a day outlives the report window and
 # Claude Code's own transcript retention; the Overview before-and-after block is built from it.
@@ -82,15 +87,33 @@ PASTE_MIN_CHARS = 4_000
 PASTE_HEAD_CHARS = 300
 PASTE_BLOCK_CHARS = 40_000
 
-TURN_WARN_STEPS = 30
+# What the turn and subagent budgets do: pause (refuse further calls and save the rest to resume), warn (say so, refuse
+# nothing) or off (only count the calls, for the reports). turn_budget_mode sets it; any other word means pause.
+TURN_BUDGET_MODES = ("pause", "warn", "off")
+TURN_BUDGET_MODE = "pause"
 TURN_STOP_STEPS = 60
-TURN_WARN_TOKENS = 4_000_000
 TURN_STOP_TOKENS = 8_000_000
+# The warning comes TURN_WARN_MARGIN calls, or a fifth of the tokens, before the pause: late enough to leave the turn its
+# working room, early enough to finish the item in progress and save the rest. turn_warn_steps and turn_warn_tokens in
+# .kiasi.json set them.
+TURN_WARN_MARGIN = 10
+TURN_WARN_STEPS = None
+TURN_WARN_TOKENS = None
 TURN_REMIND_STEPS = 5
+# Calls refused after a pause before the turn is ended outright, so a model that ignores the refusals stops re-reading.
+TURN_DENY_BACKSTOP = 3
 TURN_EXEMPT_TOOLS = {"Agent", "Write", "AskUserQuestion", "TodoWrite", "TaskCreate", "TaskUpdate"}
+# The first prompt after a pause resumes it from the checklist when it is a plain "continue" (or resume, go on, go
+# ahead, carry on, keep going, proceed); any other prompt is only told where the checklist is.
+RESUME_PATTERN = r"^((ok|okay|yes|sure|please)[\s,.!]+)*(continue|resume|go on|go ahead|carry on|keep going|proceed)\b.{0,80}$"
+RESUME_CHECKLIST_CHARS = 2000
+RESUME_TASK_CHARS = 300
+# A subagent's own turn budget: stated in its brief, warned TURN_WARN_MARGIN calls before the limit, paused at it.
 SUBAGENT_STEP_LIMIT = 40
+# The brief's budget sentence, left out when the budget is off.
+SUBAGENT_BRIEF_BUDGET = "Kiasi budget: finish within {steps} tool calls. "
 SUBAGENT_BRIEF_SUFFIX = (
-    "Kiasi budget: finish within {steps} tool calls. Batch shell commands, run each test suite once per round, never poll with sleep. "
+    "Batch shell commands, run each test suite once per round, never poll with sleep. "
     "When done or blocked, reply with at most 300 words: what changed (paths), what was verified, what remains."
 )
 BUDGET_FRESH_HOURS = 48
@@ -312,7 +335,7 @@ CLEANUP_PATTERNS = {
     "outputs": r"(toolu_[A-Za-z0-9_-]+|compact-[0-9a-f]{8}-\d{8}-\d{6}|(run|distill|fetch)-\d{8}-\d{6}-\d+)\.txt",
     "checkpoints": r"[0-9a-f]{8}-\d+(-\d+)?\.md",
     "pastes": r"[0-9a-f-]{36}-\d+\.txt",
-    "sessions": r"[0-9a-f-]{36}\.json",
+    "sessions": r"[0-9a-f-]{36}\.(json|lock)",
     "notes": r"[A-Za-z0-9-]+\.jsonl",
 }
 
@@ -322,6 +345,26 @@ SYNC_SCRIPTS = ("reports/budget.py", "reports/lens.py")
 
 # SessionStart: rules.md shipped inside the plugin, injected as additionalContext.
 RULES_FILE = PLUGIN_ROOT / "rules.md"
+# rules.md states the default budgets. rules_text renders its lines that start with these prefixes from the templates
+# below for the budget settings, so rules.md must stay the pause template with the defaults filled in.
+TURN_RULE_PREFIX = "- Every turn has a budget of"
+SUBAGENT_RULE_PREFIX = "- Each subagent has its own budget of"
+TURN_RULES = {
+    "pause": ("- Every turn has a budget of {steps} tool calls or {tokens} re-read tokens. At the warning, about {margin} calls before the pause, "
+              "finish the item in progress, write the remaining work as a checklist to the path kiasi names, and end the turn or hand the checklist "
+              "to one general-purpose subagent. At the pause every call except Write and Agent is refused: end the turn with the notice kiasi gives, "
+              "so the developer knows how to resume."),
+    "warn": ("- Every turn has a budget of {steps} tool calls or {tokens} re-read tokens, which kiasi reports but does not enforce. At the warning, "
+             "about {margin} calls before the budget, finish the item in progress, write the remaining work as a checklist to the path kiasi names, "
+             "and end the turn or hand the checklist to one general-purpose subagent."),
+}
+SUBAGENT_RULES = {
+    "pause": ("- Each subagent has its own budget of {subagent_steps} tool calls, stated in its brief and enforced like the turn budget: at the pause "
+              "it writes its checklist and replies. Scope review subagents to the diff, never the whole repo."),
+    "warn": ("- Each subagent has its own budget of {subagent_steps} tool calls, stated in its brief and reported like the turn budget. "
+             "Scope review subagents to the diff, never the whole repo."),
+    "off": "- Scope review subagents to the diff, never the whole repo.",
+}
 REQUIRED_ENV = {
     "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "200000",
     "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1",
@@ -334,9 +377,16 @@ def _env_int(name, default):
     except (TypeError, ValueError):
         return default
 
+
+def _env_choice(name, default, choices):
+    value = os.environ.get(name, "").strip().lower()
+    return value if value in choices else default
+
 CAP_OUTSIDE_READ_CHARS = _env_int("CLAUDE_PLUGIN_OPTION_OUTPUT_CAP_CHARS", CAP_OUTSIDE_READ_CHARS)
-SUBAGENT_STEP_LIMIT = _env_int("CLAUDE_PLUGIN_OPTION_TURN_CALL_BUDGET", SUBAGENT_STEP_LIMIT)
+SUBAGENT_STEP_LIMIT = _env_int("CLAUDE_PLUGIN_OPTION_SUBAGENT_CALL_BUDGET", SUBAGENT_STEP_LIMIT)
 TURN_STOP_STEPS = _env_int("CLAUDE_PLUGIN_OPTION_TURN_CALL_BUDGET", TURN_STOP_STEPS)
+TURN_STOP_TOKENS = _env_int("CLAUDE_PLUGIN_OPTION_TURN_TOKEN_BUDGET", TURN_STOP_TOKENS)
+TURN_BUDGET_MODE = _env_choice("CLAUDE_PLUGIN_OPTION_TURN_BUDGET_MODE", TURN_BUDGET_MODE, TURN_BUDGET_MODES)
 PASTE_BLOCK_CHARS = _env_int("CLAUDE_PLUGIN_OPTION_PASTE_REFUSAL_CHARS", PASTE_BLOCK_CHARS)
 COMPACTION_WINDOW_TEXT = os.environ.get("CLAUDE_PLUGIN_OPTION_COMPACTION_WINDOW_TEXT", "200000")
 
@@ -353,8 +403,27 @@ PROJECT_KEYS = {
     "paste_refusal_chars": "PASTE_BLOCK_CHARS",
     "turn_call_budget": "TURN_STOP_STEPS",
     "turn_warn_steps": "TURN_WARN_STEPS",
+    "turn_token_budget": "TURN_STOP_TOKENS",
+    "turn_warn_tokens": "TURN_WARN_TOKENS",
     "subagent_call_budget": "SUBAGENT_STEP_LIMIT",
 }
+# Settings that take one of a few words rather than a number; any other value is ignored.
+PROJECT_CHOICES = {"turn_budget_mode": ("TURN_BUDGET_MODE", TURN_BUDGET_MODES)}
+
+
+def warn_steps(stop_steps):
+    """The call count of the warning for a budget of stop_steps: TURN_WARN_MARGIN calls before it, never before half way."""
+    return max(stop_steps - TURN_WARN_MARGIN, stop_steps // 2)
+
+
+def turn_warn_steps():
+    """The main turn's warning: turn_warn_steps from .kiasi.json when set, else TURN_WARN_MARGIN calls before the pause."""
+    return TURN_WARN_STEPS or warn_steps(TURN_STOP_STEPS)
+
+
+def turn_warn_tokens():
+    """The warning's token count: turn_warn_tokens from .kiasi.json when set, else a fifth of the tokens before the pause."""
+    return TURN_WARN_TOKENS or TURN_STOP_TOKENS * 4 // 5
 
 
 def apply_project(cwd):
@@ -368,6 +437,10 @@ def apply_project(cwd):
             if isinstance(value, (int, float)) and int(value) > 0:
                 globals()[name] = int(value)
                 applied[name] = int(value)
+        for key, (name, choices) in PROJECT_CHOICES.items():
+            value = str(raw.get(key, "")).strip().lower()
+            if value in choices:
+                globals()[name] = applied[name] = value
     except (OSError, ValueError, TypeError):
         pass
     return applied
