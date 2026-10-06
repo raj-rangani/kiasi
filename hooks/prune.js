@@ -76,12 +76,48 @@ function rebuildAssistant(message, level) {
   };
 }
 
+// Claude Code stores a parallel batch as one assistant message per call and writes each result when its call ends,
+// sometimes before the batch's later calls. Rebuilt messages get fresh ids, so unless a batch is rebuilt as one
+// message ahead of all its results, every call whose result does not come next loses it when the session loads.
+function mergeBatches(messages) {
+  const ahead = new Set(messages.flatMap((message) => (message.toolResults || []).map((result) => result.tool_use_id)));
+  const pending = new Set();
+  const merged = [];
+  let calls = null;
+  for (const message of messages) {
+    for (const result of message.toolResults || []) {
+      ahead.delete(result.tool_use_id);
+      pending.delete(result.tool_use_id);
+    }
+    if (message.role === 'assistant' && calls && (merged[merged.length - 1] === calls || pending.size)) {
+      calls.text = [calls.text, message.text].filter(Boolean).join('\n\n');
+      calls.toolUses = [...calls.toolUses, ...message.toolUses];
+    } else {
+      merged.push(message);
+      if (message.role === 'assistant') calls = message;
+    }
+    for (const use of message.toolUses) if (ahead.has(use.tool_use_id)) pending.add(use.tool_use_id);
+  }
+  return merged;
+}
+
+// The recent messages kept as they are must not start inside a run of assistant messages or between a call and its result.
+function batchStart(messages, index) {
+  const callAt = new Map();
+  messages.forEach((message, at) => (message.toolUses || []).forEach((use) => callAt.set(use.tool_use_id, at)));
+  const earliest = Array(messages.length + 1).fill(Infinity);
+  for (let at = messages.length - 1; at >= 0; at -= 1) {
+    earliest[at] = Math.min(earliest[at + 1], ...(messages[at].toolResults || []).map((result) => callAt.get(result.tool_use_id) ?? Infinity));
+  }
+  let start = index;
+  while (start > 0 && (earliest[start] < start || (messages[start].role === 'assistant' && messages[start - 1].role === 'assistant'))) start -= 1;
+  return start;
+}
+
 function applyLevel(messages, level) {
-  const cut = Math.max(0, messages.length - level.recent);
-  return messages.map((message, index) => {
-    if (index >= cut) return message;
-    return message.role === 'user' ? rebuildUser(message, level) : rebuildAssistant(message, level);
-  });
+  const cut = batchStart(messages, Math.max(0, messages.length - level.recent));
+  const rebuilt = messages.slice(0, cut).map((message) => (message.role === 'user' ? rebuildUser(message, level) : rebuildAssistant(message, level)));
+  return [...mergeBatches(rebuilt), ...messages.slice(cut)];
 }
 
 export function pruneTranscript(messages, archivePath) {
