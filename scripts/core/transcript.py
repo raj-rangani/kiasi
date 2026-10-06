@@ -140,3 +140,14 @@ def prompt_text(entry):
 
 def transcript_key(transcript_path):
     return Path(transcript_path or "main").stem
+
+
+def caller_key(payload):
+    return payload.get("agent_id") or transcript_key(payload.get("transcript_path"))
+
+
+def caller_transcript(payload):
+    path, agent_id = payload.get("transcript_path"), payload.get("agent_id")
+    if not (path and agent_id):
+        return path
+    return str(Path(path).with_suffix("") / "subagents" / f"agent-{agent_id}.jsonl")

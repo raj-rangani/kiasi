@@ -2,7 +2,7 @@ from core import constants
 from core.caps import failure_label, handle_tool_output, leading_command
 from core.events import load_session, log_event, save_session
 from core.reads import track_reads
-from core.transcript import current_context_tokens, fmt_k, fmt_m, is_short_reply, is_system_prompt, is_task_prompt, prompt_text, tail_entries, transcript_key
+from core.transcript import caller_key, caller_transcript, current_context_tokens, fmt_k, fmt_m, is_short_reply, is_system_prompt, is_task_prompt, prompt_text, tail_entries
 
 
 def steps_per_prompt(entries):
@@ -70,7 +70,7 @@ def checkpoint_path(key, turn):
 def turn_guard(payload, tokens):
     tool_name = payload.get("tool_name", "")
     session_id = payload.get("session_id", "")
-    key = transcript_key(payload.get("transcript_path"))
+    key = caller_key(payload)
     state = load_session(session_id)
     turn = state.setdefault("turns", {}).setdefault(key, {"steps": 0, "reread": 0, "warned": False, "stopped": False, "index": state.get("prompts", 0)})
     turn["steps"] += 1
@@ -104,7 +104,7 @@ def turn_guard(payload, tokens):
 
 
 def handle_post_tool(payload):
-    entries = tail_entries(payload.get("transcript_path"))
+    entries = tail_entries(caller_transcript(payload))
     guard = turn_guard(payload, current_context_tokens(entries))
     capped = handle_tool_output(payload)
     track_reads(payload, capped)
@@ -120,7 +120,7 @@ def loop_check(payload):
     tool_input = payload.get("tool_input") or {}
     session_id = payload.get("session_id", "")
     state = load_session(session_id)
-    turn = state.setdefault("turns", {}).setdefault(transcript_key(payload.get("transcript_path")), {"steps": 0, "reread": 0, "warned": False, "stopped": False, "index": state.get("prompts", 0)})
+    turn = state.setdefault("turns", {}).setdefault(caller_key(payload), {"steps": 0, "reread": 0, "warned": False, "stopped": False, "index": state.get("prompts", 0)})
     fails = turn.setdefault("fails", {})
     nudged = turn.setdefault("loop_nudged", [])
     label = failure_label(tool_name, tool_input)
@@ -143,7 +143,7 @@ def loop_check(payload):
 def handle_tool_failure(payload):
     if payload.get("is_interrupt"):
         return None
-    guard = turn_guard(payload, current_context_tokens(tail_entries(payload.get("transcript_path"))))
+    guard = turn_guard(payload, current_context_tokens(tail_entries(caller_transcript(payload))))
     nudge = loop_check(payload)
     if not nudge:
         return guard

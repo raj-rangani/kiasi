@@ -1,5 +1,7 @@
 
 
+import json
+
 from helpers import KiasiTestCase
 from core import constants  # noqa: E402
 from core import events  # noqa: E402
@@ -25,6 +27,31 @@ class TestTurnGuard(KiasiTestCase):
                 break
         self.assertIsNotNone(blocked_at, "turn_guard should block once the step budget is exhausted")
         self.assertGreaterEqual(blocked_at, constants.TURN_STOP_STEPS)
+
+    def test_subagent_calls_have_their_own_turn(self):
+        main = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": "s-agents", "transcript_path": str(self.tmp / "s-agents.jsonl")}
+        results = [turn.turn_guard(main, 1000) for _ in range(constants.TURN_STOP_STEPS)]
+        self.assertEqual(results[-1]["decision"], "block")
+        subagent = {**main, "agent_id": "a1fd597a875bd1f14"}
+        handed_off = [turn.turn_guard(subagent, 1000) for _ in range(constants.TURN_REMIND_STEPS)]
+        self.assertFalse([r for r in handed_off if r and r.get("decision") == "block"],
+                         "the subagent a stopped turn hands its checklist to must be able to work")
+        turns = events.load_session("s-agents")["turns"]
+        self.assertEqual(turns["s-agents"]["steps"], constants.TURN_STOP_STEPS)
+        self.assertEqual(turns["a1fd597a875bd1f14"]["steps"], constants.TURN_REMIND_STEPS)
+        prompt.handle_prompt({"prompt": "the next task after the hand-off", "session_id": "s-agents", "transcript_path": main["transcript_path"]})
+        self.assertNotIn("a1fd597a875bd1f14", events.load_session("s-agents")["turns"])
+
+    def test_subagent_calls_reread_their_own_context(self):
+        main_path = self.tmp / "s-ctx.jsonl"
+        agent_path = self.tmp / "s-ctx" / "subagents" / "agent-a4bb4aca3bed22433.jsonl"
+        agent_path.parent.mkdir(parents=True)
+        for path, tokens in ((main_path, 150_000), (agent_path, 20_000)):
+            path.write_text(json.dumps({"type": "assistant", "message": {"usage": {"input_tokens": 10, "cache_read_input_tokens": tokens - 10}}}) + "\n")
+        payload = {"hook_event_name": "PostToolUseFailure", "tool_name": "Bash", "tool_input": {"command": "make"}, "session_id": "s-ctx",
+                   "transcript_path": str(main_path), "agent_id": "a4bb4aca3bed22433"}
+        turn.handle_tool_failure(payload)
+        self.assertEqual(events.load_session("s-ctx")["turns"]["a4bb4aca3bed22433"]["reread"], 20_000)
 
     def test_checkpoint_path_never_names_an_existing_file(self):
         constants.CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)

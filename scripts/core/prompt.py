@@ -67,7 +67,7 @@ def handle_prompt(payload):
     changed = config_changes(state, payload.get("cwd"))
     if changed:
         record["config_changed"] = changed
-    state.setdefault("turns", {})[transcript_key(payload.get("transcript_path"))] = {"steps": 0, "reread": 0, "warned": False, "stopped": False, "index": state["prompts"]}
+    state["turns"] = {transcript_key(payload.get("transcript_path")): {"steps": 0, "reread": 0, "warned": False, "stopped": False, "index": state["prompts"]}}
     if len(prompt) >= constants.PASTE_MIN_CHARS:
         path = save_paste(session_id, state, prompt)
         context_lines.append(f"The pasted content in this prompt ({len(prompt)} chars) is also saved at {path}. After this turn refer to it by that path instead of quoting it, and expect it to be dropped from the conversation summary.")
