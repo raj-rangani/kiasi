@@ -170,7 +170,7 @@ Ordered by value for the effort.
 1. Reproduced with three slow parallel Bash calls, then `/compact`, then a question asking for all four outputs. The first two calls of the batch came back as `[Tool result missing due to internal error]`.
 2. Fixed in `hooks/prune.js` rather than with the stopgap, so batches are still pruned.
 3. Regression tests in `hooks/compact.test.ts`, plus `tests/e2e_parallel_compact.py` to rerun after a Claude Code update.
-4. Still open: report upstream that a rebuilt message cannot keep its batch's message id, since function hooks are experimental.
+4. Reported upstream with `/feedback` on 2026-10-06, receipt `d15b4c11-b128-422e-acea-c0b0cd68ac5b`. The full write-up is `docs/upstream-compact-hook-report.md`. Testing it with minimal hooks found two more traps, both avoided by the fix. A changed call gets a new message id even when its handle is kept. A result kept unchanged after its call changed links back into the pre-compaction history, which undoes the compaction when the session is resumed.
 
 **Report numbers (finding 7).**
 - In `budget.py` (and any shared code in `lens.py`):
