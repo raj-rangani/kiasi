@@ -57,10 +57,12 @@ class AutostartTests(KiasiTestCase):
         with mock.patch.object(procs.sys, "platform", "linux"):
             self.assertTrue(procs.detached_kwargs()["start_new_session"])
         with mock.patch.object(procs.sys, "platform", "win32"), mock.patch.object(procs.subprocess, "DETACHED_PROCESS", 8, create=True), \
-             mock.patch.object(procs.subprocess, "CREATE_NEW_PROCESS_GROUP", 512, create=True):
+             mock.patch.object(procs.subprocess, "CREATE_NEW_PROCESS_GROUP", 512, create=True), \
+             mock.patch.object(procs.subprocess, "CREATE_NO_WINDOW", 0x08000000, create=True):
             kwargs = procs.detached_kwargs()
             self.assertNotIn("start_new_session", kwargs)
-            self.assertEqual(kwargs["creationflags"] & 8, 8)
+            self.assertEqual(kwargs["creationflags"], 512 | 0x08000000,
+                             "with no console at all (DETACHED_PROCESS) every console program the child starts opens a window")
 
 
 if __name__ == "__main__":
