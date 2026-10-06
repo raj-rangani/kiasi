@@ -102,3 +102,11 @@ On one machine over the last 7 days, before the workaround, a pruning compaction
 ## Workaround
 
 Rebuild each batch as one assistant message holding all its calls, ahead of all its results, and keep the batch open while any call still has a result to come. Claude Code writes that merged message as one entry. Start the part kept unchanged at a message that has no call still waiting for its result, so a kept result never outlives its call. With both rules, the same test keeps every result and the resumed chain starts at the boundary.
+
+## Related: read records after a hook compaction
+
+Mentioned as the cause in a separate `/feedback` report on 2026-10-06, receipt `4c23646f-f8fe-4126-9298-729df97e3c89`.
+
+When a `session.compact` hook replaces the messages, Claude Code clears its record of which files the session has read or written and restores none. Its own summary compaction clears the same record but then re-attaches the most recent files. Write and Edit refuse to overwrite a file with no record ("File has not been read yet") unless it is a file Claude Code may read without asking, which covers the working directories. So after a hook compaction, a file outside them that the session wrote a minute earlier cannot be overwritten until it is read again.
+
+Found when Kiasi's turn checklists, kept under `~/.claude/plugins/data/`, could not be updated after a compaction: 2 refusals in 7 days, while 21 overwrites of project files after the same kind of compaction went through. Suggested fix: after a hook compaction, rebuild the record from the returned messages, as a resumed session already does.

@@ -310,7 +310,7 @@ STORAGE_HISTORY_ROWS = 100
 # Only files whose names Kiasi itself writes are ever touched; anything else in these folders stays.
 CLEANUP_PATTERNS = {
     "outputs": r"(toolu_[A-Za-z0-9_-]+|compact-[0-9a-f]{8}-\d{8}-\d{6}|(run|distill|fetch)-\d{8}-\d{6}-\d+)\.txt",
-    "checkpoints": r"[0-9a-f]{8}-\d+\.md",
+    "checkpoints": r"[0-9a-f]{8}-\d+(-\d+)?\.md",
     "pastes": r"[0-9a-f-]{36}-\d+\.txt",
     "sessions": r"[0-9a-f-]{36}\.json",
     "notes": r"[A-Za-z0-9-]+\.jsonl",
