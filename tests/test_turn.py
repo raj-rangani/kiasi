@@ -10,6 +10,7 @@ from helpers import SCRIPTS, KiasiTestCase
 from core import constants  # noqa: E402
 from core import events  # noqa: E402
 from core import prompt  # noqa: E402
+from core import session  # noqa: E402
 from core import turn  # noqa: E402
 
 
@@ -78,6 +79,33 @@ class TestTurnGuard(KiasiTestCase):
         self.assertEqual(json.loads(hook.stdout)["hookSpecificOutput"]["permissionDecision"], "deny")
         matchers = [group.get("matcher") for group in json.loads((SCRIPTS.parent / "hooks" / "hooks.json").read_text())["hooks"]["PreToolUse"]]
         self.assertEqual(matchers, [""], "PreToolUse has to see every tool to refuse it")
+
+    def test_a_paused_turn_that_ends_without_the_notice_is_reminded_once(self):
+        def paused(sid):
+            post = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": sid, "transcript_path": str(self.tmp / f"{sid}.jsonl")}
+            for _ in range(constants.TURN_STOP_STEPS):
+                turn.turn_guard(post, 1000)
+            return {**post, "hook_event_name": "Stop", "stop_hook_active": False, "last_assistant_message": "The parser is done."}
+
+        def checkpoint(sid):
+            return events.load_session(sid)["turns"][sid]["checkpoint"]
+
+        quiet = {"hook_event_name": "Stop", "session_id": "s-quiet", "transcript_path": str(self.tmp / "s-quiet.jsonl"), "stop_hook_active": False}
+        self.assertIsNone(session.handle_stop(quiet), "a turn that was never paused ends quietly")
+        stop = paused("s-remind")
+        reminder = session.handle_stop(stop)
+        self.assertNotIn("decision", reminder, "a Stop block shows the developer a hook error")
+        self.assertEqual(reminder["hookSpecificOutput"]["hookEventName"], "Stop")
+        self.assertIn(f"Paused by Kiasi at {constants.TURN_STOP_STEPS} tool calls; the rest is in {checkpoint('s-remind')}",
+                      reminder["hookSpecificOutput"]["additionalContext"])
+        self.assertIsNone(session.handle_stop(stop), "the reminder is sent once")
+        told = paused("s-told")
+        self.assertIsNone(session.handle_stop({**told, "last_assistant_message": f"Paused by Kiasi; the rest is in {checkpoint('s-told')}."}))
+        self.assertIsNone(session.handle_stop({**paused("s-active"), "stop_hook_active": True}), "another Stop hook already made Claude reply")
+        ended = paused("s-ended")
+        for _ in range(constants.TURN_DENY_BACKSTOP):
+            turn.paused_call({**ended, "hook_event_name": "PreToolUse"})
+        self.assertIsNone(session.handle_stop(ended), "the refused calls already ended the turn with the notice")
 
     def test_subagent_calls_have_their_own_turn(self):
         main = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": "s-agents", "transcript_path": str(self.tmp / "s-agents.jsonl")}

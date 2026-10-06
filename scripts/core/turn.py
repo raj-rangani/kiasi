@@ -180,6 +180,29 @@ def handle_pre_tool_use(payload):
     return handle_pre_tool(payload)
 
 
+def pause_reminder(payload):
+    """Stop: ask Claude once to tell the developer about the pause when its final message leaves it out."""
+    # Hook messages may not show in the desktop app or VS Code; Claude's own reply shows everywhere. additionalContext
+    # makes Claude reply once more and shows as hook context, where a Stop block would show as a hook error.
+    if payload.get("stop_hook_active") or payload.get("agent_id"):
+        return None
+    session_id = payload.get("session_id", "")
+    state = load_session(session_id)
+    key = caller_key(payload)
+    turn = state.get("turns", {}).get(key)
+    if not turn or not turn.get("stopped") or turn.get("reminded") or turn.get("denied", 0) >= constants.TURN_DENY_BACKSTOP:
+        return None
+    turn.setdefault("checkpoint", str(checkpoint_path(key, turn)))
+    if turn["checkpoint"] in (payload.get("last_assistant_message") or ""):
+        return None
+    turn["reminded"] = True
+    save_session(session_id, state)
+    context = (f"kiasi: this turn was paused at {turn['stopped']} tool calls, and your final message does not tell the developer. "
+               f"If work remains, write it to {turn['checkpoint']} if you have not, then reply in two or three lines ending with: "
+               f'"{pause_line(turn)}" If nothing remains, say so in one line. Make no other tool calls.')
+    return {"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": context}}
+
+
 def handle_post_tool(payload):
     entries = tail_entries(caller_transcript(payload))
     guard = turn_guard(payload, current_context_tokens(entries))

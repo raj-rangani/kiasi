@@ -10,6 +10,7 @@ from core.events import ensure_dirs, load_session, log_event, now_iso, save_sess
 from core.launch import ensure_dashboard, launch_cleanup
 from core.reads import forget_reads
 from core.transcript import current_context_tokens, edited_files, failing_commands, fmt_k, fmt_m, last_task_prompt, tail_entries, tool_uses, transcript_key
+from core.turn import pause_reminder
 
 
 def handle_pre_compact(payload):
@@ -61,7 +62,7 @@ def handle_stop(payload):
     written = write_note(session_id, payload.get("cwd") or "", last_task_prompt(entries), edited_files(entries), payload.get("last_assistant_message") or "", state)
     turn = state.get("turns", {}).get(transcript_key(payload.get("transcript_path")), {})
     log_event({"event": "stop", "session_id": session_id, "context_tokens": current_context_tokens(entries), "note_written": written, "steps": turn.get("steps", 0), "reread": turn.get("reread", 0), "stopped": bool(turn.get("stopped"))})
-    return None
+    return pause_reminder(payload)
 
 
 def budget_line():
