@@ -23,7 +23,8 @@ def handle_agent(payload):
         if not tool_input.get("model"):
             updated["model"] = constants.AGENT_DEFAULT_MODEL.get(agent_type, constants.AGENT_FALLBACK_MODEL)
             record["model_set"] = updated["model"]
-        suffix = constants.SUBAGENT_BRIEF_SUFFIX.format(steps=constants.SUBAGENT_STEP_LIMIT)
+        budget = "" if constants.TURN_BUDGET_MODE == "off" else constants.SUBAGENT_BRIEF_BUDGET.format(steps=constants.SUBAGENT_STEP_LIMIT)
+        suffix = budget + constants.SUBAGENT_BRIEF_SUFFIX
         if suffix not in prompt:
             updated["prompt"] = prompt.rstrip() + "\n\n" + suffix
             record["brief_suffix"] = True

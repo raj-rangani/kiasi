@@ -208,7 +208,7 @@ def turn_part(payload, session):
     turn = (session.get("turns") or {}).get(key) or {}
     budget = session.get("turn_budget") or {}
     steps, stop = int(turn.get("steps") or 0), int(budget.get("stop") or 0)
-    if not steps or not stop:
+    if not steps or not stop or budget.get("mode") == "off":
         return None
     tone = tone_for(steps, int(budget.get("warn") or stop), stop)
     return f"{paint('turn', 'label')} {paint(f'{steps}/{stop}', 'turn' if tone == 'ok' else tone)}"

@@ -85,13 +85,17 @@ def turn_guard(payload, tokens):
     turn = state.setdefault("turns", {}).setdefault(key, {"steps": 0, "reread": 0, "warned": False, "stopped": False, "index": state.get("prompts", 0)})
     turn["steps"] += 1
     turn["reread"] += tokens
-    state["turn_budget"] = {"warn": constants.turn_warn_steps(), "stop": constants.TURN_STOP_STEPS}
+    mode = constants.TURN_BUDGET_MODE
+    state["turn_budget"] = {"warn": constants.turn_warn_steps(), "stop": constants.TURN_STOP_STEPS, "mode": mode}
     result = None
-    over_stop = turn["steps"] >= stop_steps or turn["reread"] >= constants.TURN_STOP_TOKENS
-    over_warn = turn["steps"] >= warn_steps or turn["reread"] >= constants.TURN_WARN_TOKENS
+    # With the budget off the calls are only counted; in warn mode it is reported once at the warning and once at the limit.
+    over_stop = mode != "off" and (turn["steps"] >= stop_steps or turn["reread"] >= constants.TURN_STOP_TOKENS)
+    over_warn = mode != "off" and (turn["steps"] >= warn_steps or turn["reread"] >= constants.turn_warn_tokens())
     checkpoint = checkpoint_path(key, turn)
     allowed = "Write" if subagent else "Write and Agent"
-    if over_stop and tool_name not in constants.TURN_EXEMPT_TOOLS and (not turn["stopped"] or (turn["steps"] - turn["stopped"]) % constants.TURN_REMIND_STEPS == 0):
+    if over_stop and mode == "warn":
+        result = None if turn.get("over") else over_budget(payload, turn, scope, checkpoint, tokens)
+    elif over_stop and tool_name not in constants.TURN_EXEMPT_TOOLS and (not turn["stopped"] or (turn["steps"] - turn["stopped"]) % constants.TURN_REMIND_STEPS == 0):
         first = not turn["stopped"]
         if first:
             # A pause, not a PostToolUse block: that block came after the call had run, stopped nothing and showed the
@@ -121,17 +125,36 @@ def turn_guard(payload, tokens):
         next_step = "reply to the caller with that path" if subagent else "end the turn with that path or hand the checklist to one general-purpose subagent"
         # Each further call re-reads about the current context, so the tokens can run out before the calls do.
         left = max(1, min(stop_steps - turn["steps"], (constants.TURN_STOP_TOKENS - turn["reread"]) // max(tokens, 1)))
+        limit = (f"it pauses at {stop_steps} tool calls or {fmt_m(constants.TURN_STOP_TOKENS)} tokens, and then every call except {allowed} is refused"
+                 if mode == "pause" else
+                 f"its budget is {stop_steps} tool calls or {fmt_m(constants.TURN_STOP_TOKENS)} tokens, which kiasi reports but does not enforce")
         context = (
             f"kiasi {scope} budget: about {left} tool calls left. This {scope} has made {turn['steps']} tool calls and re-read {fmt_m(turn['reread'])} "
-            f"tokens at a context of {fmt_k(tokens)}; it pauses at {stop_steps} tool calls or {fmt_m(constants.TURN_STOP_TOKENS)} tokens, and then every "
-            f"call except {allowed} is refused. Finish the item in progress, keep the remaining items as a checklist at {checkpoint}, then {next_step}."
+            f"tokens at a context of {fmt_k(tokens)}; {limit}. Finish the item in progress, keep the remaining items as a checklist at {checkpoint}, then {next_step}."
         )
         result = {"hookSpecificOutput": {"hookEventName": payload.get("hook_event_name", "PostToolUse"), "additionalContext": context}}
         if not subagent:
-            result["systemMessage"] = (f"Kiasi: about {left} tool calls left before this turn pauses ({turn['steps']} made, {fmt_m(turn['reread'])} tokens "
+            result["systemMessage"] = (f"Kiasi: about {left} tool calls left before this turn {'pauses' if mode == 'pause' else 'reaches its budget'} ({turn['steps']} made, {fmt_m(turn['reread'])} tokens "
                                        f"re-read). Claude was asked to finish the item in progress and keep the rest in {checkpoint}.")
         log_event({"event": "turn_warn", "session_id": session_id, "transcript": key, "steps": turn["steps"], "reread": turn["reread"], "context_tokens": tokens, "subagent": subagent})
     save_session(session_id, state)
+    return result
+
+
+def over_budget(payload, turn, scope, checkpoint, tokens):
+    """warn mode at the limit: say so once, to Claude and to the developer, but refuse nothing and save nothing to resume."""
+    subagent = scope == "subagent"
+    turn.update(over=turn["steps"], warned=True)
+    next_step = "reply to the caller with that path" if subagent else "end the turn with that path or hand the checklist to one general-purpose subagent"
+    context = (f"kiasi: this {scope} reached its budget at {turn['steps']} tool calls and {fmt_m(turn['reread'])} tokens re-read at a context of "
+               f"{fmt_k(tokens)}. The budget is in warn mode, so no call is refused. Finish the item in progress, write what remains as a "
+               f"checklist to {checkpoint}, then {next_step}.")
+    result = {"hookSpecificOutput": {"hookEventName": payload.get("hook_event_name", "PostToolUse"), "additionalContext": context}}
+    if not subagent:
+        result["systemMessage"] = (f"Kiasi: this turn reached its budget at {turn['steps']} tool calls ({fmt_m(turn['reread'])} tokens re-read). "
+                                   f"The budget is in warn mode, so nothing is refused; Claude was asked to wrap up and keep the rest in {checkpoint}.")
+    log_event({"event": "turn_over", "session_id": payload.get("session_id", ""), "transcript": caller_key(payload), "steps": turn["steps"],
+               "reread": turn["reread"], "context_tokens": tokens, "subagent": subagent})
     return result
 
 
@@ -156,7 +179,8 @@ def pause_alert(turn):
 
 def paused_call(payload):
     """PreToolUse: once a turn or subagent is paused, refuse every call but the checklist Write and the hand-off."""
-    if payload.get("tool_name") in constants.TURN_EXEMPT_TOOLS:
+    # Only pause mode refuses, so a turn paused before the mode was changed is let go.
+    if constants.TURN_BUDGET_MODE != "pause" or payload.get("tool_name") in constants.TURN_EXEMPT_TOOLS:
         return None
     session_id = payload.get("session_id", "")
     state = load_session(session_id)

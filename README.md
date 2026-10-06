@@ -12,7 +12,7 @@ On the machine it was built on, context re-sent per step went from 201k to 31k t
 ## Key features
 
 - **Output cap and cleaning**: tool output over 12,000 chars is cut, progress bars and repeated lines are stripped, the full text is saved to disk and named in the cut.
-- **Turn budget and loop check**: warned 10 tool calls before the pause at 60 (later calls are refused and Claude saves a checklist; reply "continue", here or after `/clear`, and Claude resumes from it); the same call failing 3 times tells Claude to rethink instead of retry.
+- **Turn budget and loop check**: warned 10 tool calls before the pause at 60 (later calls are refused and Claude saves a checklist; reply "continue", here or after `/clear`, and Claude resumes from it; `turn_budget_mode` can make the budget only warn, or turn it off); the same call failing 3 times tells Claude to rethink instead of retry.
 - **Re-read skip**: a file already in context and unchanged comes back as a pointer, not the text again.
 - **Paste manager**: a paste over 4,000 chars is saved to disk; over 40,000 it is refused and you resend with the path.
 - **Pruner and state** (experimental): at compaction your prompts and Claude's replies stay word for word while old tool output is pruned; the task, edited files and failing commands are re-injected.
@@ -90,10 +90,14 @@ Set these with `/config` or as env vars. Every other threshold is a named consta
 | Setting | Env var | Default |
 |---|---|---|
 | `output_cap_chars` | `CLAUDE_PLUGIN_OPTION_OUTPUT_CAP_CHARS` | 12000 |
+| `turn_budget_mode` | `CLAUDE_PLUGIN_OPTION_TURN_BUDGET_MODE` | pause (or warn, off) |
 | `turn_call_budget` | `CLAUDE_PLUGIN_OPTION_TURN_CALL_BUDGET` | 60 |
+| `turn_token_budget` | `CLAUDE_PLUGIN_OPTION_TURN_TOKEN_BUDGET` | 8000000 |
 | `subagent_call_budget` | `CLAUDE_PLUGIN_OPTION_SUBAGENT_CALL_BUDGET` | 40 |
 | `paste_refusal_chars` | `CLAUDE_PLUGIN_OPTION_PASTE_REFUSAL_CHARS` | 40000 |
 | `compaction_window_text` | `CLAUDE_PLUGIN_OPTION_COMPACTION_WINDOW_TEXT` | "200000" |
+
+A `.kiasi.json` in the project root can set any of these except `compaction_window_text` for that project, plus `turn_warn_steps` and `turn_warn_tokens` (by default the warning comes 10 calls, or a fifth of the tokens, before the budget).
 
 `KIASI_DASHBOARD=off` stops the session-start autostart of the dashboard.
 

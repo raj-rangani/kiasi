@@ -101,9 +101,25 @@ def env_warning():
 
 def rules_text():
     try:
-        return constants.RULES_FILE.read_text().strip()
+        text = constants.RULES_FILE.read_text().strip()
     except OSError:
         return ""
+    lines = (budget_rule(line) for line in text.splitlines())
+    return "\n".join(line for line in lines if line is not None)
+
+
+def budget_rule(line):
+    """rules.md states the default budgets: fit its two budget lines to the settings, and drop the turn's when the budget is off."""
+    if line.startswith(constants.TURN_RULE_PREFIX):
+        template = constants.TURN_RULES.get(constants.TURN_BUDGET_MODE)
+    elif line.startswith(constants.SUBAGENT_RULE_PREFIX):
+        template = constants.SUBAGENT_RULES.get(constants.TURN_BUDGET_MODE)
+    else:
+        return line
+    if template is None:
+        return None
+    return template.format(steps=constants.TURN_STOP_STEPS, tokens=f"{round(constants.TURN_STOP_TOKENS / 1_000_000, 1):g}M",
+                           margin=constants.TURN_STOP_STEPS - constants.turn_warn_steps(), subagent_steps=constants.SUBAGENT_STEP_LIMIT)
 
 
 def record_plugin_root():

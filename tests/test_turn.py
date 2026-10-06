@@ -11,6 +11,7 @@ from helpers import SCRIPTS, KiasiTestCase
 from core import constants  # noqa: E402
 from core import events  # noqa: E402
 from core import prompt  # noqa: E402
+from core import reads  # noqa: E402
 from core import session  # noqa: E402
 from core import turn  # noqa: E402
 
@@ -194,8 +195,8 @@ class TestTurnGuard(KiasiTestCase):
         self.assertIn(f"about {constants.TURN_WARN_MARGIN} tool calls left", narrow[0][1])
         # A wide context runs out of tokens first: at 200k a call it warns at 6.4M and pauses at 8M, 8 calls later.
         wide = said("s-wide", 200_000, constants.TURN_STOP_TOKENS // 200_000)
-        self.assertEqual([n for n, _ in wide], [constants.TURN_WARN_TOKENS // 200_000, constants.TURN_STOP_TOKENS // 200_000])
-        self.assertIn(f"about {(constants.TURN_STOP_TOKENS - constants.TURN_WARN_TOKENS) // 200_000} tool calls left", wide[0][1])
+        self.assertEqual([n for n, _ in wide], [constants.turn_warn_tokens() // 200_000, constants.TURN_STOP_TOKENS // 200_000])
+        self.assertIn(f"about {(constants.TURN_STOP_TOKENS - constants.turn_warn_tokens()) // 200_000} tool calls left", wide[0][1])
         self.addCleanup(setattr, constants, "TURN_WARN_STEPS", constants.TURN_WARN_STEPS)
         (self.tmp / constants.PROJECT_FILE_NAME).write_text(json.dumps({"turn_warn_steps": 25}))
         constants.apply_project(str(self.tmp))
@@ -269,6 +270,81 @@ class TestTurnGuard(KiasiTestCase):
                 stop = context
         self.assertIn(str(constants.CHECKPOINT_DIR / "checklis-0.md"), warning)
         self.assertIn(str(constants.CHECKPOINT_DIR / "checklis-0-2.md"), stop)
+
+    def settings(self, **values):
+        for name, value in values.items():
+            self.addCleanup(setattr, constants, name, getattr(constants, name))
+            setattr(constants, name, value)
+
+    def test_warn_mode_reports_the_budget_but_refuses_nothing(self):
+        self.settings(TURN_BUDGET_MODE="warn")
+        payload = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": "s-warn", "cwd": str(self.tmp),
+                   "transcript_path": str(self.tmp / "s-warn.jsonl")}
+        results = [turn.turn_guard(payload, 1000) for _ in range(constants.TURN_STOP_STEPS + 5)]
+        said = [(n, result) for n, result in enumerate(results, 1) if result]
+        self.assertEqual([n for n, _ in said], [constants.turn_warn_steps(), constants.TURN_STOP_STEPS], "once at the warning, once at the budget")
+        (_, warning), (_, over) = said
+        self.assertIn("which kiasi reports but does not enforce", warning["hookSpecificOutput"]["additionalContext"])
+        self.assertIn("before this turn reaches its budget", warning["systemMessage"])
+        self.assertIn("warn mode, so no call is refused", over["hookSpecificOutput"]["additionalContext"])
+        self.assertIn(f"reached its budget at {constants.TURN_STOP_STEPS} tool calls", over["systemMessage"])
+        self.assertNotIn("terminalSequence", over, "no desktop notification when nothing stops")
+        self.assertIsNone(turn.paused_call({**payload, "hook_event_name": "PreToolUse"}))
+        state = events.load_session("s-warn")
+        self.assertNotIn("paused", state, "nothing is saved to resume")
+        [counted] = state["turns"].values()
+        self.assertFalse(counted["stopped"])
+        self.assertEqual(state["turn_budget"]["mode"], "warn")
+
+    def test_off_mode_only_counts_calls(self):
+        self.settings(TURN_BUDGET_MODE="off")
+        payload = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": "s-off", "cwd": str(self.tmp),
+                   "transcript_path": str(self.tmp / "s-off.jsonl")}
+        results = [turn.turn_guard(payload, 1000) for _ in range(constants.TURN_STOP_STEPS + 5)]
+        self.assertEqual([result for result in results if result], [])
+        self.assertIsNone(turn.paused_call({**payload, "hook_event_name": "PreToolUse"}))
+        state = events.load_session("s-off")
+        [counted] = state["turns"].values()
+        self.assertEqual(counted["steps"], constants.TURN_STOP_STEPS + 5, "calls are still counted for the reports")
+        import statusline
+        self.assertIsNone(statusline.turn_part(payload, state), "the status line shows no budget")
+        state["turn_budget"]["mode"] = "pause"
+        self.assertIn(f"{constants.TURN_STOP_STEPS + 5}/{constants.TURN_STOP_STEPS}", statusline.turn_part(payload, state))
+
+    def test_a_turn_paused_before_the_mode_changed_is_let_go(self):
+        payload = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": "s-switch", "cwd": str(self.tmp),
+                   "transcript_path": str(self.tmp / "s-switch.jsonl")}
+        for _ in range(constants.TURN_STOP_STEPS):
+            turn.turn_guard(payload, 1000)
+        call = {**payload, "hook_event_name": "PreToolUse"}
+        self.assertEqual(turn.paused_call(call)["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.settings(TURN_BUDGET_MODE="warn")
+        self.assertIsNone(turn.paused_call(call), "only pause mode refuses calls")
+
+    def test_the_session_rules_follow_the_budget_settings(self):
+        self.settings(TURN_BUDGET_MODE="pause", TURN_STOP_STEPS=60, TURN_STOP_TOKENS=8_000_000, TURN_WARN_STEPS=None, SUBAGENT_STEP_LIMIT=40)
+        self.assertEqual(session.rules_text(), constants.RULES_FILE.read_text().strip(), "the defaults render rules.md as written")
+        self.settings(TURN_STOP_STEPS=80, TURN_STOP_TOKENS=2_500_000, SUBAGENT_STEP_LIMIT=25)
+        text = session.rules_text()
+        self.assertIn("budget of 80 tool calls or 2.5M re-read tokens. At the warning, about 10 calls before the pause", text)
+        self.assertIn("own budget of 25 tool calls", text)
+        self.settings(TURN_BUDGET_MODE="warn")
+        text = session.rules_text()
+        self.assertIn("which kiasi reports but does not enforce", text)
+        self.assertNotIn("every call except Write and Agent is refused", text)
+        self.settings(TURN_BUDGET_MODE="off")
+        lines = session.rules_text().splitlines()
+        self.assertEqual([line for line in lines if "Every turn has a budget" in line], [])
+        self.assertIn("- Scope review subagents to the diff, never the whole repo.", lines)
+
+    def test_a_subagent_brief_states_its_budget_unless_the_budget_is_off(self):
+        brief = {"session_id": "s-brief", "tool_input": {"prompt": "Fix the failing test in a.py", "subagent_type": "general-purpose"}}
+        stated = reads.handle_agent(brief)["hookSpecificOutput"]["updatedInput"]["prompt"]
+        self.assertIn(f"Kiasi budget: finish within {constants.SUBAGENT_STEP_LIMIT} tool calls. Batch shell commands", stated)
+        self.settings(TURN_BUDGET_MODE="off")
+        plain = reads.handle_agent(brief)["hookSpecificOutput"]["updatedInput"]["prompt"]
+        self.assertNotIn("Kiasi budget", plain)
+        self.assertTrue(plain.endswith(constants.SUBAGENT_BRIEF_SUFFIX))
 
 
 class TestLoopCheck(KiasiTestCase):
