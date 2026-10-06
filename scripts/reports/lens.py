@@ -712,7 +712,7 @@ def build(days):
         "pastes": list(reversed(pastes)),
         "budget_rows": list(reversed(budget_rows)),
         "actions": list(reversed(actions))[: constants.LENS_MAX_ACTIONS],
-        "settings": {"warn_tokens": constants.CONTEXT_WARN_TOKENS, "hard_tokens": constants.CONTEXT_HARD_TOKENS, "turn_warn_steps": constants.TURN_WARN_STEPS,
+        "settings": {"warn_tokens": constants.CONTEXT_WARN_TOKENS, "hard_tokens": constants.CONTEXT_HARD_TOKENS, "turn_warn_steps": constants.turn_warn_steps(),
                      "turn_stop_steps": constants.TURN_STOP_STEPS, "comply_steps": constants.LENS_COMPLY_STEPS, "saving_kinds": SAVING_KINDS},
     }
     constants.LOG_DIR.mkdir(parents=True, exist_ok=True)

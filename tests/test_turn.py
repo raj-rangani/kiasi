@@ -19,8 +19,8 @@ class TestTurnGuard(KiasiTestCase):
         payload = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": "sess-turn",
                    "transcript_path": str(self.tmp / "missing-transcript.jsonl")}
         results = [turn.turn_guard(payload, 100_000) for _ in range(constants.TURN_STOP_STEPS)]
-        warning, paused = results[constants.TURN_WARN_STEPS - 1], results[-1]
-        self.assertIn(f"pauses at {constants.TURN_STOP_STEPS}", warning["systemMessage"])
+        warning, paused = results[constants.turn_warn_steps() - 1], results[-1]
+        self.assertIn(f"about {constants.TURN_WARN_MARGIN} tool calls left", warning["systemMessage"])
         self.assertNotIn("decision", paused, "a PostToolUse block shows the developer a hook error and stops nothing")
         checkpoint = events.load_session("sess-turn")["turns"]["missing-transcript"]["checkpoint"]
         self.assertIn(checkpoint, paused["hookSpecificOutput"]["additionalContext"])
@@ -107,6 +107,24 @@ class TestTurnGuard(KiasiTestCase):
             turn.paused_call({**ended, "hook_event_name": "PreToolUse"})
         self.assertIsNone(session.handle_stop(ended), "the refused calls already ended the turn with the notice")
 
+    def test_the_warning_comes_ten_calls_before_the_pause_and_counts_what_is_left(self):
+        def said(sid, tokens, steps):
+            payload = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": sid, "transcript_path": str(self.tmp / f"{sid}.jsonl")}
+            return [(n, r["systemMessage"]) for n, r in enumerate((turn.turn_guard(payload, tokens) for _ in range(steps)), 1) if r]
+
+        narrow = said("s-left", 1000, constants.TURN_STOP_STEPS)
+        self.assertEqual([n for n, _ in narrow], [constants.TURN_STOP_STEPS - constants.TURN_WARN_MARGIN, constants.TURN_STOP_STEPS])
+        self.assertIn(f"about {constants.TURN_WARN_MARGIN} tool calls left", narrow[0][1])
+        # A wide context runs out of tokens first: at 200k a call it warns at 6.4M and pauses at 8M, 8 calls later.
+        wide = said("s-wide", 200_000, constants.TURN_STOP_TOKENS // 200_000)
+        self.assertEqual([n for n, _ in wide], [constants.TURN_WARN_TOKENS // 200_000, constants.TURN_STOP_TOKENS // 200_000])
+        self.assertIn(f"about {(constants.TURN_STOP_TOKENS - constants.TURN_WARN_TOKENS) // 200_000} tool calls left", wide[0][1])
+        self.addCleanup(setattr, constants, "TURN_WARN_STEPS", constants.TURN_WARN_STEPS)
+        (self.tmp / constants.PROJECT_FILE_NAME).write_text(json.dumps({"turn_warn_steps": 25}))
+        constants.apply_project(str(self.tmp))
+        self.assertEqual([n for n, _ in said("s-set", 1000, constants.TURN_STOP_STEPS)], [25, constants.TURN_STOP_STEPS],
+                         "turn_warn_steps in .kiasi.json still sets the warning")
+
     def test_subagent_calls_have_their_own_turn(self):
         main = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": "s-agents", "transcript_path": str(self.tmp / "s-agents.jsonl")}
         results = [turn.turn_guard(main, 1000) for _ in range(constants.TURN_STOP_STEPS)]
@@ -138,12 +156,12 @@ class TestTurnGuard(KiasiTestCase):
         subagent = {**main, "agent_id": "a7c2e19b04d5f3a68"}
         results = [turn.turn_guard(subagent, 1000) for _ in range(constants.SUBAGENT_STEP_LIMIT)]
         said = [(n, r["hookSpecificOutput"]["additionalContext"]) for n, r in enumerate(results, 1) if r]
-        self.assertEqual([n for n, _ in said], [constants.SUBAGENT_STEP_LIMIT // 2, constants.SUBAGENT_STEP_LIMIT])
+        self.assertEqual([n for n, _ in said], [constants.warn_steps(constants.SUBAGENT_STEP_LIMIT), constants.SUBAGENT_STEP_LIMIT])
         self.assertIn(f"pauses at {constants.SUBAGENT_STEP_LIMIT} tool calls", said[0][1])
         self.assertIn("kiasi paused this subagent", said[1][1])
         self.assertIn("reply to the caller", said[1][1])
         self.assertNotIn("Agent call", said[1][1], "a subagent cannot start another subagent")
-        main_results = [turn.turn_guard(main, 1000) for _ in range(constants.SUBAGENT_STEP_LIMIT)]
+        main_results = [turn.turn_guard(main, 1000) for _ in range(constants.turn_warn_steps())]
         self.assertFalse([r for r in main_results if r and "kiasi paused" in r["hookSpecificOutput"]["additionalContext"]],
                          "the main turn keeps its own budget")
         logged = [json.loads(line) for line in constants.EVENT_LOG.read_text().splitlines()]

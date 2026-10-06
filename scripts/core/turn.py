@@ -74,14 +74,14 @@ def turn_guard(payload, tokens):
     # A subagent has its own budget and cannot start another subagent, so it hands what remains back to its caller.
     subagent = bool(payload.get("agent_id"))
     if subagent:
-        scope, warn_steps, stop_steps = "subagent", constants.SUBAGENT_STEP_LIMIT // 2, constants.SUBAGENT_STEP_LIMIT
+        scope, warn_steps, stop_steps = "subagent", constants.warn_steps(constants.SUBAGENT_STEP_LIMIT), constants.SUBAGENT_STEP_LIMIT
     else:
-        scope, warn_steps, stop_steps = "turn", constants.TURN_WARN_STEPS, constants.TURN_STOP_STEPS
+        scope, warn_steps, stop_steps = "turn", constants.turn_warn_steps(), constants.TURN_STOP_STEPS
     state = load_session(session_id)
     turn = state.setdefault("turns", {}).setdefault(key, {"steps": 0, "reread": 0, "warned": False, "stopped": False, "index": state.get("prompts", 0)})
     turn["steps"] += 1
     turn["reread"] += tokens
-    state["turn_budget"] = {"warn": constants.TURN_WARN_STEPS, "stop": constants.TURN_STOP_STEPS}
+    state["turn_budget"] = {"warn": constants.turn_warn_steps(), "stop": constants.TURN_STOP_STEPS}
     result = None
     over_stop = turn["steps"] >= stop_steps or turn["reread"] >= constants.TURN_STOP_TOKENS
     over_warn = turn["steps"] >= warn_steps or turn["reread"] >= constants.TURN_WARN_TOKENS
@@ -113,16 +113,17 @@ def turn_guard(payload, tokens):
     elif over_warn and not turn["warned"]:
         turn["warned"] = True
         next_step = "reply to the caller with that path" if subagent else "end the turn with that path or hand the checklist to one general-purpose subagent"
+        # Each further call re-reads about the current context, so the tokens can run out before the calls do.
+        left = max(1, min(stop_steps - turn["steps"], (constants.TURN_STOP_TOKENS - turn["reread"]) // max(tokens, 1)))
         context = (
-            f"kiasi {scope} budget: this {scope} has made {turn['steps']} tool calls and re-read {fmt_m(turn['reread'])} tokens at a context of {fmt_k(tokens)}. "
-            f"The {scope} pauses at {stop_steps} tool calls or {fmt_m(constants.TURN_STOP_TOKENS)} tokens, and then every call except {allowed} is refused. "
-            f"Before that: finish the item in progress, write the remaining items as a checklist to {checkpoint}, then {next_step}."
+            f"kiasi {scope} budget: about {left} tool calls left. This {scope} has made {turn['steps']} tool calls and re-read {fmt_m(turn['reread'])} "
+            f"tokens at a context of {fmt_k(tokens)}; it pauses at {stop_steps} tool calls or {fmt_m(constants.TURN_STOP_TOKENS)} tokens, and then every "
+            f"call except {allowed} is refused. Finish the item in progress, keep the remaining items as a checklist at {checkpoint}, then {next_step}."
         )
         result = {"hookSpecificOutput": {"hookEventName": payload.get("hook_event_name", "PostToolUse"), "additionalContext": context}}
         if not subagent:
-            result["systemMessage"] = (f"Kiasi: this turn has made {turn['steps']} tool calls and re-read {fmt_m(turn['reread'])} tokens; it pauses at "
-                                       f"{stop_steps} calls or {fmt_m(constants.TURN_STOP_TOKENS)} tokens. Claude was asked to finish the item in progress "
-                                       f"and save the rest to {checkpoint}.")
+            result["systemMessage"] = (f"Kiasi: about {left} tool calls left before this turn pauses ({turn['steps']} made, {fmt_m(turn['reread'])} tokens "
+                                       f"re-read). Claude was asked to finish the item in progress and keep the rest in {checkpoint}.")
         log_event({"event": "turn_warn", "session_id": session_id, "transcript": key, "steps": turn["steps"], "reread": turn["reread"], "context_tokens": tokens, "subagent": subagent})
     save_session(session_id, state)
     return result

@@ -84,15 +84,18 @@ PASTE_MIN_CHARS = 4_000
 PASTE_HEAD_CHARS = 300
 PASTE_BLOCK_CHARS = 40_000
 
-TURN_WARN_STEPS = 30
 TURN_STOP_STEPS = 60
-TURN_WARN_TOKENS = 4_000_000
 TURN_STOP_TOKENS = 8_000_000
+# The warning comes TURN_WARN_MARGIN calls, or a fifth of the tokens, before the pause: late enough to leave the turn its
+# working room, early enough to finish the item in progress and save the rest. turn_warn_steps in .kiasi.json sets the count.
+TURN_WARN_MARGIN = 10
+TURN_WARN_STEPS = None
+TURN_WARN_TOKENS = TURN_STOP_TOKENS * 4 // 5
 TURN_REMIND_STEPS = 5
 # Calls refused after a pause before the turn is ended outright, so a model that ignores the refusals stops re-reading.
 TURN_DENY_BACKSTOP = 3
 TURN_EXEMPT_TOOLS = {"Agent", "Write", "AskUserQuestion", "TodoWrite", "TaskCreate", "TaskUpdate"}
-# A subagent's own turn budget: stated in its brief, warned at half, paused at the limit.
+# A subagent's own turn budget: stated in its brief, warned TURN_WARN_MARGIN calls before the limit, paused at it.
 SUBAGENT_STEP_LIMIT = 40
 SUBAGENT_BRIEF_SUFFIX = (
     "Kiasi budget: finish within {steps} tool calls. Batch shell commands, run each test suite once per round, never poll with sleep. "
@@ -360,6 +363,16 @@ PROJECT_KEYS = {
     "turn_warn_steps": "TURN_WARN_STEPS",
     "subagent_call_budget": "SUBAGENT_STEP_LIMIT",
 }
+
+
+def warn_steps(stop_steps):
+    """The call count of the warning for a budget of stop_steps: TURN_WARN_MARGIN calls before it, never before half way."""
+    return max(stop_steps - TURN_WARN_MARGIN, stop_steps // 2)
+
+
+def turn_warn_steps():
+    """The main turn's warning: turn_warn_steps from .kiasi.json when set, else TURN_WARN_MARGIN calls before the pause."""
+    return TURN_WARN_STEPS or warn_steps(TURN_STOP_STEPS)
 
 
 def apply_project(cwd):
