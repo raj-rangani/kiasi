@@ -89,8 +89,10 @@ TURN_STOP_STEPS = 60
 TURN_WARN_TOKENS = 4_000_000
 TURN_STOP_TOKENS = 8_000_000
 TURN_REMIND_STEPS = 5
+# Calls refused after a pause before the turn is ended outright, so a model that ignores the refusals stops re-reading.
+TURN_DENY_BACKSTOP = 3
 TURN_EXEMPT_TOOLS = {"Agent", "Write", "AskUserQuestion", "TodoWrite", "TaskCreate", "TaskUpdate"}
-# A subagent's own turn budget: stated in its brief, warned at half, stopped at the limit.
+# A subagent's own turn budget: stated in its brief, warned at half, paused at the limit.
 SUBAGENT_STEP_LIMIT = 40
 SUBAGENT_BRIEF_SUFFIX = (
     "Kiasi budget: finish within {steps} tool calls. Batch shell commands, run each test suite once per round, never poll with sleep. "

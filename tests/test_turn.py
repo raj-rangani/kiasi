@@ -14,32 +14,80 @@ from core import turn  # noqa: E402
 
 
 class TestTurnGuard(KiasiTestCase):
-    def test_stops_after_budget(self):
-        session_id = "sess-turn"
-        transcript_path = str(self.tmp / "missing-transcript.jsonl")
-        blocked_at = None
-        for step in range(1, constants.TURN_STOP_STEPS + 5):
-            payload = {
-                "hook_event_name": "PostToolUse",
-                "tool_name": "Bash",
-                "session_id": session_id,
-                "transcript_path": transcript_path,
-            }
-            result = turn.turn_guard(payload, 1000)
-            if result and result.get("decision") == "block":
-                blocked_at = step
-                break
-        self.assertIsNotNone(blocked_at, "turn_guard should block once the step budget is exhausted")
-        self.assertGreaterEqual(blocked_at, constants.TURN_STOP_STEPS)
+    def test_pauses_at_the_budget_with_a_notice_instead_of_an_error(self):
+        payload = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": "sess-turn",
+                   "transcript_path": str(self.tmp / "missing-transcript.jsonl")}
+        results = [turn.turn_guard(payload, 100_000) for _ in range(constants.TURN_STOP_STEPS)]
+        warning, paused = results[constants.TURN_WARN_STEPS - 1], results[-1]
+        self.assertIn(f"pauses at {constants.TURN_STOP_STEPS}", warning["systemMessage"])
+        self.assertNotIn("decision", paused, "a PostToolUse block shows the developer a hook error and stops nothing")
+        checkpoint = events.load_session("sess-turn")["turns"]["missing-transcript"]["checkpoint"]
+        self.assertIn(checkpoint, paused["hookSpecificOutput"]["additionalContext"])
+        notice = paused["systemMessage"]
+        for part in (f"Kiasi paused this turn at {constants.TURN_STOP_STEPS} tool calls", checkpoint, 'Reply "continue"', "/clear", "100k tokens"):
+            self.assertIn(part, notice)
+        self.assertNotIn("exhausted", notice + paused["hookSpecificOutput"]["additionalContext"])
+        # Claude Code passes on only OSC 0/1/2/9/99/777 and BEL, and an OSC 9 body may not start with a digit.
+        self.assertEqual(paused["terminalSequence"], f"\x1b]9;Kiasi paused this turn at {constants.TURN_STOP_STEPS} tool calls\x07\x07")
+
+    def test_a_paused_turn_refuses_calls_then_ends_the_turn(self):
+        post = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": "s-pause", "transcript_path": str(self.tmp / "s-pause.jsonl")}
+        pre = {**post, "hook_event_name": "PreToolUse", "tool_name": "Edit"}
+        for _ in range(constants.TURN_STOP_STEPS - 1):
+            turn.turn_guard(post, 1000)
+        self.assertIsNone(turn.handle_pre_tool_use(pre), "nothing is refused before the pause")
+        turn.turn_guard(post, 1000)
+        for tool in ("Write", "Agent", "TodoWrite"):
+            self.assertIsNone(turn.paused_call({**pre, "tool_name": tool}), f"{tool} stays allowed for the checklist and the hand-off")
+        refused = [turn.handle_pre_tool_use(pre) for _ in range(constants.TURN_DENY_BACKSTOP)]
+        self.assertEqual({r["hookSpecificOutput"]["permissionDecision"] for r in refused}, {"deny"})
+        reason = refused[0]["hookSpecificOutput"]["permissionDecisionReason"]
+        self.assertIn("so this call was not run", reason)
+        self.assertIn(events.load_session("s-pause")["turns"]["s-pause"]["checkpoint"], reason)
+        self.assertFalse([r for r in refused[:-1] if "continue" in r], "the first refusals leave Claude room to write the checklist")
+        self.assertIs(refused[-1]["continue"], False)
+        self.assertIn("Kiasi paused this turn", refused[-1]["stopReason"])
+        prompt.handle_prompt({"prompt": "continue", "session_id": "s-pause", "transcript_path": post["transcript_path"]})
+        self.assertIsNone(turn.handle_pre_tool_use(pre), "the next prompt starts a fresh budget")
+
+    def test_a_paused_subagent_is_refused_but_never_ends_the_developers_turn(self):
+        post = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": "s-subpause",
+                "transcript_path": str(self.tmp / "s-subpause.jsonl"), "agent_id": "a5e0c3d9b71f2a846"}
+        paused = [turn.turn_guard(post, 1000) for _ in range(constants.SUBAGENT_STEP_LIMIT)][-1]
+        self.assertIn("kiasi paused this subagent", paused["hookSpecificOutput"]["additionalContext"])
+        self.assertNotIn("terminalSequence", paused, "the developer's turn is still running")
+        refused = [turn.paused_call({**post, "hook_event_name": "PreToolUse"}) for _ in range(constants.TURN_DENY_BACKSTOP + 1)]
+        self.assertEqual({r["hookSpecificOutput"]["permissionDecision"] for r in refused}, {"deny"})
+        self.assertFalse([r for r in refused if "continue" in r], "continue: false would end the developer's turn too")
+        main = {k: v for k, v in post.items() if k != "agent_id"}
+        self.assertIsNone(turn.paused_call({**main, "hook_event_name": "PreToolUse"}))
+
+    def test_a_refused_call_counts_as_neither_a_step_nor_a_failure(self):
+        payload = {"hook_event_name": "PostToolUseFailure", "tool_name": "Bash", "tool_input": {"command": "make"}, "session_id": "s-refused",
+                   "transcript_path": str(self.tmp / "s-refused.jsonl"), "error": "kiasi paused this turn at 60 tool calls, so this call was not run."}
+        self.assertEqual([turn.handle_tool_failure(payload) for _ in range(constants.LOOP_SAME_FAILS)], [None] * constants.LOOP_SAME_FAILS)
+        self.assertEqual(events.load_session("s-refused").get("turns", {}), {})
+
+    def test_the_hook_refuses_any_tool_once_the_turn_is_paused(self):
+        post = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": "s-hook", "transcript_path": str(self.tmp / "s-hook.jsonl")}
+        for _ in range(constants.TURN_STOP_STEPS):
+            turn.turn_guard(post, 1000)
+        hook = subprocess.run([sys.executable, str(SCRIPTS / "kiasi.py")], input=json.dumps({**post, "hook_event_name": "PreToolUse", "tool_name": "Grep"}),
+                              capture_output=True, text=True, env={**os.environ, "CLAUDE_PLUGIN_DATA": str(self.tmp)}, timeout=60)
+        self.assertEqual(hook.stderr, "")
+        self.assertEqual(json.loads(hook.stdout)["hookSpecificOutput"]["permissionDecision"], "deny")
+        matchers = [group.get("matcher") for group in json.loads((SCRIPTS.parent / "hooks" / "hooks.json").read_text())["hooks"]["PreToolUse"]]
+        self.assertEqual(matchers, [""], "PreToolUse has to see every tool to refuse it")
 
     def test_subagent_calls_have_their_own_turn(self):
         main = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": "s-agents", "transcript_path": str(self.tmp / "s-agents.jsonl")}
         results = [turn.turn_guard(main, 1000) for _ in range(constants.TURN_STOP_STEPS)]
-        self.assertEqual(results[-1]["decision"], "block")
+        self.assertIn("kiasi paused this turn", results[-1]["hookSpecificOutput"]["additionalContext"])
         subagent = {**main, "agent_id": "a1fd597a875bd1f14"}
         handed_off = [turn.turn_guard(subagent, 1000) for _ in range(constants.TURN_REMIND_STEPS)]
-        self.assertFalse([r for r in handed_off if r and r.get("decision") == "block"],
-                         "the subagent a stopped turn hands its checklist to must be able to work")
+        self.assertFalse([r for r in handed_off if r], "the subagent a paused turn hands its checklist to must be able to work")
+        self.assertIsNone(turn.paused_call({**subagent, "hook_event_name": "PreToolUse"}))
+        self.assertIsNotNone(turn.paused_call({**main, "hook_event_name": "PreToolUse"}))
         turns = events.load_session("s-agents")["turns"]
         self.assertEqual(turns["s-agents"]["steps"], constants.TURN_STOP_STEPS)
         self.assertEqual(turns["a1fd597a875bd1f14"]["steps"], constants.TURN_REMIND_STEPS)
@@ -61,14 +109,15 @@ class TestTurnGuard(KiasiTestCase):
         main = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": "s-sub", "transcript_path": str(self.tmp / "s-sub.jsonl")}
         subagent = {**main, "agent_id": "a7c2e19b04d5f3a68"}
         results = [turn.turn_guard(subagent, 1000) for _ in range(constants.SUBAGENT_STEP_LIMIT)]
-        warned = [n for n, r in enumerate(results, 1) if r and "hookSpecificOutput" in r]
-        stopped = [n for n, r in enumerate(results, 1) if r and r.get("decision") == "block"]
-        self.assertEqual((warned, stopped), ([constants.SUBAGENT_STEP_LIMIT // 2], [constants.SUBAGENT_STEP_LIMIT]))
-        self.assertIn(f"stopped at {constants.SUBAGENT_STEP_LIMIT} tool calls", results[warned[0] - 1]["hookSpecificOutput"]["additionalContext"])
-        self.assertIn("reply to the caller", results[-1]["reason"])
-        self.assertNotIn("Agent call", results[-1]["reason"], "a subagent cannot start another subagent")
+        said = [(n, r["hookSpecificOutput"]["additionalContext"]) for n, r in enumerate(results, 1) if r]
+        self.assertEqual([n for n, _ in said], [constants.SUBAGENT_STEP_LIMIT // 2, constants.SUBAGENT_STEP_LIMIT])
+        self.assertIn(f"pauses at {constants.SUBAGENT_STEP_LIMIT} tool calls", said[0][1])
+        self.assertIn("kiasi paused this subagent", said[1][1])
+        self.assertIn("reply to the caller", said[1][1])
+        self.assertNotIn("Agent call", said[1][1], "a subagent cannot start another subagent")
         main_results = [turn.turn_guard(main, 1000) for _ in range(constants.SUBAGENT_STEP_LIMIT)]
-        self.assertFalse([r for r in main_results if r and r.get("decision") == "block"], "the main turn keeps its own budget")
+        self.assertFalse([r for r in main_results if r and "kiasi paused" in r["hookSpecificOutput"]["additionalContext"]],
+                         "the main turn keeps its own budget")
         logged = [json.loads(line) for line in constants.EVENT_LOG.read_text().splitlines()]
         self.assertEqual([e.get("subagent") for e in logged if e["event"] in ("turn_warn", "turn_stop")], [True, True, False])
 
@@ -89,10 +138,12 @@ class TestTurnGuard(KiasiTestCase):
         warning = stop = ""
         for _ in range(constants.TURN_STOP_STEPS):
             result = turn.turn_guard(payload, 1000) or {}
-            if "hookSpecificOutput" in result:
-                warning = result["hookSpecificOutput"]["additionalContext"]
+            context = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+            if context and not warning:
+                warning = context
                 (constants.CHECKPOINT_DIR / "checklis-0.md").write_text("- [ ] left\n")
-            stop = result.get("reason", stop)
+            elif context:
+                stop = context
         self.assertIn(str(constants.CHECKPOINT_DIR / "checklis-0.md"), warning)
         self.assertIn(str(constants.CHECKPOINT_DIR / "checklis-0-2.md"), stop)
 

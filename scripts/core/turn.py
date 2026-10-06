@@ -1,7 +1,7 @@
 from core import constants
 from core.caps import failure_label, handle_tool_output, leading_command
 from core.events import load_session, log_event, save_session
-from core.reads import track_reads
+from core.reads import handle_pre_tool, track_reads
 from core.transcript import caller_key, caller_transcript, current_context_tokens, fmt_k, fmt_m, is_short_reply, is_system_prompt, is_task_prompt, prompt_text, tail_entries
 
 
@@ -86,34 +86,98 @@ def turn_guard(payload, tokens):
     over_stop = turn["steps"] >= stop_steps or turn["reread"] >= constants.TURN_STOP_TOKENS
     over_warn = turn["steps"] >= warn_steps or turn["reread"] >= constants.TURN_WARN_TOKENS
     checkpoint = checkpoint_path(key, turn)
+    allowed = "Write" if subagent else "Write and Agent"
     if over_stop and tool_name not in constants.TURN_EXEMPT_TOOLS and (not turn["stopped"] or (turn["steps"] - turn["stopped"]) % constants.TURN_REMIND_STEPS == 0):
         first = not turn["stopped"]
-        turn["stopped"] = turn["stopped"] or turn["steps"]
         if first:
+            # A pause, not a PostToolUse block: that block came after the call had run, stopped nothing and showed the
+            # developer a hook error. paused_call refuses the calls that follow, before they run.
+            turn.update(stopped=turn["steps"], checkpoint=str(checkpoint), context=tokens)
             hand_off = ("end with your reply to the caller: what is done, what is verified, what remains and the checklist path" if subagent else
                         "either make one Agent call with subagent_type general-purpose whose brief is that checklist path plus the done condition, "
-                        "or end the turn reporting what is done, what is verified and what remains")
-            reason = (
-                f"kiasi {scope} budget exhausted: {turn['steps']} tool calls and {fmt_m(turn['reread'])} tokens re-read in this {scope} at a context of {fmt_k(tokens)}. "
-                f"Make no further Read, Bash, Edit or search calls. Write what remains as a checklist to {checkpoint} (Write is allowed), then {hand_off}."
+                        "or end the turn reporting what is done, what is verified and what remains. If work remains when the turn ends, close "
+                        f'your final message with this line for the developer: "{pause_line(turn)}"')
+            context = (
+                f"kiasi paused this {scope}: {turn['steps']} tool calls and {fmt_m(turn['reread'])} tokens re-read at a context of {fmt_k(tokens)}. "
+                f"Every further call except {allowed} is refused. Write what remains as a checklist to {checkpoint}, then {hand_off}."
             )
         else:
-            reason = (f"kiasi: {scope} budget still exhausted ({turn['steps']} tool calls, {fmt_m(turn['reread'])} tokens). "
-                      f"Write the checklist to {checkpoint} and {'reply to the caller' if subagent else 'stop or delegate'}.")
-        result = {"decision": "block", "reason": reason}
+            context = (f"kiasi: this {scope} is still paused ({turn['steps']} tool calls, {fmt_m(turn['reread'])} tokens). "
+                       f"Write the checklist to {turn.get('checkpoint', checkpoint)} and {'reply to the caller' if subagent else 'end the turn or delegate'}.")
+        result = {"hookSpecificOutput": {"hookEventName": payload.get("hook_event_name", "PostToolUse"), "additionalContext": context}}
+        if first and subagent:
+            result["systemMessage"] = f"Kiasi paused a subagent at {turn['steps']} tool calls; it hands the remaining work back in {checkpoint}."
+        elif first:
+            result.update(systemMessage=pause_notice(turn), terminalSequence=pause_alert(turn))
         log_event({"event": "turn_stop", "session_id": session_id, "transcript": key, "steps": turn["steps"], "reread": turn["reread"], "context_tokens": tokens, "first": first, "subagent": subagent})
     elif over_warn and not turn["warned"]:
         turn["warned"] = True
         next_step = "reply to the caller with that path" if subagent else "end the turn with that path or hand the checklist to one general-purpose subagent"
         context = (
             f"kiasi {scope} budget: this {scope} has made {turn['steps']} tool calls and re-read {fmt_m(turn['reread'])} tokens at a context of {fmt_k(tokens)}. "
-            f"The {scope} is stopped at {stop_steps} tool calls or {fmt_m(constants.TURN_STOP_TOKENS)} tokens. Before that: finish the item in progress, "
-            f"write the remaining items as a checklist to {checkpoint}, then {next_step}."
+            f"The {scope} pauses at {stop_steps} tool calls or {fmt_m(constants.TURN_STOP_TOKENS)} tokens, and then every call except {allowed} is refused. "
+            f"Before that: finish the item in progress, write the remaining items as a checklist to {checkpoint}, then {next_step}."
         )
         result = {"hookSpecificOutput": {"hookEventName": payload.get("hook_event_name", "PostToolUse"), "additionalContext": context}}
+        if not subagent:
+            result["systemMessage"] = (f"Kiasi: this turn has made {turn['steps']} tool calls and re-read {fmt_m(turn['reread'])} tokens; it pauses at "
+                                       f"{stop_steps} calls or {fmt_m(constants.TURN_STOP_TOKENS)} tokens. Claude was asked to finish the item in progress "
+                                       f"and save the rest to {checkpoint}.")
         log_event({"event": "turn_warn", "session_id": session_id, "transcript": key, "steps": turn["steps"], "reread": turn["reread"], "context_tokens": tokens, "subagent": subagent})
     save_session(session_id, state)
     return result
+
+
+def pause_line(turn):
+    return (f"Paused by Kiasi at {turn['stopped']} tool calls; the rest is in {turn['checkpoint']}. "
+            "Reply continue to resume here, or run /clear and ask me to resume from that file.")
+
+
+def pause_notice(turn):
+    """What the developer reads at a pause: the cause, where the rest goes and both ways to resume, never an error."""
+    return (f"Kiasi paused this turn at {turn['stopped']} tool calls ({fmt_m(turn['reread'])} tokens re-read). "
+            f"The remaining work goes to {turn['checkpoint']}. "
+            f'Reply "continue" to resume in this session (each step re-reads about {fmt_k(turn.get("context", 0))} tokens), '
+            "or run /clear and ask Claude to resume from that file, which is cheaper.")
+
+
+def pause_alert(turn):
+    # OSC 9 raises a desktop notification where the terminal supports it, and the BEL after it rings the bell
+    # everywhere else. Claude Code passes on only OSC 0/1/2/9/99/777 and BEL, and only in interactive sessions.
+    return f"\x1b]9;Kiasi paused this turn at {turn['stopped']} tool calls\x07\x07"
+
+
+def paused_call(payload):
+    """PreToolUse: once a turn or subagent is paused, refuse every call but the checklist Write and the hand-off."""
+    if payload.get("tool_name") in constants.TURN_EXEMPT_TOOLS:
+        return None
+    session_id = payload.get("session_id", "")
+    state = load_session(session_id)
+    key = caller_key(payload)
+    turn = state.get("turns", {}).get(key)
+    if not turn or not turn.get("stopped"):
+        return None
+    subagent = bool(payload.get("agent_id"))
+    turn["denied"] = turn.get("denied", 0) + 1
+    turn.setdefault("checkpoint", str(checkpoint_path(key, turn)))
+    save_session(session_id, state)
+    scope, next_step = ("subagent", "end with your reply to the caller") if subagent else ("turn", "end the turn with the pause notice for the developer")
+    reason = (f"kiasi paused this {scope} at {turn['stopped']} tool calls, so this call was not run. "
+              f"Write what remains to {turn['checkpoint']} if you have not yet, then {next_step}.")
+    output = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": reason}}
+    if not subagent and turn["denied"] >= constants.TURN_DENY_BACKSTOP:
+        # Claude kept calling tools after the pause, so the turn ends here. A subagent is only refused:
+        # continue: false would end the developer's turn along with it.
+        output.update({"continue": False, "stopReason": pause_notice(turn)})
+    return output
+
+
+def handle_pre_tool_use(payload):
+    """PreToolUse for every tool: a paused turn refuses the call, then the routed tools get their own checks."""
+    refused = paused_call(payload)
+    if refused or payload.get("tool_name") not in constants.PRE_TOOL_HOOKED:
+        return refused
+    return handle_pre_tool(payload)
 
 
 def handle_post_tool(payload):
@@ -154,7 +218,8 @@ def loop_check(payload):
 
 
 def handle_tool_failure(payload):
-    if payload.get("is_interrupt"):
+    # A call refused at the pause never ran, so it is neither a step nor a failure to rethink.
+    if payload.get("is_interrupt") or "kiasi paused this" in str(payload.get("error") or ""):
         return None
     guard = turn_guard(payload, current_context_tokens(tail_entries(caller_transcript(payload))))
     nudge = loop_check(payload)

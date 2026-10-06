@@ -12,7 +12,7 @@ On the machine it was built on, context re-sent per step went from 201k to 31k t
 ## Key features
 
 - **Output cap and cleaning**: tool output over 12,000 chars is cut, progress bars and repeated lines are stripped, the full text is saved to disk and named in the cut.
-- **Turn budget and loop check**: warned at 30 tool calls, stopped at 60; the same call failing 3 times tells Claude to rethink instead of retry.
+- **Turn budget and loop check**: warned at 30 tool calls, paused at 60 (later calls are refused, Claude saves a checklist, and you are told how to resume); the same call failing 3 times tells Claude to rethink instead of retry.
 - **Re-read skip**: a file already in context and unchanged comes back as a pointer, not the text again.
 - **Paste manager**: a paste over 4,000 chars is saved to disk; over 40,000 it is refused and you resend with the path.
 - **Pruner and state** (experimental): at compaction your prompts and Claude's replies stay word for word while old tool output is pruned; the task, edited files and failing commands are re-injected.
