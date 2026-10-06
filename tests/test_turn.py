@@ -204,6 +204,8 @@ class TestTurnGuard(KiasiTestCase):
         self.assertIn(str(checkpoint), results[0]["hookSpecificOutput"]["additionalContext"])
         self.assertIn(str(checkpoint), results[-1]["systemMessage"])
         self.assertEqual(json.loads(turn.paused_file(str(project)).read_text())["checkpoint"], str(checkpoint))
+        logged = {e["event"]: e.get("checkpoint") for e in map(json.loads, constants.EVENT_LOG.read_text().splitlines()) if e.get("session_id") == "s-proj"}
+        self.assertEqual((logged["turn_warn"], logged["turn_stop"]), (str(checkpoint), str(checkpoint)), "cleanup finds project checklist folders through these events")
 
     def test_without_a_writable_project_folder_the_checklist_stays_in_the_data_folder(self):
         for cwd in (None, "", str(self.tmp / "missing")):
@@ -353,6 +355,8 @@ class TestTurnGuard(KiasiTestCase):
         [counted] = state["turns"].values()
         self.assertFalse(counted["stopped"])
         self.assertEqual(state["turn_budget"]["mode"], "warn")
+        logged = {e["event"]: e.get("checkpoint") for e in map(json.loads, constants.EVENT_LOG.read_text().splitlines()) if e.get("session_id") == "s-warn"}
+        self.assertEqual({Path(logged[name]).parent for name in ("turn_warn", "turn_over")}, {self.tmp / ".kiasi" / "checkpoints"})
 
     def test_off_mode_only_counts_calls(self):
         self.settings(TURN_BUDGET_MODE="off")

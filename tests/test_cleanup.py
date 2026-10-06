@@ -122,6 +122,34 @@ class TestCleanup(KiasiTestCase):
         self.assertTrue(cleaned["sessions"]["auto"])
         self.assertEqual((moves["count"], moves["bytes"]), (3, 500), "everything due before report-only ends moves then")
 
+    def test_project_checklists_named_by_turn_events_are_cleaned_and_restored(self):
+        constants.CLEANUP_MODE = "trash"
+        folder = self.tmp / "app" / ".kiasi" / "checkpoints"
+        idle = self.put(folder / f"{self.SID[:8]}-3.md", self.old)
+        stranger = self.put(folder / "plan.md", self.old)
+        unnamed = self.put(self.tmp / "other" / ".kiasi" / "checkpoints" / f"{self.SID[:8]}-4.md", self.old)
+        constants.EVENT_LOG.write_text(json.dumps({"event": "turn_warn", "session_id": self.SID, "checkpoint": str(idle)}) + "\n")
+        self.assertIn(("checkpoints", folder, constants.CLEANUP_IDLE_DAYS), self.cleanup.managed_folders(), "the storage tab counts them too")
+        self.assertNotIn(idle, {row[1] for row in self.cleanup.candidates(time.time(), self.SID)}, "the running session keeps its checklists")
+        result, _ = self.cleanup.run("", False)
+        self.assertEqual(result["moved"], 1)
+        self.assertFalse(idle.exists())
+        self.assertTrue(stranger.exists(), "files Kiasi did not name are never touched")
+        self.assertTrue(unnamed.exists(), "only folders a turn event named are cleaned")
+        self.assertEqual(self.cleanup.restore({idle.name}), 1)
+        self.assertEqual(idle.read_text(), "x" * 100, "a restore puts the checklist back in its project")
+
+    def test_checklist_paths_outside_a_project_kiasi_folder_or_behind_a_symlink_are_ignored(self):
+        elsewhere = self.put(self.tmp / "elsewhere" / "checkpoints" / f"{self.SID[:8]}-3.md", self.old)
+        project = self.tmp / "app"
+        project.mkdir()
+        (project / ".kiasi").symlink_to(self.tmp / "elsewhere")
+        linked = project / ".kiasi" / "checkpoints" / elsewhere.name
+        loose = self.put(self.tmp / "docs" / f"{self.SID[:8]}-5.md", self.old)
+        constants.EVENT_LOG.write_text("".join(json.dumps({"event": "turn_stop", "checkpoint": str(p)}) + "\n" for p in (linked, loose, elsewhere)))
+        self.assertEqual(self.cleanup.checklist_folders(), [])
+        self.assertFalse({elsewhere, linked, loose} & {row[1] for row in self.cleanup.candidates(time.time(), "")})
+
     def test_off_mode_does_nothing(self):
         constants.CLEANUP_MODE = "off"
         self.put(constants.OUTPUT_DIR / "toolu_old.txt", self.old)

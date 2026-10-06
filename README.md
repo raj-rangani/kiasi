@@ -81,7 +81,7 @@ The days before you installed Kiasi are the baseline, built from your own transc
 - No prompt text is logged. Reports hold counts and sizes, never what you typed.
 - The dashboard listens on `127.0.0.1` only and refuses other host names.
 - Nothing is lost. Every cut output and refused paste is saved in full and found again with `mcp__kiasi__search` or `scripts/search.py`.
-- Saved files are moved to `trash/` after 7 unused days (pastes 14) and deleted 7 days later. The first week is report-only, `cleanup.py --restore` undoes a move, and `KIASI_CLEANUP=off` disables it.
+- Saved files are moved to `trash/` after 7 unused days (pastes 14) and deleted 7 days later. The first week is report-only, `cleanup.py --restore` undoes a move, and `KIASI_CLEANUP=off` disables it. Turn checklists in a project's `.kiasi/` folder are cleaned the same way, and a restore puts them back there.
 
 ## Settings
 

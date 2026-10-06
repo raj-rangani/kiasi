@@ -121,7 +121,8 @@ def turn_guard(payload, tokens):
             result["systemMessage"] = f"Kiasi paused a subagent at {turn['steps']} tool calls; it hands the remaining work back in {checkpoint}."
         elif first:
             result.update(systemMessage=pause_notice(turn), terminalSequence=pause_alert(turn))
-        log_event({"event": "turn_stop", "session_id": session_id, "transcript": key, "steps": turn["steps"], "reread": turn["reread"], "context_tokens": tokens, "first": first, "subagent": subagent})
+        log_event({"event": "turn_stop", "session_id": session_id, "transcript": key, "steps": turn["steps"], "reread": turn["reread"], "context_tokens": tokens, "first": first, "subagent": subagent,
+                   "checkpoint": turn.get("checkpoint", str(checkpoint))})
     elif over_warn and not turn["warned"]:
         turn["warned"] = True
         make_checklist_folder(checkpoint)
@@ -139,7 +140,7 @@ def turn_guard(payload, tokens):
         if not subagent:
             result["systemMessage"] = (f"Kiasi: about {left} tool calls left before this turn {'pauses' if mode == 'pause' else 'reaches its budget'} ({turn['steps']} made, {fmt_m(turn['reread'])} tokens "
                                        f"re-read). Claude was asked to finish the item in progress and keep the rest in {checkpoint}.")
-        log_event({"event": "turn_warn", "session_id": session_id, "transcript": key, "steps": turn["steps"], "reread": turn["reread"], "context_tokens": tokens, "subagent": subagent})
+        log_event({"event": "turn_warn", "session_id": session_id, "transcript": key, "steps": turn["steps"], "reread": turn["reread"], "context_tokens": tokens, "subagent": subagent, "checkpoint": str(checkpoint)})
     save_session(session_id, state)
     return result
 
@@ -158,7 +159,7 @@ def over_budget(payload, turn, scope, checkpoint, tokens):
         result["systemMessage"] = (f"Kiasi: this turn reached its budget at {turn['steps']} tool calls ({fmt_m(turn['reread'])} tokens re-read). "
                                    f"The budget is in warn mode, so nothing is refused; Claude was asked to wrap up and keep the rest in {checkpoint}.")
     log_event({"event": "turn_over", "session_id": payload.get("session_id", ""), "transcript": caller_key(payload), "steps": turn["steps"],
-               "reread": turn["reread"], "context_tokens": tokens, "subagent": subagent})
+               "reread": turn["reread"], "context_tokens": tokens, "subagent": subagent, "checkpoint": str(checkpoint)})
     return result
 
 

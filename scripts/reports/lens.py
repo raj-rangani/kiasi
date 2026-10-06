@@ -633,7 +633,7 @@ def storage(recalls=()):
     except (OSError, ValueError):
         pass
     first = cleanup.parse_ts(last.get("first_run"))
-    managed = [(name, path, stat) for name, (folder, _) in cleanup.folders().items() for path, stat in cleanup.own_files(name, folder)]
+    managed = [(name, path, stat) for name, folder, _ in cleanup.managed_folders() for path, stat in cleanup.own_files(name, folder)]
     managed += [("notes", path, stat) for path, stat in cleanup.own_files("notes", constants.NOTES_DIR)]
     report_end = first + constants.CLEANUP_REPORT_DAYS * 86400 if first and constants.CLEANUP_MODE == "auto" and first + constants.CLEANUP_REPORT_DAYS * 86400 > now else None
     cleaned, report_moves = storage_folders(cleanup, recalls, now, report_end)
