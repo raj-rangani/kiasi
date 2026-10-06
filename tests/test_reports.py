@@ -23,6 +23,13 @@ class PromptRows(unittest.TestCase):
 
 
 class TestLensSignals(KiasiTestCase):
+    def test_subagent_budget_events_stay_out_of_the_turn_figures(self):
+        from reports import lens
+        stop = {"ts": "2026-10-06T10:00:00", "event": "turn_stop", "session_id": "s1", "steps": 40, "first": True, "subagent": True}
+        self.assertIsNone(lens.classify(0, stop, {}))
+        self.assertIsNone(lens.classify(0, {**stop, "event": "turn_warn", "steps": 20}, {}))
+        self.assertEqual(lens.classify(0, {**stop, "steps": 60, "subagent": False}, {})["kind"], "turn_stop")
+
     def test_miss_cause_and_recall(self):
         from reports import lens
         self.assertEqual(lens.miss_cause(10, True, False), "compaction")
@@ -165,6 +172,13 @@ class TestBudgetReport(ReportTestCase):
         self.write(self.project / "s1.jsonl", [self.step("old", 1, 9999, day=old), self.prompt(2), self.step("r1", 3, 1000)])
         days = [row["day"] for row in self.budget.build(7)["per_day"]]
         self.assertEqual(days, [self.day])
+
+    def test_subagent_stops_are_counted_apart_from_turn_stops(self):
+        from core import events
+        for subagent in (False, True, True):
+            events.log_event({"event": "turn_stop", "session_id": "s1", "steps": 40, "first": True, "subagent": subagent})
+        counts = self.budget.kiasi_actions(7)["counts"]
+        self.assertEqual((counts.get("turns stopped"), counts.get("subagents stopped")), (1, 2))
 
     def test_compaction_is_a_drop_to_under_half_from_over_150k(self):
         self.write(self.project / "s1.jsonl", [

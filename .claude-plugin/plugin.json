@@ -24,6 +24,13 @@
       "default": 60,
       "min": 5
     },
+    "subagent_call_budget": {
+      "type": "number",
+      "title": "Subagent call budget",
+      "description": "Tool calls one subagent may make before kiasi blocks further calls and asks it to checkpoint and reply to its caller.",
+      "default": 40,
+      "min": 5
+    },
     "paste_refusal_chars": {
       "type": "number",
       "title": "Paste refusal size (chars)",

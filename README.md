@@ -91,6 +91,7 @@ Set these with `/config` or as env vars. Every other threshold is a named consta
 |---|---|---|
 | `output_cap_chars` | `CLAUDE_PLUGIN_OPTION_OUTPUT_CAP_CHARS` | 12000 |
 | `turn_call_budget` | `CLAUDE_PLUGIN_OPTION_TURN_CALL_BUDGET` | 60 |
+| `subagent_call_budget` | `CLAUDE_PLUGIN_OPTION_SUBAGENT_CALL_BUDGET` | 40 |
 | `paste_refusal_chars` | `CLAUDE_PLUGIN_OPTION_PASTE_REFUSAL_CHARS` | 40000 |
 | `compaction_window_text` | `CLAUDE_PLUGIN_OPTION_COMPACTION_WINDOW_TEXT` | "200000" |
 

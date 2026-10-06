@@ -57,6 +57,21 @@ class TestTurnGuard(KiasiTestCase):
         turn.handle_tool_failure(payload)
         self.assertEqual(events.load_session("s-ctx")["turns"]["a4bb4aca3bed22433"]["reread"], 20_000)
 
+    def test_a_subagent_stops_at_its_own_budget(self):
+        main = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": "s-sub", "transcript_path": str(self.tmp / "s-sub.jsonl")}
+        subagent = {**main, "agent_id": "a7c2e19b04d5f3a68"}
+        results = [turn.turn_guard(subagent, 1000) for _ in range(constants.SUBAGENT_STEP_LIMIT)]
+        warned = [n for n, r in enumerate(results, 1) if r and "hookSpecificOutput" in r]
+        stopped = [n for n, r in enumerate(results, 1) if r and r.get("decision") == "block"]
+        self.assertEqual((warned, stopped), ([constants.SUBAGENT_STEP_LIMIT // 2], [constants.SUBAGENT_STEP_LIMIT]))
+        self.assertIn(f"stopped at {constants.SUBAGENT_STEP_LIMIT} tool calls", results[warned[0] - 1]["hookSpecificOutput"]["additionalContext"])
+        self.assertIn("reply to the caller", results[-1]["reason"])
+        self.assertNotIn("Agent call", results[-1]["reason"], "a subagent cannot start another subagent")
+        main_results = [turn.turn_guard(main, 1000) for _ in range(constants.SUBAGENT_STEP_LIMIT)]
+        self.assertFalse([r for r in main_results if r and r.get("decision") == "block"], "the main turn keeps its own budget")
+        logged = [json.loads(line) for line in constants.EVENT_LOG.read_text().splitlines()]
+        self.assertEqual([e.get("subagent") for e in logged if e["event"] in ("turn_warn", "turn_stop")], [True, True, False])
+
     def test_checkpoint_path_never_names_an_existing_file(self):
         constants.CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
         record = {"index": 7}

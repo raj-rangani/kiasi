@@ -1,6 +1,9 @@
 import json
+import os
+import subprocess
+import sys
 
-from helpers import KiasiTestCase
+from helpers import SCRIPTS, KiasiTestCase
 from core import constants  # noqa: E402
 
 
@@ -28,3 +31,15 @@ class TestProjectOverrides(KiasiTestCase):
         (self.tmp / constants.PROJECT_FILE_NAME).write_text("{not json")
         self.assertEqual(constants.apply_project(self.tmp), {})
         self.assertEqual(constants.TURN_STOP_STEPS, self.before["TURN_STOP_STEPS"])
+
+    def test_subagent_budget_has_its_own_option(self):
+        env = {**os.environ, "CLAUDE_PLUGIN_DATA": str(self.tmp), "CLAUDE_PLUGIN_OPTION_TURN_CALL_BUDGET": "100"}
+        env.pop("CLAUDE_PLUGIN_OPTION_SUBAGENT_CALL_BUDGET", None)
+
+        def budgets():
+            script = "from core import constants; print(constants.TURN_STOP_STEPS, constants.SUBAGENT_STEP_LIMIT)"
+            return subprocess.run([sys.executable, "-c", script], cwd=SCRIPTS, env=env, capture_output=True, text=True, check=True).stdout.split()
+
+        self.assertEqual(budgets(), ["100", "40"], "the turn budget no longer sets the subagent budget")
+        env["CLAUDE_PLUGIN_OPTION_SUBAGENT_CALL_BUDGET"] = "25"
+        self.assertEqual(budgets(), ["100", "25"])

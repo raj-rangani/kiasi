@@ -90,6 +90,7 @@ TURN_WARN_TOKENS = 4_000_000
 TURN_STOP_TOKENS = 8_000_000
 TURN_REMIND_STEPS = 5
 TURN_EXEMPT_TOOLS = {"Agent", "Write", "AskUserQuestion", "TodoWrite", "TaskCreate", "TaskUpdate"}
+# A subagent's own turn budget: stated in its brief, warned at half, stopped at the limit.
 SUBAGENT_STEP_LIMIT = 40
 SUBAGENT_BRIEF_SUFFIX = (
     "Kiasi budget: finish within {steps} tool calls. Batch shell commands, run each test suite once per round, never poll with sleep. "
@@ -337,7 +338,7 @@ def _env_int(name, default):
         return default
 
 CAP_OUTSIDE_READ_CHARS = _env_int("CLAUDE_PLUGIN_OPTION_OUTPUT_CAP_CHARS", CAP_OUTSIDE_READ_CHARS)
-SUBAGENT_STEP_LIMIT = _env_int("CLAUDE_PLUGIN_OPTION_TURN_CALL_BUDGET", SUBAGENT_STEP_LIMIT)
+SUBAGENT_STEP_LIMIT = _env_int("CLAUDE_PLUGIN_OPTION_SUBAGENT_CALL_BUDGET", SUBAGENT_STEP_LIMIT)
 TURN_STOP_STEPS = _env_int("CLAUDE_PLUGIN_OPTION_TURN_CALL_BUDGET", TURN_STOP_STEPS)
 PASTE_BLOCK_CHARS = _env_int("CLAUDE_PLUGIN_OPTION_PASTE_REFUSAL_CHARS", PASTE_BLOCK_CHARS)
 COMPACTION_WINDOW_TEXT = os.environ.get("CLAUDE_PLUGIN_OPTION_COMPACTION_WINDOW_TEXT", "200000")

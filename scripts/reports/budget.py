@@ -208,9 +208,9 @@ def kiasi_actions(days):
             elif event == "prompt" and (record.get("reread_check") or {}).get("mode") == "delegate":
                 actions["delegations instructed"] += 1
             elif event == "turn_warn":
-                actions["turn budget warnings"] += 1
+                actions["subagent budget warnings" if record.get("subagent") else "turn budget warnings"] += 1
             elif event == "turn_stop" and record.get("first"):
-                actions["turns stopped"] += 1
+                actions["subagents stopped" if record.get("subagent") else "turns stopped"] += 1
             elif event == "agent" and record.get("model_set"):
                 actions["subagent models set"] += 1
             elif event == "agent" and record.get("decision") == "ask":

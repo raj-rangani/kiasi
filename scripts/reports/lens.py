@@ -286,6 +286,8 @@ def classify(t, record, sessions):
         return action(record, "summary", f"pruning could not reach the target ({before // 1000}k → {after // 1000}k), built-in summary used")
     if event == "compact":
         return action(record, "compaction", f"{record.get('trigger')} compaction at {record.get('context_tokens', 0) // 1000}k context")
+    if event in ("turn_warn", "turn_stop") and record.get("subagent"):
+        return None  # a subagent's budget is not the turn budget, and its stop is not followed by the next prompt
     if event == "turn_warn":
         return action(record, "turn_warn", f"warned at {record.get('steps')} steps, {record.get('reread', 0) / 1e6:.1f}M re-read")
     if event == "turn_stop" and record.get("first"):
