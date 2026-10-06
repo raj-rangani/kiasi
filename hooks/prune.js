@@ -1,11 +1,14 @@
 import {
   LEVELS, ERROR_KEEP_CHARS, USER_TEXT_KEEP_CHARS, USER_TEXT_HEAD_CHARS, INJECTED_HEAD_CHARS, INJECTED_PATTERN,
-  INPUT_FIELD_KEEP_CHARS, CONTENT_FIELDS, CHARS_PER_TOKEN, MAX_KEEP_TOKENS, MAX_KEEP_RATIO, MARKER_PREFIX, ARCHIVE_MIN_CHARS,
+  INPUT_FIELD_KEEP_CHARS, CONTENT_FIELDS, CHARS_PER_TOKEN, MAX_KEEP_TOKENS, MAX_KEEP_RATIO, MARKER_PREFIX, SIZE_MARKER_PATTERN, ARCHIVE_MIN_CHARS,
 } from './constants.js';
 
 const marker = (dropped, ref) => (ref
   ? `${MARKER_PREFIX} ${dropped} chars at compaction; full text is #${ref.index} in ${ref.path}]`
   : `${MARKER_PREFIX} ${dropped} chars at compaction]`);
+
+// Content an earlier compaction replaced is already a size marker; measuring it again would give the marker's own length.
+const sizeMarker = (value) => (SIZE_MARKER_PATTERN.test(value) ? value : `[${value.length} chars]`);
 
 function archived(archive, text, dropped) {
   if (!archive || dropped < ARCHIVE_MIN_CHARS) return null;
@@ -33,7 +36,7 @@ function pruneInput(input, level) {
   const pruned = {};
   for (const [key, value] of Object.entries(input || {})) {
     if (typeof value !== 'string') pruned[key] = value;
-    else if (CONTENT_FIELDS.includes(key)) pruned[key] = `[${value.length} chars]`;
+    else if (CONTENT_FIELDS.includes(key)) pruned[key] = sizeMarker(value);
     else pruned[key] = head(value, INPUT_FIELD_KEEP_CHARS, level.archive);
   }
   return pruned;

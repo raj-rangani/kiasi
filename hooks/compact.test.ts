@@ -82,16 +82,25 @@ test('falls back to the summary when pruning cannot reach the target', () => {
   expect(result.messages).toBeNull();
 });
 
+function writes(from: number, count: number) {
+  return Array.from({ length: count }, (_, k) => from + k).flatMap((i) => [
+    { role: 'assistant', text: 'Writing.', toolUses: [{ tool_use_id: `w${i}`, tool: 'Write', input: { file_path: `/repo/f${i}.py`, content: big('code\n', 9000) }, text: 'ok' }], handle: `a${i}` },
+    { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: `w${i}`, text: 'File written', isError: false }], handle: `u${i}` },
+  ]);
+}
+
 test('replaces edit content with a size marker and keeps the path', () => {
-  const messages: any[] = [{ role: 'user', text: 'go', toolUses: [], handle: 'h0' }];
-  for (let i = 0; i < 12; i++) {
-    messages.push({ role: 'assistant', text: 'Writing.', toolUses: [{ tool_use_id: `w${i}`, tool: 'Write', input: { file_path: `/repo/f${i}.py`, content: big('code\n', 9000) }, text: 'ok' }], handle: `a${i}` });
-    messages.push({ role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: `w${i}`, text: 'File written', isError: false }], handle: `u${i}` });
-  }
-  const result = pruneTranscript(messages);
+  const result = pruneTranscript([{ role: 'user', text: 'go', toolUses: [], handle: 'h0' }, ...writes(0, 12)]);
   expect(result.kept).toBe(true);
   expect(result.messages![1].toolUses[0].input.file_path).toBe('/repo/f0.py');
   expect(result.messages![1].toolUses[0].input.content).toBe('[9000 chars]');
+});
+
+test('a second compaction keeps the sizes the first one wrote', () => {
+  const first = pruneTranscript([{ role: 'user', text: 'go', toolUses: [], handle: 'h0' }, ...writes(0, 12)]);
+  const second = pruneTranscript([...first.messages!, ...writes(12, 12)]);
+  expect(second.kept).toBe(true);
+  expect(second.messages![1].toolUses[0].input.content).toBe('[9000 chars]');
 });
 
 test('the hook defers to the engine when the event carries no message list', async ($) => {
