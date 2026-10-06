@@ -81,7 +81,6 @@ h1 .logo circle { fill: var(--accent); }
 .stat b { display: block; font-family: var(--serif); font-weight: 400; font-size: 40px; line-height: 1; margin-bottom: 8px; }
 .stat b small { font-size: 18px; color: var(--muted); margin-left: 4px; }
 .stat span { color: var(--muted); font-size: 13px; }
-.stat.warn b { color: var(--accent-ink); }
 .sheet { padding: 40px 0 28px; border-bottom: 1px solid var(--rule); }
 .sheet:last-of-type { border-bottom: 0; }
 .sheet-head { display: grid; grid-template-columns: 1fr 1.2fr; gap: 24px; align-items: start; margin-bottom: 22px; }

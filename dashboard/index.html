@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="What the context kiasi did and how many re-read tokens each action kept off the weekly limit.">
 <title>Kiasi</title>
-<link rel="stylesheet" href="assets/budget.css?v=2026100117">
-<link rel="stylesheet" href="assets/lens.css?v=2026100117">
+<link rel="stylesheet" href="assets/budget.css?v=2026100622">
+<link rel="stylesheet" href="assets/lens.css?v=2026100636">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cstyle%3E.s{fill:none;stroke:%231d1a16}@media (prefers-color-scheme:dark){.s{stroke:%23f6f2ea}}%3C/style%3E%3Cpath class='s' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' d='M8 3H4v18h4M16 3h4v18h-4'/%3E%3Ccircle fill='%23f2b632' cx='12' cy='12' r='3.6'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -29,41 +29,33 @@
 
   <main class="view" data-view="overview" hidden>
   <section class="view-empty" hidden></section>
-  <section class="since" id="since"></section>
-  <section class="stats" id="stats"></section>
-  <p class="startup-hint" id="startup-hint" hidden></p>
-  <p class="storage-line" id="storage"></p>
   <section class="sheet">
     <div class="sheet-head">
-      <h2><span class="num">01</span>Paid against avoided, per day</h2>
-      <p>The re-read bill each day (cache reads by main sessions and subagents) next to what Kiasi kept off it. The label is the avoided share of the total. The Budget tab splits the same bill by subagents and by project.</p>
+      <h2><span class="num">01</span>What you paid</h2>
+      <p>Measured from your transcripts. Re-read tokens are the cache reads of main sessions and subagents; the Budget tab splits the same bill by subagents and by project.</p>
     </div>
+    <div class="kpis" id="stats"></div>
+    <h3 class="block-head">Re-read tokens paid per day</h3>
     <div class="chart" id="bill-chart"></div>
-    <div class="legend"><span><i class="paid"></i>re-read tokens paid</span><span><i class="avoided"></i>avoided by Kiasi<span id="est-legend"></span></span></div>
+    <p class="startup-hint" id="startup-hint" hidden></p>
   </section>
   <section class="sheet">
     <div class="sheet-head">
-      <h2><span class="num">02</span>By mechanism</h2>
-      <p>One card per rule: what it saved or how often it fired, and the days it fired on the same scale as its neighbours. Click a card for that rule's log; bookkeeping (notes, recalls, subagent models) is left out.</p>
+      <h2><span class="num">02</span>Before and after Kiasi</h2>
+      <p>What your sessions measured before Kiasi was switched on and since. It is an observation, not a controlled test: the work in the two periods differs, and steps include subagent steps.</p>
     </div>
-    <div id="kinds"></div>
+    <div id="trend" hidden></div>
+    <div class="since" id="since"></div>
   </section>
   <section class="sheet">
     <div class="sheet-head">
-      <h2><span class="num">03</span>Cache</h2>
-      <p>A miss writes the conversation to the cache again at a higher price. The causes worth fixing, by what they cost.</p>
+      <h2><span class="num">03</span>What Kiasi did</h2>
+      <p>Counts from Kiasi's own log: how often each rule acted and how many tokens it cut. No token saving is credited to a rule here.</p>
     </div>
-    <div class="cache-tiles" id="cache-tiles"></div>
-    <div id="cache-causes"></div>
+    <div class="measured" id="did"></div>
+    <p class="more-link"><a href="#rules">Each rule day by day, with its log →</a></p>
   </section>
-  <section class="sheet">
-    <div class="sheet-head">
-      <h2><span class="num">04</span>Recall</h2>
-      <p>How often Claude went back to the full text of a cut output. Rarely means the cap could be tighter; often means it cuts too much.</p>
-    </div>
-    <div id="recall"></div>
-  </section>
-  <p class="est-note" id="est-note"></p>
+  <p class="storage-line" id="storage"></p>
   </main>
 
   <main class="view" data-view="sessions" hidden>
@@ -92,18 +84,33 @@
   <section class="sheet">
     <div class="sheet-head">
       <h2><span class="num">01</span>Each rule</h2>
-      <p>How often each rule fired and what it saved. Click a rule to open its detail.</p>
+      <p>How often each rule fired, how many tokens it cut, and its fires per day. The line is the rule's fires per day, with the count under each day; each line has its own scale, and the larger dot is its peak day. Click a rule for its detail and log.</p>
     </div>
-    <div class="cards rules" id="rules"></div>
+    <div class="rule-list" id="rules"></div>
   </section>
   <section class="sheet">
     <div class="sheet-head">
       <h2><span class="num">02</span>Steps per prompt</h2>
-      <p>How many prompts fell into each step band and the re-read bill those prompts carried. This is what the turn budget shapes.</p>
+      <p>For each step band, its share of the prompts next to its share of the re-read tokens, and what one prompt of that length cost. This is what the turn budget shapes.</p>
     </div>
-    <div class="chart" id="steps-chart"></div>
-    <div class="legend"><span><i></i>under the warning</span><span><i class="delegated"></i>warned</span><span><i class="red"></i>paused</span></div>
+    <div class="steps-bars" id="steps-chart"></div>
+    <div class="legend" id="steps-legend"></div>
     <p class="hist-note" id="steps-note"></p>
+  </section>
+  <section class="sheet">
+    <div class="sheet-head">
+      <h2><span class="num">03</span>Cache</h2>
+      <p>A miss writes the conversation to the cache again at a higher price. The causes worth fixing, by what they cost.</p>
+    </div>
+    <div class="cache-tiles" id="cache-tiles"></div>
+    <div id="cache-causes"></div>
+  </section>
+  <section class="sheet">
+    <div class="sheet-head">
+      <h2><span class="num">04</span>Recall</h2>
+      <p>How often Claude went back to the full text of a cut output. Rarely means the cap could be tighter; often means it cuts too much.</p>
+    </div>
+    <div id="recall"></div>
   </section>
   </main>
 
@@ -153,11 +160,11 @@
       <div class="panel-content" id="panel-content" tabindex="-1"></div>
     </div>
   </aside>
-  <script src="assets/lens-constants.js?v=2026100619"></script>
-<script src="assets/lens-common.js?v=2026100201"></script>
-<script src="assets/lens.js?v=2026100619"></script>
-<script src="assets/sessions.js?v=2026100619"></script>
-<script src="assets/rules.js?v=2026100619"></script>
+  <script src="assets/lens-constants.js?v=2026100636"></script>
+<script src="assets/lens-common.js?v=2026100636"></script>
+<script src="assets/lens.js?v=2026100634"></script>
+<script src="assets/sessions.js?v=2026100627"></script>
+<script src="assets/rules.js?v=2026100636"></script>
 <script src="assets/budget.js?v=2026100117"></script>
 <script src="assets/storage.js?v=2026100117"></script>
 <script src="assets/sync.js?v=2026100201"></script>

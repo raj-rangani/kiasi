@@ -5,6 +5,8 @@ const BAR_RADIUS = 4;
 const MINI_HEIGHT = 110;
 const PAD = { top: 24, right: 88, bottom: 44, left: 64 };
 const MINI_PAD = { top: 8, right: 8, bottom: 8, left: 8 };
+const BILL_PAD = { ...PAD, right: PAD.left };
+const DAY_LINE = { width: 224, height: 32, pad: 5, dot: 1.8, peakDot: 3 };
 const NARROW_STEP_PX = 48;
 const MAX_ROWS = 400;
 const OVERVIEW_ROWS = 12;
@@ -34,6 +36,7 @@ const MISS_CAUSE_FIX = {
   'MCP changed': 'change MCP servers between sessions',
 };
 const MISS_SPARK = { width: 96, height: 22 };
+const TREND = { width: 360, height: 120, maxDays: 60 };
 const CACHE_CAUSE_MIN_SHARE = 0.1;
 const RECALL_LOW = 0.05;
 const RECALL_HIGH = 0.3;
@@ -47,23 +50,7 @@ const KIND_LABELS = {
   turn_stop: 'turn paused', turn_over: 'turn over budget', turn_resume: 'pause resumed', turn_moved_on: 'pause skipped', read_skipped: 're-read skipped', read_retry: 're-read let through', agent_model: 'subagent model', review_asked: 'review round asked', note: 'session note', recall: 'note recalled', loop: 'loop stopped', state: 'state re-injected',
   routed: 'routed to sandbox', route_retry: 'routing let through',
 };
-const KIND_STRIP_DAYS = 8;
-
-// One-line versions of KIND_HELP for the overview tiles; the full text is the tile's tooltip.
-const KIND_SHORT = {
-  cap: 'oversized tool output cut, full text kept on disk',
-  pruned: 'transcript pruned instead of summarised',
-  read_skipped: 'unchanged file range not read twice',
-  turn_warn: 'passed the warning step or re-read budget',
-  reread_check: 'here-vs-subagent estimate shown to Claude',
-  turn_stop: 'paused at the budget: calls refused, the rest saved to resume',
-  turn_over: 'reached the budget in warn mode; nothing refused',
-  turn_resume: '"continue" picked a paused turn back up',
-  turn_moved_on: 'the first prompt after a pause was something else',
-  summary: "prune missed the ceiling; built-in summary ran",
-  loop: 'same failing call stopped after repeats',
-  routed: 'raw Bash or WebFetch pointed at the sandbox tool',
-};
+const RULE_STRIP_DAYS = 8;
 
 const KIND_HELP = {
   cap: 'a tool result over its cap was cut; the full text is saved to disk',
@@ -93,9 +80,9 @@ const KIND_HELP = {
 };
 const MARK_LABELS = { compaction: 'compaction', pruned: 'pruned compaction', check: 're-read check', stop: 'turn stopped' };
 const VIEWS = [
-  ['overview', 'Overview', 'What Kiasi kept off your weekly limit, and the proof. <b>Re-read</b> is the whole conversation sent again on every step; <b>avoided</b> is what Kiasi kept out of it.'],
+  ['overview', 'Overview', 'What your sessions paid, how that changed since Kiasi was switched on, and what Kiasi did. <b>Re-read</b> is the whole conversation sent again on every step.'],
   ['sessions', 'Sessions', 'One chart per session: context at every step, prompts as ticks, compactions as rings. Click a session for its full trajectory and every Kiasi action inside it.'],
-  ['rules', 'Rules', 'Each rule of Kiasi: how often it fired, what it saved, and its log. The chart shows where the steps go, which is what the turn budget shapes.'],
+  ['rules', 'Rules', 'Each rule of Kiasi: how often it fired, how many tokens it cut, and its log. The chart shows where the steps go, which is what the turn budget shapes. Cache misses and the cut outputs read back follow the rules.'],
   ['budget', 'Budget', 'Where the weekly limit goes: every turn re-reads the whole conversation, so the cost is context size times turns.'],
   ['storage', 'Storage', 'What Kiasi keeps on disk and for how long. A saved file follows its session: once both are unused for a week it goes to trash, and the trash is emptied a week later.']
 ];
@@ -173,19 +160,20 @@ const VIEW_ALIASES = { actions: 'rules' };
 const TOP_MULTIPLES = 8;
 const LOG_ROWS = 60;
 const RULES = [
-  { key: 'cap', name: 'Output cap', kinds: ['cap'], what: 'A tool result over its cap is cut and the full text saved to disk; the conversation keeps a marker with the path.' },
-  { key: 'route', name: 'Sandbox routing', kinds: ['routed', 'route_retry'], what: 'While the sandbox tools are registered, a Bash command whose output would only be scanned (tests, builds, installs, curl, git log) or a WebFetch is refused once with the mcp__kiasi__run or mcp__kiasi__fetch call to make instead; repeating the same call lets it through.' },
-  { key: 'pruner', name: 'Compaction pruner', kinds: ['pruned', 'summary'], what: 'At compaction the plugin prunes the transcript deterministically instead of calling the summariser; it falls back only if the prune cannot get under the ceiling.' },
-  { key: 'turn', name: 'Turn budget', kinds: ['turn_warn', 'turn_stop', 'turn_over', 'turn_resume', 'turn_moved_on'], what: 'A prompt that runs too many steps is warned, then paused with the remaining work written down; "continue" resumes it.' },
-  { key: 'reread', name: 'Re-read check', kinds: ['reread_check', 'delegated'], what: 'Shows what the rest of the turn will cost here against in a subagent, and lets Claude delegate.' },
-  { key: 'reads', name: 'Re-read skip', kinds: ['read_skipped', 'read_retry'], what: 'A Read of a file range already in context and unchanged on disk gets a pointer to the earlier copy instead of the text; repeating the Read lets it through.' },
-  { key: 'loop', name: 'Loop check', kinds: ['loop'], what: 'A command or edit that fails three times in one turn, or one command failing five times with different arguments, gets a note to stop retrying and check the assumption. Failed calls also count toward the turn budget.' },
-  { key: 'paste', name: 'Paste manager', kinds: ['paste_saved', 'paste_refused'], what: 'Large pasted prompts are saved to disk so later turns refer to the path; very large ones are refused.' },
-  { key: 'notes', name: 'Notes and recall', kinds: ['note', 'recall', 'state', 'agent_model', 'compaction', 'nudge', 'review_asked'], what: 'Bookkeeping: a note at every stop and compaction, recalled at the next start; working state re-injected after each compaction; subagent models set by type.', muted: true },
+  { key: 'cap', name: 'Output cap', short: 'Oversized tool output cut; the full text is kept on disk', kinds: ['cap'], what: 'A tool result over its cap is cut and the full text saved to disk; the conversation keeps a marker with the path.' },
+  { key: 'route', name: 'Sandbox routing', short: 'Scan-only Bash and WebFetch pointed at the sandbox tools', kinds: ['routed', 'route_retry'], what: 'While the sandbox tools are registered, a Bash command whose output would only be scanned (tests, builds, installs, curl, git log) or a WebFetch is refused once with the mcp__kiasi__run or mcp__kiasi__fetch call to make instead; repeating the same call lets it through.' },
+  { key: 'pruner', name: 'Compaction pruner', short: 'Transcript pruned at compaction instead of summarised', kinds: ['pruned', 'summary'], what: 'At compaction the plugin prunes the transcript deterministically instead of calling the summariser; it falls back only if the prune cannot get under the ceiling.' },
+  { key: 'turn', name: 'Turn budget', short: 'Long prompts warned, then paused with the rest saved', kinds: ['turn_warn', 'turn_stop', 'turn_over', 'turn_resume', 'turn_moved_on'], what: 'A prompt that runs too many steps is warned, then paused with the remaining work written down; "continue" resumes it.' },
+  { key: 'reread', name: 'Re-read check', short: 'Cost here against a subagent, shown to Claude', kinds: ['reread_check', 'delegated'], what: 'Shows what the rest of the turn will cost here against in a subagent, and lets Claude delegate.' },
+  { key: 'reads', name: 'Re-read skip', short: 'Unchanged file range not read twice', kinds: ['read_skipped', 'read_retry'], what: 'A Read of a file range already in context and unchanged on disk gets a pointer to the earlier copy instead of the text; repeating the Read lets it through.' },
+  { key: 'loop', name: 'Loop check', short: 'Repeated failing call told to stop retrying', kinds: ['loop'], what: 'A command or edit that fails three times in one turn, or one command failing five times with different arguments, gets a note to stop retrying and check the assumption. Failed calls also count toward the turn budget.' },
+  { key: 'paste', name: 'Paste manager', short: 'Large pastes saved to disk; very large ones refused', kinds: ['paste_saved', 'paste_refused'], what: 'Large pasted prompts are saved to disk so later turns refer to the path; very large ones are refused.' },
+  { key: 'notes', name: 'Notes and recall', short: 'Bookkeeping: session notes, recall, state after compaction', kinds: ['note', 'recall', 'state', 'agent_model', 'compaction', 'nudge', 'review_asked'], what: 'Bookkeeping: a note at every stop and compaction, recalled at the next start; working state re-injected after each compaction; subagent models set by type.', muted: true },
 ];
 const DETAIL_HEIGHT = 340;
 const PROMPT_ROWS = 20;
 const RULE_CHART_HEIGHT = 200;
+const STEPS_CHART_HEIGHT = 240;
 const PANEL_MS = 260;
 const JUMP_LABELS = { 'Which tools get capped': 'Tools', 'How much each cut kept out': 'Cut sizes', 'Every compaction the pruner handled': 'Compactions', 'Every warning, pause and resume': 'Warnings', 'Every check shown': 'Checks', 'Every paste handled': 'Pastes' };
 const OFFENDER_ROWS = 5;

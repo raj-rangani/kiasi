@@ -227,6 +227,17 @@ class TestHistory(ReportTestCase):
         self.assertEqual([(r["day"], r["turns"]) for r in kept], [(self.days_ago(20), 50), (self.day, 1)])
         self.assertEqual(report["history_days"], 2)
 
+    def test_a_history_from_before_the_replay_fix_is_recounted_once(self):
+        old = self.days_ago(20)
+        self.write(self.project / "s1.jsonl", [self.step("r1", 1, 1000, day=old)])
+        constants.HISTORY_FILE.write_text(json.dumps({"per_day": [self.row(old, 100, 200_000)]}))
+        self.budget.build(7)
+        stored = json.loads(constants.HISTORY_FILE.read_text())
+        self.assertEqual((stored["counting"], stored["per_day"][0]["turns"]), (self.budget.HISTORY_COUNTING, 1))
+        constants.HISTORY_FILE.write_text(json.dumps({"counting": self.budget.HISTORY_COUNTING, "per_day": [self.row(old, 100, 200_000)]}))
+        self.budget.build(7)
+        self.assertEqual(json.loads(constants.HISTORY_FILE.read_text())["per_day"][0]["turns"], 100, "a current history keeps the fuller stored row")
+
     def test_baseline_older_than_the_window_still_compares(self):
         constants.EVENT_LOG.write_text(json.dumps({"ts": f"{self.days_ago(5)}T10:00:00", "event": "cap"}) + "\n")
         constants.HISTORY_FILE.write_text(json.dumps({"per_day": [self.row(self.days_ago(20), 100, 200_000)]}))
@@ -244,6 +255,12 @@ class TestHistory(ReportTestCase):
         self.write(self.project / "s1.jsonl", [self.prompt(2), self.step("r1", 3, 50_000)])
         all_time = self.lens.build(7)["all_time"]
         self.assertEqual((all_time["first_day"], all_time["days"], all_time["saved"], all_time["caps"]), (self.days_ago(20), 2, 500, 4))
+
+    def test_actions_cover_the_whole_first_day_of_the_window(self):
+        first_day = self.lens.local_day(self.lens.time.time() - 7 * 86400)
+        constants.EVENT_LOG.write_text(json.dumps({"ts": f"{first_day}T00:00:30", "event": "cap"}) + "\n")
+        self.write(self.project / "s1.jsonl", [self.prompt(2), self.step("r1", 3, 50_000)])
+        self.assertEqual([a["ts"][:10] for a in self.lens.build(7)["actions"]], [first_day])
 
 
 class TestEmptyReport(ReportTestCase):
@@ -274,6 +291,37 @@ class TestLensReport(ReportTestCase):
         self.assertEqual(sum(prompts.values()), 2)
         self.assertEqual(self.lens.steps_until_next_prompt(info["steps"], info["prompts"], info["prompts"][0]), 2)
         self.assertEqual(self.lens.steps_until_next_prompt(info["steps"], info["prompts"], info["prompts"][1]), 1)
+
+    def test_messages_replayed_by_a_pruned_compaction_are_not_counted_again(self):
+        """The kept prompt comes back under its promptId and the kept answer as a zero-usage synthetic entry."""
+        asked = dict(self.prompt(0), promptId="p1")
+        replayed_prompt = dict(self.prompt(5), promptId="p1")
+        replayed_step = self.step("x1", 5, 0, create=0)
+        replayed_step["message"]["model"] = "<synthetic>"
+        replayed_step["message"]["usage"]["input_tokens"] = 0
+        self.write(self.project / "s1.jsonl", [
+            asked, self.step("r1", 1, 1000), self.tool_result(2), self.step("r2", 3, 3000),
+            replayed_prompt, replayed_step, self.step("r3", 6, 500), dict(self.prompt(7, "next"), promptId="p2"), self.step("r4", 8, 700)])
+        sessions, bill, _, prompts = self.lens.scan_sessions(7)
+        info = sessions["s1"]
+        self.assertEqual(info["contexts"], [1100, 3100, 600, 800], "the synthetic entry is not a step")
+        self.assertEqual((len(info["prompts"]), sum(prompts.values())), (2, 2))
+        self.assertEqual([count for count, _ in self.lens.prompt_steps(info)], [3, 1])
+        [day] = self.budget.build(7)["per_day"]
+        self.assertEqual((day["turns"], day["mean_context"]), (4, (1100 + 3100 + 600 + 800) // 4))
+        [session] = self.budget.build(7)["sessions"]
+        self.assertEqual(session["steps_per_prompt"], 2.0)
+
+    def test_prompts_out_of_time_order_never_give_a_negative_step_count(self):
+        info = {"steps": [1, 2, 3, 4], "contexts": [10, 10, 10, 10], "prompts": [2.5, 0.5]}
+        self.assertEqual(self.lens.prompt_steps(info), [(2, 20), (2, 20)])
+
+    def test_a_compaction_summary_is_not_a_prompt(self):
+        summary = dict(self.prompt(2, "This session is being continued"), isCompactSummary=True)
+        self.write(self.project / "s1.jsonl", [self.prompt(0), self.step("r1", 1, 1000), summary, self.step("r2", 3, 500)])
+        sessions, _, _, prompts = self.lens.scan_sessions(7)
+        self.assertEqual((len(sessions["s1"]["prompts"]), sum(prompts.values())), (1, 1))
+        self.assertEqual(self.budget.build(7)["totals"]["prompts"], 1)
 
     def test_the_report_counts_resumes_against_pauses(self):
         from core import events
@@ -318,6 +366,9 @@ class TestLensReport(ReportTestCase):
         self.assertEqual((result["before"]["days"], result["before"]["reread_per_turn"]), (2, 40_000))
         self.assertEqual((result["after"]["days"], result["after"]["reread_per_turn"], result["after"]["turns"]), (2, 10_000, 30))
         self.assertEqual(result["factor"], 4.0)
+        self.assertEqual((result["before"]["steps_per_day"], result["after"]["steps_per_day"]), (10, 10))
+        self.assertEqual([(p["day"], p["reread"], p["steps"]) for p in result["series"]][:1], [(day(5), 400_000, 10)])
+        self.assertEqual(len(result["series"]), 6)
 
     def test_since_install_has_no_per_day_figure_before_a_full_day(self):
         day = lambda n: time.strftime("%Y-%m-%d", time.localtime(time.time() - n * 86400))
