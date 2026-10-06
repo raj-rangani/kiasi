@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core import constants
-from reports.budget import install_day, project_of, transcript_files
+from reports.budget import SYNTHETIC_MODEL, first_ask, install_day, project_of, transcript_files
 
 SAVING_KINDS = ("cap", "paste_refused", "delegated", "pruned", "read_skipped")
 CONTEXT_KEYS = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
@@ -55,7 +55,7 @@ def usage_entries(path):
     seen = set()
     for entry in iter_entries(path):
         message = entry.get("message") or {}
-        if entry.get("type") != "assistant" or not message.get("usage"):
+        if entry.get("type") != "assistant" or not message.get("usage") or message.get("model") == SYNTHETIC_MODEL:
             yield entry, None
             continue
         request = entry.get("requestId") or entry.get("uuid")
@@ -64,9 +64,6 @@ def usage_entries(path):
             continue
         seen.add(request)
         yield entry, message["usage"]
-
-
-SYNTHETIC_MODEL = "<synthetic>"
 
 
 def recall_texts(message):
@@ -189,6 +186,7 @@ def scan_sessions(days):
     main_bill, prompts = Counter(), Counter()
     for path in main:
         info = {"session": Path(path).stem, "project": project_of(path), "steps": [], "contexts": [], "prompts": [], "reread": 0, "recalls": []}
+        asked = set()
         for entry, usage in usage_entries(path):
             t = epoch_iso(entry["timestamp"])
             message = entry.get("message") or {}
@@ -200,7 +198,7 @@ def scan_sessions(days):
                 info["reread"] += usage.get("cache_read_input_tokens", 0)
                 bill[local_day(t)] += usage.get("cache_read_input_tokens", 0)
                 main_bill[local_day(t)] += usage.get("cache_read_input_tokens", 0)
-            elif entry.get("type") == "user" and is_prompt(entry.get("message") or {}):
+            elif entry.get("type") == "user" and is_prompt(entry.get("message") or {}) and first_ask(entry, asked):
                 info["prompts"].append(t)
                 prompts[local_day(t)] += 1
         if info["steps"]:
@@ -360,7 +358,7 @@ def bucket_index(buckets, value):
 
 
 def prompt_steps(info):
-    steps, contexts, prompts = info["steps"], info["contexts"], info["prompts"]
+    steps, contexts, prompts = info["steps"], info["contexts"], sorted(info["prompts"])
     rows = []
     for index, start in enumerate(prompts):
         end = prompts[index + 1] if index + 1 < len(prompts) else float("inf")
@@ -505,7 +503,7 @@ def session_records(sessions, actions):
             "findings": postmortem(info, per_session.get(session, []), steps_per_prompt, mean_context),
             "compactions": max(sum(1 for a in per_session.get(session, []) if a["kind"] == "compaction"),
                                sum(1 for a in per_session.get(session, []) if a["kind"] in ("pruned", "summary"))),
-            "actions": len(per_session.get(session, [])), "saved": sum(a["saved"] for a in per_session.get(session, [])),
+            "actions": len(per_session.get(session, [])), "saved": sum(a["saved"] for a in per_session.get(session, [])), "kept_out": sum(a["kept_out"] for a in per_session.get(session, [])),
             "series": series_points(info, marks),
             "prompt_rows": prompt_rows(info),
         })
@@ -523,6 +521,7 @@ def period_metrics(rows):
         "reread": reread,
         "reread_per_turn": int(reread / turns) if turns else 0,
         "reread_per_day": int(reread / len(rows)) if rows else None,
+        "steps_per_day": int(turns / len(rows)) if rows else None,
         "mean_context": int(sum(r.get("mean_context", 0) * r.get("turns", 0) for r in rows) / main_turns) if main_turns else 0,
         "high_share": round(sum(r.get("high_share", 0) * r.get("turns", 0) for r in rows) / main_turns, 3) if main_turns else 0,
     }
@@ -564,6 +563,15 @@ def merge_savings(actions, days):
             **{key: sum(r.get(key, 0) for r in kept) for key in ("saved", "kept_out", "actions", "caps")}}
 
 
+def day_series(rows):
+    """One point per history day, for the before-and-after charts of the Overview."""
+    points = []
+    for r in rows:
+        m = period_metrics([r])
+        points.append({"day": r["day"], "reread": m["reread"], "steps": m["turns"]})
+    return points
+
+
 def since_install():
     """Before-and-after comparison built from the per-day history, so the baseline
     survives the report window and Claude Code's transcript retention.
@@ -589,7 +597,7 @@ def since_install():
     factor = round(b["reread_per_turn"] / after["reread_per_turn"], 1) if enough and b["reread_per_turn"] and after["reread_per_turn"] else None
     return {"install_day": day, "before": b if before else None, "after": after if after_all else None, "factor": factor,
             "factor_min_steps": constants.LENS_FACTOR_MIN_STEPS,
-            "first_day": rows[0]["day"], "history_days": len(rows)}
+            "first_day": rows[0]["day"], "history_days": len(rows), "series": day_series(rows)}
 
 
 def storage_growth(files, now):
@@ -685,7 +693,8 @@ def build(days):
     events = read_events(days * 2)
     cache_days, misses_all = cache_scan(days)
     attribute_misses(misses_all, events)
-    events = [(t, record) for t, record in events if t >= time.time() - days * 86400]
+    window_start = epoch_local(local_day(time.time() - days * 86400) + "T00:00:00")
+    events = [(t, record) for t, record in events if t >= window_start]
     actions = []
     per_day = defaultdict(Counter)
     by_kind = defaultdict(lambda: {"count": 0, "saved": 0, "kept_out": 0})
@@ -774,11 +783,11 @@ def build(days):
 
 def print_report(report):
     t = report["totals"]
-    print(f"last {report['days']} days: {t['actions']} kiasi actions, {t['saved'] / 1e6:.1f}M re-read tokens avoided against {t['paid'] / 1e6:.0f}M paid, "
-          f"{t['kept_out'] // 1000}k tokens kept out, {t['pruned']} compactions pruned / {t['summaries']} summarised, {t['stops']} turns paused "
+    print(f"last {report['days']} days: {t['actions']} kiasi actions, {t['paid'] / 1e6:.0f}M re-read tokens paid, "
+          f"{t['kept_out'] // 1000}k tokens cut, {t['pruned']} compactions pruned / {t['summaries']} summarised, {t['stops']} turns paused "
           f"({t['resumed']} resumed, {t['stops_complied']} complied, mean {t['mean_steps_after_stop']} steps after), {t['sessions']} sessions, {t['mean_steps']} steps per prompt")
-    for kind, row in sorted(report["by_kind"].items(), key=lambda x: -x[1]["saved"]):
-        print(f"  {kind:14} {row['count']:4}  saved {row['saved'] / 1e6:6.1f}M")
+    for kind, row in sorted(report["by_kind"].items(), key=lambda x: -x[1]["kept_out"]):
+        print(f"  {kind:14} {row['count']:4}  cut {row['kept_out'] / 1e3:8.0f}k")
 
 
 if __name__ == "__main__":

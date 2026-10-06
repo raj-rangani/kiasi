@@ -44,7 +44,7 @@ let allPrompts = false;
 
 function actionRows(rows) {
   return rows.map((a, i) => `<div class="action click ${openAction === i ? 'open' : ''}" data-i="${i}"><span class="when">${esc(stamp(a.ts))}</span><span>${pill(a.kind)}</span><span class="what">${esc(a.label)}</span>
-    <span class="saved${a.saved ? '' : ' zero'}">${a.saved ? fmtM(a.saved) : '·'}</span><span class="steps">${['turn_stop', 'turn_over'].includes(a.kind) ? `${a.later_steps} after` : a.later_steps ? `× ${a.later_steps}` : ''}</span></div>${openAction === i ? `<div class="detail"><p>${esc(a.formula || 'no token effect is attributed to this row; it is counted')}</p><pre>${esc(JSON.stringify(a.record, null, 1))}</pre></div>` : ''}`).join('');
+    <span class="saved${a.kept_out ? '' : ' zero'}">${a.kept_out ? fmtM(a.kept_out) : '·'}</span><span class="steps">${['turn_stop', 'turn_over'].includes(a.kind) ? `${a.later_steps} after` : ''}</span></div>${openAction === i ? `<div class="detail"><p>${esc(a.kept_out ? `${a.kept_out.toLocaleString()} tokens cut from the conversation` : 'no token count for this row; it is counted')}</p><pre>${esc(JSON.stringify(a.record, null, 1))}</pre></div>` : ''}`).join('');
 }
 
 function postmortemList(s) {
@@ -85,7 +85,7 @@ function renderDetail(d) {
     nav: { index: order.indexOf(s.session), total: order.length, go: dir => { const next = order[order.indexOf(selected) + dir]; if (next) select(next, true); } },
   });
   host.innerHTML = `<dl class="kv wide"><dt>session</dt><dd>${esc(s.session)}</dd><dt>project</dt><dd>${esc(s.project)}</dd><dt>started</dt><dd>${esc(stamp(s.start))}</dd></dl>
-    <div class="rule-nums"><b>${fmtM(s.bill)}<small>re-read bill</small></b><b>${fmtM(s.saved)}<small>avoided${est('avoided')}</small></b><b>${s.prompts}<small>prompts</small></b><b>${s.steps}<small>steps</small></b><b>${fmtK(s.startup || 0)}<small>startup</small></b><b>${fmtK(s.mean_context)}<small>mean context</small></b><b>${fmtK(s.peak)}<small>peak</small></b><b>${s.compactions}<small>compactions</small></b></div>
+    <div class="rule-nums"><b>${fmtM(s.bill)}<small>re-read bill</small></b><b>${fmtM(s.kept_out || 0)}<small>tokens cut</small></b><b>${s.prompts}<small>prompts</small></b><b>${s.steps}<small>steps</small></b><b>${fmtK(s.startup || 0)}<small>startup</small></b><b>${fmtK(s.mean_context)}<small>mean context</small></b><b>${fmtK(s.peak)}<small>peak</small></b><b>${s.compactions}<small>compactions</small></b></div>
     <h3 class="sub" data-jump="Context">Context at every step</h3>
     <div class="chart">${sessionSvg(s, d.settings, panelWidth(), DETAIL_HEIGHT, true)}</div>
     <div class="legend"><span><i class="tick"></i>prompt</span><span><i class="ring"></i>compaction</span><span><i class="ring pruned"></i>pruned compaction</span><span><i class="amber"></i>re-read check</span><span><i class="red"></i>turn stopped</span><span><i class="line"></i>warning</span><span><i class="line warn"></i>hard limit</span></div>
@@ -110,8 +110,8 @@ function renderTable(d) {
   const toggle = $('#toggle-all');
   if (toggle) toggle.addEventListener('click', e => { e.preventDefault(); showAll = !showAll; renderTable(d); });
   const maxBill = Math.max(...rows.map(s => s.bill)) || 1;
-  $('#sessions').innerHTML = `<table><thead><tr><th>session</th><th>project</th><th>day</th><th class="num">steps</th><th class="num">mean ctx</th><th class="num">compactions</th><th class="num">avoided${est('avoided')}</th><th>bill</th></tr></thead><tbody>${rows.map(s => `
-    <tr class="click ${s.session === selected ? 'selected' : ''}" data-session="${esc(s.session)}"><td class="mono">${esc(s.short)}</td><td>${esc(s.project.slice(0, 40))}</td><td class="mono">${esc(s.day)}</td><td class="num">${s.steps}</td><td class="num${s.mean_context >= d.settings.warn_tokens ? ' warn' : ''}">${fmtK(s.mean_context)}</td><td class="num">${s.compactions}</td><td class="num">${s.saved ? fmtM(s.saved) : ''}</td>
+  $('#sessions').innerHTML = `<table><thead><tr><th>session</th><th>project</th><th>day</th><th class="num">steps</th><th class="num">mean ctx</th><th class="num">compactions</th><th class="num">tokens cut</th><th>bill</th></tr></thead><tbody>${rows.map(s => `
+    <tr class="click ${s.session === selected ? 'selected' : ''}" data-session="${esc(s.session)}"><td class="mono">${esc(s.short)}</td><td>${esc(s.project.slice(0, 40))}</td><td class="mono">${esc(s.day)}</td><td class="num">${s.steps}</td><td class="num${s.mean_context >= d.settings.warn_tokens ? ' warn' : ''}">${fmtK(s.mean_context)}</td><td class="num">${s.compactions}</td><td class="num">${s.kept_out ? fmtM(s.kept_out) : ''}</td>
     <td><div class="fillbar" title="${fmtM(s.bill)}"><i class="${s.mean_context >= d.settings.warn_tokens ? 'warn' : ''}" style="width:${(s.bill / maxBill * 100).toFixed(1)}%"></i></div></td></tr>`).join('')}</tbody></table>`;
   $('#sessions').querySelectorAll('tr.click').forEach(el => el.addEventListener('click', () => select(el.dataset.session)));
 }

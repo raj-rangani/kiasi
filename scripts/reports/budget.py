@@ -9,6 +9,23 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core import constants
 
+SYNTHETIC_MODEL = "<synthetic>"
+
+
+def first_ask(entry, asked):
+    """False for an entry that is no new prompt: the summary of a built-in compaction, or a prompt already counted.
+    A pruned compaction writes the kept messages back into the transcript: the prompts under their old promptId,
+    the answers as zero-usage entries of the synthetic model."""
+    if entry.get("isCompactSummary"):
+        return False
+    prompt = entry.get("promptId")
+    if prompt is None:
+        return True
+    if prompt in asked:
+        return False
+    asked.add(prompt)
+    return True
+
 USAGE_KEYS = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens")
 
 
@@ -32,15 +49,32 @@ def install_day():
     return None
 
 
+HISTORY_COUNTING = 2  # 2: the messages a pruned compaction writes back are not steps
+HISTORY_RECOUNT_DAYS = 45
+
+
+def day_rows(per_day):
+    rows = []
+    for day in sorted(per_day):
+        b = per_day[day]
+        rows.append({"day": day, "turns": b["turns"], "sub_turns": b["sub_turns"], "mean_context": b["context_sum"] // max(1, b["turns"]), "high_share": round(b["high_turns"] / max(1, b["turns"]), 2),
+                         "main": dict(b["main"]), "sub": dict(b["sub"])})
+    return rows
+
+
 def merge_history(rows, days):
     """Merge this build's per-day rows into HISTORY_FILE and return every row ever kept, oldest first.
 
     Days the window covers in full replace the stored row; the partly covered first day and
-    days outside the window keep the stored row unless the new one counts more steps."""
+    days outside the window keep the stored row unless the new one counts more steps. A file written
+    under an older HISTORY_COUNTING is recounted once, from the transcripts that still exist."""
     try:
-        history = {r["day"]: r for r in json.loads(constants.HISTORY_FILE.read_text())["per_day"]}
+        stored_file = json.loads(constants.HISTORY_FILE.read_text())
+        history = {r["day"]: r for r in stored_file["per_day"]}
     except (OSError, ValueError, KeyError, TypeError):
-        history = {}
+        stored_file, history = {}, {}
+    if history and stored_file.get("counting") != HISTORY_COUNTING:
+        rows, days = day_rows(scan(HISTORY_RECOUNT_DAYS)[0]), HISTORY_RECOUNT_DAYS
     first_full_day = time.strftime("%Y-%m-%d", time.gmtime(time.time() - (days - 1) * 86400))
     for row in rows:
         stored = history.get(row["day"])
@@ -48,7 +82,7 @@ def merge_history(rows, days):
         if row["day"] >= first_full_day or stored is None or steps >= stored.get("turns", 0) + stored.get("sub_turns", 0):
             history[row["day"]] = row
     kept = [history[day] for day in sorted(history)]
-    constants.HISTORY_FILE.write_text(json.dumps({"updated": time.strftime("%Y-%m-%dT%H:%M:%S"), "per_day": kept}, indent=1))
+    constants.HISTORY_FILE.write_text(json.dumps({"updated": time.strftime("%Y-%m-%dT%H:%M:%S"), "counting": HISTORY_COUNTING, "per_day": kept}, indent=1))
     return kept
 
 
@@ -90,6 +124,7 @@ def scan(days):
         turn_steps = 0
         turn_reread = 0
         first_day = None
+        asked, results = set(), set()
         for line in open(path, errors="replace"):
             try:
                 entry = json.loads(line)
@@ -103,7 +138,7 @@ def scan(days):
                         tool_names[block.get("id")] = (block.get("name"), block.get("input") or {})
                 usage = message.get("usage") or {}
                 request = entry.get("requestId") or entry.get("uuid")
-                if not usage or request in seen:
+                if not usage or request in seen or message.get("model") == SYNTHETIC_MODEL:
                     continue
                 seen.add(request)
                 day = day_of(entry)
@@ -132,6 +167,9 @@ def scan(days):
                     continue
                 content = message.get("content")
                 blocks = content if isinstance(content, list) else [{"type": "text", "text": content}] if isinstance(content, str) else []
+                typed = any(isinstance(b, dict) and b.get("type") == "text" and not b.get("text", "").lstrip().startswith("<") for b in blocks)
+                if typed and not first_ask(entry, asked):
+                    continue
                 for block in blocks:
                     if not isinstance(block, dict):
                         continue
@@ -146,6 +184,9 @@ def scan(days):
                         session_pastes += 1
                         paste_chars += len(block["text"])
                     elif block.get("type") == "tool_result":
+                        if block.get("tool_use_id") in results:
+                            continue
+                        results.add(block.get("tool_use_id"))
                         raw = block.get("content")
                         text = raw if isinstance(raw, str) else " ".join(x.get("text", "") for x in raw or [] if isinstance(x, dict))
                         if len(text) >= constants.BUDGET_BIG_OUTPUT_CHARS:
@@ -170,7 +211,7 @@ def scan(days):
                 continue
             usage = (entry.get("message") or {}).get("usage") or {}
             request = entry.get("requestId") or entry.get("uuid")
-            if not usage or request in seen or day_of(entry) < min_day:
+            if not usage or request in seen or day_of(entry) < min_day or entry["message"].get("model") == SYNTHETIC_MODEL:
                 continue
             seen.add(request)
             bucket = per_day[day_of(entry)]
@@ -230,11 +271,7 @@ def kiasi_actions(days):
 
 def build(days):
     per_day, sessions, projects, big_outputs, pastes, paste_chars, compactions, steps = scan(days)
-    days_out = []
-    for day in sorted(per_day):
-        b = per_day[day]
-        days_out.append({"day": day, "turns": b["turns"], "sub_turns": b["sub_turns"], "mean_context": b["context_sum"] // max(1, b["turns"]), "high_share": round(b["high_turns"] / max(1, b["turns"]), 2),
-                         "main": dict(b["main"]), "sub": dict(b["sub"])})
+    days_out = day_rows(per_day)
     total_main = Counter()
     total_sub = Counter()
     for b in per_day.values():

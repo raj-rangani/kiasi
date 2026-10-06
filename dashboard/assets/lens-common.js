@@ -172,6 +172,28 @@ function dayLabel(day, step) {
   return step < NARROW_STEP_PX ? day.slice(8) : day.slice(5);
 }
 
+function dayLine(counts, days, install) {
+  const { width, height, pad, dot, peakDot } = DAY_LINE;
+  const values = days.map(day => counts[day] || 0);
+  const top = Math.max(1, ...values);
+  const slot = width / days.length;
+  const floor = height - pad;
+  const x = i => ((i + 0.5) * slot).toFixed(1);
+  const y = v => (floor - v / top * (floor - pad)).toFixed(1);
+  const md = day => day.slice(5).replace('-', '/');
+  const points = values.map((v, i) => `${x(i)},${y(v)}`).join(' ');
+  const peak = values.indexOf(Math.max(...values));
+  const dots = values.map((v, i) => `<circle cx="${x(i)}" cy="${y(v)}" r="${v && i === peak ? peakDot : dot}"><title>${esc(md(days[i]))}: ${v} fired</title></circle>`).join('');
+  const on = install ? days.indexOf(install) : -1;
+  const marker = on > 0 ? `<line class="marker" x1="${(on * slot).toFixed(1)}" x2="${(on * slot).toFixed(1)}" y1="0" y2="${floor}"><title>Kiasi switched on ${esc(md(install))}</title></line>` : '';
+  const svg = `<svg class="day-line" viewBox="0 0 ${width} ${height}" role="img" aria-label="Fires per day, ${esc(md(days[0]))} to ${esc(md(days[days.length - 1]))}"><line class="base" x1="0" x2="${width}" y1="${floor}" y2="${floor}"/>${marker}<polygon points="${x(0)},${floor} ${points} ${x(values.length - 1)},${floor}"/><polyline points="${points}"/>${dots}</svg>`;
+  return `${svg}<span class="cells counts" style="--n:${days.length}">${values.map((v, i) => `<i class="${v ? '' : 'nil'}" data-day="${esc(days[i].slice(8))}" title="${esc(md(days[i]))}: ${v} fired">${v}</i>`).join('')}</span>`;
+}
+
+function dayCellLabels(days) {
+  return `<span class="cells labels" style="--n:${days.length}">${days.map(day => `<i title="${esc(day)}">${esc(day.slice(8))}</i>`).join('')}</span>`;
+}
+
 function pill(kind, text) {
   return `<span class="pill ${esc(kind)}">${esc(text ?? label(kind))}</span>`;
 }
