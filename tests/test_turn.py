@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 from helpers import SCRIPTS, KiasiTestCase
 from core import constants  # noqa: E402
@@ -106,6 +107,82 @@ class TestTurnGuard(KiasiTestCase):
         for _ in range(constants.TURN_DENY_BACKSTOP):
             turn.paused_call({**ended, "hook_event_name": "PreToolUse"})
         self.assertIsNone(session.handle_stop(ended), "the refused calls already ended the turn with the notice")
+
+    def _pause(self, sid, cwd, transcript=None):
+        post = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": sid, "cwd": cwd,
+                "transcript_path": str(transcript or self.tmp / f"{sid}.jsonl")}
+        for _ in range(constants.TURN_STOP_STEPS):
+            turn.turn_guard(post, 1000)
+        return Path(events.load_session(sid)["turns"][Path(post["transcript_path"]).stem]["checkpoint"])
+
+    def _prompt(self, sid, text, cwd):
+        return prompt.handle_prompt({"hook_event_name": "UserPromptSubmit", "prompt": text, "session_id": sid, "cwd": cwd,
+                                     "transcript_path": str(self.tmp / f"{sid}-next.jsonl")}) or {}
+
+    def test_continue_after_a_pause_resumes_once_from_the_checklist(self):
+        cwd = str(self.tmp / "app")
+        checkpoint = self._pause("s-resume", cwd)
+        checkpoint.write_text("- [x] parser\n- [ ] tests for the parser\n")
+        resumed = self._prompt("s-resume", "continue", cwd)
+        context = resumed["hookSpecificOutput"]["additionalContext"]
+        for part in (str(checkpoint), "- [ ] tests for the parser", "git status", "n of m verified"):
+            self.assertIn(part, context)
+        self.assertIn(f"Kiasi: resuming from {checkpoint}", resumed["systemMessage"])
+        self.assertNotIn(str(checkpoint), json.dumps(self._prompt("s-resume", "continue", cwd)), "a pause is resumed once")
+
+    def test_only_a_plain_continue_resumes_and_any_other_prompt_is_told_where_the_work_is(self):
+        paused = {"checkpoint": str(self.tmp / "never-written.md"), "steps": 60, "reread": 0, "at": "2026-10-06T18:20:00", "task": "", "files": []}
+        for text in ("continue", "Continue.", "ok, continue", "yes continue please", "go on", "Resume", "keep going", "carry on with the tests"):
+            self.assertEqual(turn.resume_context({"paused": dict(paused)}, text, str(self.tmp))["mode"], "resume", text)
+        for text in ("yes", "why did it stop?", "continuous integration is red", "fix the login bug instead"):
+            self.assertEqual(turn.resume_context({"paused": dict(paused)}, text, str(self.tmp))["mode"], "pointer", text)
+        cwd = str(self.tmp / "app")
+        checkpoint = self._pause("s-point", cwd)
+        told = self._prompt("s-point", "why did the parser tests fail?", cwd)
+        self.assertIn(str(checkpoint), told["hookSpecificOutput"]["additionalContext"])
+        self.assertNotIn("n of m verified", told["hookSpecificOutput"]["additionalContext"])
+        self.assertNotIn("systemMessage", told)
+        self.assertNotIn(str(checkpoint), json.dumps(self._prompt("s-point", "continue", cwd)), "the first prompt after the pause uses it up")
+
+    def test_a_new_session_in_the_project_offers_the_paused_work_and_its_continue_resumes_it(self):
+        cwd = str(self.tmp / "app")
+        checkpoint = self._pause("s-old", cwd)
+        checkpoint.write_text("- [ ] tests for the parser\n")
+
+        def start(sid, source, where=cwd):
+            return session.handle_session_start({"hook_event_name": "SessionStart", "session_id": sid, "source": source, "cwd": where}) or {}
+
+        self.assertNotIn("systemMessage", start("s-old", "resume"), "the paused session resumes from its own state")
+        self.assertNotIn("systemMessage", start("s-elsewhere", "startup", str(self.tmp / "other")), "only the same project is offered it")
+        offered = start("s-new", "clear")
+        self.assertIn(str(checkpoint), offered["systemMessage"])
+        self.assertIn(str(checkpoint), offered["hookSpecificOutput"]["additionalContext"])
+        self.assertIn(f"Kiasi: resuming from {checkpoint}", self._prompt("s-new", "Continue please", cwd)["systemMessage"])
+        self.assertNotIn("systemMessage", start("s-later", "startup"), "a resumed pause is not offered again")
+
+    def test_a_resume_without_a_checklist_starts_from_the_task_and_the_edited_files(self):
+        transcript = self.tmp / "s-task.jsonl"
+        transcript.write_text("".join(json.dumps(entry) + "\n" for entry in (
+            {"type": "user", "message": {"content": "Build the CSV parser for the import screen and add tests for it"}},
+            {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Edit", "input": {"file_path": "/app/parser.py"}}]}},
+        )))
+        cwd = str(self.tmp / "app")
+        self._pause("s-task", cwd, transcript)
+        resumed = self._prompt("s-task", "continue", cwd)
+        context = resumed["hookSpecificOutput"]["additionalContext"]
+        for part in ("no checklist was written", "Build the CSV parser for the import screen", "/app/parser.py", "n of m verified"):
+            self.assertIn(part, context)
+        self.assertIn("no checklist was written", resumed["systemMessage"])
+
+    def test_a_paused_subagent_leaves_nothing_to_resume(self):
+        subagent = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": "s-subp", "cwd": str(self.tmp / "app"),
+                    "transcript_path": str(self.tmp / "s-subp.jsonl"), "agent_id": "a7c2e19b04d5f3a68"}
+        for _ in range(constants.SUBAGENT_STEP_LIMIT):
+            turn.turn_guard(subagent, 1000)
+        state = events.load_session("s-subp")
+        self.assertTrue(any(t.get("stopped") for t in state["turns"].values()))
+        self.assertNotIn("paused", state, "a subagent hands its checklist to its caller, which goes on")
+        self.assertEqual(list(constants.NOTES_DIR.glob("*.paused.json")), [])
 
     def test_the_warning_comes_ten_calls_before_the_pause_and_counts_what_is_left(self):
         def said(sid, tokens, steps):

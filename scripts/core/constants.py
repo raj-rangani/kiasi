@@ -95,6 +95,11 @@ TURN_REMIND_STEPS = 5
 # Calls refused after a pause before the turn is ended outright, so a model that ignores the refusals stops re-reading.
 TURN_DENY_BACKSTOP = 3
 TURN_EXEMPT_TOOLS = {"Agent", "Write", "AskUserQuestion", "TodoWrite", "TaskCreate", "TaskUpdate"}
+# The first prompt after a pause resumes it from the checklist when it is a plain "continue" (or resume, go on, go
+# ahead, carry on, keep going, proceed); any other prompt is only told where the checklist is.
+RESUME_PATTERN = r"^((ok|okay|yes|sure|please)[\s,.!]+)*(continue|resume|go on|go ahead|carry on|keep going|proceed)\b.{0,80}$"
+RESUME_CHECKLIST_CHARS = 2000
+RESUME_TASK_CHARS = 300
 # A subagent's own turn budget: stated in its brief, warned TURN_WARN_MARGIN calls before the limit, paused at it.
 SUBAGENT_STEP_LIMIT = 40
 SUBAGENT_BRIEF_SUFFIX = (

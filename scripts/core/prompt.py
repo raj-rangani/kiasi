@@ -6,7 +6,7 @@ import time
 from core import constants
 from core.events import ensure_dirs, load_session, log_event, save_session
 from core.transcript import current_context_tokens, fmt_k, is_system_prompt, last_prompt_epoch, tail_entries, transcript_key
-from core.turn import reread_check
+from core.turn import reread_check, resume_context
 
 
 def save_paste(session_id, state, prompt):
@@ -68,6 +68,12 @@ def handle_prompt(payload):
     if changed:
         record["config_changed"] = changed
     state["turns"] = {transcript_key(payload.get("transcript_path")): {"steps": 0, "reread": 0, "warned": False, "stopped": False, "index": state["prompts"]}}
+    resume = resume_context(state, prompt, payload.get("cwd"))
+    if resume:
+        context_lines.append(resume["context"])
+        if "message" in resume:
+            messages.append(resume["message"])
+        record["resume"] = resume["mode"]
     if len(prompt) >= constants.PASTE_MIN_CHARS:
         path = save_paste(session_id, state, prompt)
         context_lines.append(f"The pasted content in this prompt ({len(prompt)} chars) is also saved at {path}. After this turn refer to it by that path instead of quoting it, and expect it to be dropped from the conversation summary.")

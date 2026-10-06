@@ -16,6 +16,10 @@ def now_iso():
     return time.strftime("%Y-%m-%dT%H:%M:%S")
 
 
+def project_slug(cwd):
+    return re.sub(r"[^A-Za-z0-9]+", "-", cwd or "unknown").strip("-") or "unknown"
+
+
 def ensure_dirs():
     for d in (constants.LOG_DIR, constants.SESSION_DIR, constants.PASTE_DIR, constants.OUTPUT_DIR, constants.NOTES_DIR, constants.CHECKPOINT_DIR):
         d.mkdir(parents=True, exist_ok=True)

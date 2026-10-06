@@ -6,11 +6,11 @@ import time
 
 from core import constants
 from core.caps import failure_label
-from core.events import ensure_dirs, load_session, log_event, now_iso, save_session
+from core.events import ensure_dirs, load_session, log_event, now_iso, project_slug, save_session
 from core.launch import ensure_dashboard, launch_cleanup
 from core.reads import forget_reads
 from core.transcript import current_context_tokens, edited_files, failing_commands, fmt_k, fmt_m, last_task_prompt, tail_entries, tool_uses, transcript_key
-from core.turn import pause_reminder
+from core.turn import pause_elsewhere, pause_reminder
 
 
 def handle_pre_compact(payload):
@@ -35,10 +35,6 @@ def handle_plugin_compact(payload):
 def handle_plugin_quiet(payload):
     log_event({"event": "quiet", **{key: payload.get(key) for key in constants.PLUGIN_QUIET_FIELDS}})
     return None
-
-
-def project_slug(cwd):
-    return re.sub(r"[^A-Za-z0-9]+", "-", cwd or "unknown").strip("-") or "unknown"
 
 
 def write_note(session_id, cwd, task, files, last_message, state, force=False):
@@ -254,12 +250,19 @@ def handle_session_start(payload):
     launch_cleanup(payload.get("session_id", ""))
     dashboard_line = ensure_dashboard(payload.get("session_id", ""))
     note = last_note(payload.get("cwd") or "")
+    paused = pause_elsewhere(payload)
     log_event({"event": "session_start", "session_id": payload.get("session_id", ""), "source": payload.get("source"), "note": bool(note)})
     lines = [rules_text(), env_warning(), budget_line(), dashboard_line, state_block(payload) if payload.get("source") == "compact" else ""]
     if note and note.get("session_id") != payload.get("session_id"):
         files = ", ".join(note.get("files") or []) or "none recorded"
         lines.append(f"Last session note for this project ({note['ts'][:16]}): task was \"{note['task']}\". Files edited: {files}. It ended with: {note.get('last_message', '')[:200]}")
+    if paused:
+        lines.append(f"The last session in this project was paused by kiasi at {paused['steps']} tool calls; its remaining work is in "
+                     f"{paused['checkpoint']}. If the developer says continue, read that file and resume from its first open item.")
     text = "\n".join(line for line in lines if line)
     if not text:
         return None
-    return {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}}
+    output = {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}}
+    if paused:
+        output["systemMessage"] = f"Kiasi: the last session paused with work left in {paused['checkpoint']}. Reply continue to resume it."
+    return output

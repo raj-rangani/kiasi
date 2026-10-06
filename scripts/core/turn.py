@@ -1,8 +1,12 @@
+import json
+import re
+import time
+
 from core import constants
 from core.caps import failure_label, handle_tool_output, leading_command
-from core.events import load_session, log_event, save_session
+from core.events import ensure_dirs, load_session, log_event, now_iso, project_slug, save_session
 from core.reads import handle_pre_tool, track_reads
-from core.transcript import caller_key, caller_transcript, current_context_tokens, fmt_k, fmt_m, is_short_reply, is_system_prompt, is_task_prompt, prompt_text, tail_entries
+from core.transcript import caller_key, caller_transcript, current_context_tokens, edited_files, fmt_k, fmt_m, is_short_reply, is_system_prompt, is_task_prompt, last_task_prompt, prompt_text, tail_entries
 
 
 def steps_per_prompt(entries):
@@ -93,6 +97,8 @@ def turn_guard(payload, tokens):
             # A pause, not a PostToolUse block: that block came after the call had run, stopped nothing and showed the
             # developer a hook error. paused_call refuses the calls that follow, before they run.
             turn.update(stopped=turn["steps"], checkpoint=str(checkpoint), context=tokens)
+            if not subagent:
+                record_pause(payload, turn, state)
             hand_off = ("end with your reply to the caller: what is done, what is verified, what remains and the checklist path" if subagent else
                         "either make one Agent call with subagent_type general-purpose whose brief is that checklist path plus the done condition, "
                         "or end the turn reporting what is done, what is verified and what remains. If work remains when the turn ends, close "
@@ -131,7 +137,7 @@ def turn_guard(payload, tokens):
 
 def pause_line(turn):
     return (f"Paused by Kiasi at {turn['stopped']} tool calls; the rest is in {turn['checkpoint']}. "
-            "Reply continue to resume here, or run /clear and ask me to resume from that file.")
+            "Reply continue to resume here, or run /clear and then reply continue, which is cheaper.")
 
 
 def pause_notice(turn):
@@ -139,7 +145,7 @@ def pause_notice(turn):
     return (f"Kiasi paused this turn at {turn['stopped']} tool calls ({fmt_m(turn['reread'])} tokens re-read). "
             f"The remaining work goes to {turn['checkpoint']}. "
             f'Reply "continue" to resume in this session (each step re-reads about {fmt_k(turn.get("context", 0))} tokens), '
-            "or run /clear and ask Claude to resume from that file, which is cheaper.")
+            'or run /clear and then reply "continue", which is cheaper.')
 
 
 def pause_alert(turn):
@@ -202,6 +208,71 @@ def pause_reminder(payload):
                f"If work remains, write it to {turn['checkpoint']} if you have not, then reply in two or three lines ending with: "
                f'"{pause_line(turn)}" If nothing remains, say so in one line. Make no other tool calls.')
     return {"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": context}}
+
+
+def paused_file(cwd):
+    return constants.NOTES_DIR / f"{project_slug(cwd)}.paused.json"
+
+
+def record_pause(payload, turn, state):
+    """At a turn's pause, keep what a resume needs: this session's next prompt reads it from the state, a new session
+    in the project from the paused file. The task and the edited files carry a resume when Claude wrote no checklist."""
+    entries = tail_entries(payload.get("transcript_path"))
+    paused = {"checkpoint": turn["checkpoint"], "steps": turn["stopped"], "reread": turn["reread"], "at": now_iso(), "session_id": payload.get("session_id", ""),
+              "task": last_task_prompt(entries)[:constants.RESUME_TASK_CHARS], "files": edited_files(entries)}
+    state["paused"] = paused
+    ensure_dirs()
+    paused_file(payload.get("cwd")).write_text(json.dumps(paused))
+
+
+def pause_elsewhere(payload):
+    """SessionStart: a turn paused in another session of this project is offered here, and this session's first prompt resumes it."""
+    session_id = payload.get("session_id", "")
+    try:
+        paused = json.loads(paused_file(payload.get("cwd")).read_text())
+        age_days = (time.time() - time.mktime(time.strptime(paused["at"], "%Y-%m-%dT%H:%M:%S"))) / 86400
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    if paused.get("session_id") == session_id or age_days > constants.NOTE_MAX_AGE_DAYS:
+        return None
+    state = load_session(session_id)
+    state["paused"] = paused
+    save_session(session_id, state)
+    return paused
+
+
+def resume_context(state, prompt, cwd):
+    """UserPromptSubmit: the first prompt after a pause uses it up. A plain "continue" resumes from the checklist; any
+    other prompt is only told where it is."""
+    paused = state.pop("paused", None)
+    if not paused:
+        return None
+    try:
+        if json.loads(paused_file(cwd).read_text()).get("checkpoint") == paused["checkpoint"]:
+            paused_file(cwd).unlink()
+    except (OSError, ValueError, AttributeError):
+        pass
+    try:
+        with open(paused["checkpoint"]) as fh:
+            checklist = fh.read()
+    except OSError:
+        checklist = ""
+    when = f"kiasi paused a turn at {paused['steps']} tool calls on {paused['at'][:16].replace('T', ' ')}"
+    saved = f"its remaining work is the checklist at {paused['checkpoint']}" if checklist else (
+        f"no checklist was written to {paused['checkpoint']}" + (f'; its task was "{paused["task"]}"' if paused.get("task") else "")
+        + (f"; files it edited: {', '.join(paused['files'])}" if paused.get("files") else ""))
+    if not re.match(constants.RESUME_PATTERN, prompt.strip(), re.I | re.S):
+        return {"mode": "pointer", "context": f"{when}; {saved}. If this prompt is about that work, start from there."}
+    if checklist:
+        cut = "\n[cut here: read the rest from the file]" if len(checklist) > constants.RESUME_CHECKLIST_CHARS else ""
+        saved += f":\n{checklist[:constants.RESUME_CHECKLIST_CHARS].rstrip()}{cut}\n"
+        message = f"Kiasi: resuming from {paused['checkpoint']}"
+    else:
+        saved += ". "
+        message = "Kiasi: resuming the paused turn from its task and edited files; no checklist was written."
+    context = (f"{when}, and the developer asked to resume it: {saved}Check git status and the files involved first. An item stays "
+               'open until you have verified it: do not call the work done while any item is unverified, and end with "n of m verified".')
+    return {"mode": "resume", "context": context, "message": message}
 
 
 def handle_post_tool(payload):
