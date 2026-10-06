@@ -45,3 +45,5 @@ class KiasiTestCase(unittest.TestCase):
         constants.DASHBOARD_STATE = data_dir / "dashboard.json"
         constants.DASHBOARD_LOG = data_dir / "dashboard.log"
         constants.DASHBOARD_AUTOSTART = False  # tests never start a real server from a hook
+        constants.PAUSE_NOTIFICATION = "off"  # nor raise a real desktop notification
+        constants.PAUSE_QUESTION = "off"  # the pause question is asked only in the tests about it

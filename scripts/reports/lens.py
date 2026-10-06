@@ -135,6 +135,11 @@ def extra_cost(tokens):
     return int(tokens * (constants.CACHE_WRITE_PRICE - constants.CACHE_READ_PRICE) / constants.CACHE_READ_PRICE)
 
 
+def avoidable_miss(miss):
+    """Compaction rewrites the prefix on purpose and an idle cache expires on its own; every other miss has a cause to fix."""
+    return miss["cause"] != "compaction" and not miss["cause"].startswith("idle")
+
+
 def cache_report(days, per_day, misses, paid):
     """Overview 03: hit rate against the target, avoidable misses against the window before, causes by cost."""
     start = time.time() - days * 86400
@@ -148,13 +153,14 @@ def cache_report(days, per_day, misses, paid):
         causes[miss["cause"]]["tokens"] += miss["tokens"]
     rows = sorted(({"cause": cause, **row, "extra": extra_cost(row["tokens"])} for cause, row in causes.items()),
                   key=lambda row: (row["cause"] == "compaction", -row["extra"]))
-    avoidable = [m for m in current if m["cause"] != "compaction"]
     had_prior = any(day < local_day(start) and v["input"] for day, v in per_day.items())
-    extra = extra_cost(sum(m["tokens"] for m in avoidable))
+    # The extra cost covers every miss outside compaction, idle expiry included: those tokens were paid for either way.
+    extra = extra_cost(sum(m["tokens"] for m in current if m["cause"] != "compaction"))
     return {"hit_rate": round(read / total, 4) if total else None, "hit_target": constants.LENS_HIT_TARGET,
             "hit_days": [{"day": day, "rate": round(v["read"] / v["input"], 4)} for day, v in sorted(window.items()) if v["input"]],
-            "misses": len(current), "avoidable": len(avoidable),
-            "prior_avoidable": sum(1 for m in prior if m["cause"] != "compaction") if had_prior else None,
+            "misses": len(current), "avoidable": sum(1 for m in current if avoidable_miss(m)),
+            "idle": sum(1 for m in current if m["cause"].startswith("idle")),
+            "prior_avoidable": sum(1 for m in prior if avoidable_miss(m)) if had_prior else None,
             "tokens": sum(m["tokens"] for m in current), "extra": extra, "extra_share": round(extra / paid, 4) if paid else None,
             "write_price": constants.CACHE_WRITE_PRICE, "read_price": constants.CACHE_READ_PRICE, "causes": rows}
 
@@ -240,7 +246,24 @@ def action(record, kind, label, kept_out=0, later=0, saved=0, formula=""):
             "kept_out": int(kept_out), "later_steps": int(later), "saved": int(saved), "formula": formula, "record": record}
 
 
-def classify(t, record, sessions):
+def follow_ups(events):
+    """Per session, when its prompts, its Agent calls and its continues at the pause question were logged."""
+    out = defaultdict(lambda: {"prompts": [], "agents": [], "renewals": []})
+    for t, record in events:
+        if record.get("event") in ("prompt", "agent"):
+            out[record.get("session_id", "")][f"{record['event']}s"].append(t)
+        elif record.get("event") == "turn_resume" and record.get("asked"):
+            out[record.get("session_id", "")]["renewals"].append(t)
+    return out
+
+
+def delegation_followed(t, logged):
+    """True when the session made an Agent call after this prompt and before its next one."""
+    next_prompt = min((when for when in logged["prompts"] if when > t), default=float("inf"))
+    return any(t <= when < next_prompt for when in logged["agents"])
+
+
+def classify(t, record, sessions, logged=None):
     session = record.get("session_id", "")
     info = sessions.get(session, {"steps": [], "prompts": []})
     event = record.get("event")
@@ -266,8 +289,11 @@ def classify(t, record, sessions):
             return action(record, "paste_refused", f"prompt of {record.get('prompt_chars', 0):,} chars refused, saved to disk", kept, later, kept * later,
                           f"{kept:,} tokens kept out × {later} later steps in the session")
         if check.get("mode") == "delegate":
+            # The instruction alone saves nothing: the estimate is credited only when Claude went on to delegate.
+            if not delegation_followed(t, (logged or {}).get(session) or {"prompts": [], "agents": []}):
+                return action(record, "reread_check", f"delegation instructed at {record.get('context_tokens', 0) // 1000}k context, no Agent call before the next prompt")
             saved = max(0, check.get("here", 0) - check.get("delegated", 0))
-            return action(record, "delegated", f"delegation instructed at {record.get('context_tokens', 0) // 1000}k context", 0, check.get("steps", 0), saved,
+            return action(record, "delegated", f"delegated as instructed at {record.get('context_tokens', 0) // 1000}k context", 0, check.get("steps", 0), saved,
                           f"{check.get('here', 0):,} estimated here − {check.get('delegated', 0):,} estimated in a subagent")
         if check:
             return action(record, "reread_check", f"re-read numbers shown at {record.get('context_tokens', 0) // 1000}k context, {check.get('steps', 0)} steps per prompt")
@@ -289,7 +315,9 @@ def classify(t, record, sessions):
     if event == "turn_warn":
         return action(record, "turn_warn", f"warned at {record.get('steps')} steps, {record.get('reread', 0) / 1e6:.1f}M re-read")
     if event == "turn_stop" and record.get("first"):
-        after = steps_until_next_prompt(info["steps"], info["prompts"], t)
+        # A continue at the pause question starts a fresh budget, as the next prompt does.
+        renewals = ((logged or {}).get(session) or {}).get("renewals", [])
+        after = steps_until_next_prompt(info["steps"], sorted([*info["prompts"], *renewals]), t)
         return action(record, "turn_stop", f"paused at {record.get('steps')} steps, {after} more before the next prompt", 0, after, 0,
                       f"steps between the pause and the next prompt: {after} (complies under {constants.LENS_COMPLY_STEPS})")
     if event == "turn_over":
@@ -300,7 +328,8 @@ def classify(t, record, sessions):
         where = " in a new session" if record.get("paused_session") not in (None, "", session) else ""
         if record.get("mode") == "resume":
             source = "from its checklist" if record.get("checklist") else "from its task and edited files, no checklist written"
-            return action(record, "turn_resume", f"turn paused at {record.get('steps')} steps resumed with continue{where}, {source}")
+            how = "at the pause question" if record.get("asked") else "with continue"
+            return action(record, "turn_resume", f"turn paused at {record.get('steps')} steps resumed {how}{where}, {source}")
         return action(record, "turn_moved_on", f"the first prompt after a pause at {record.get('steps')} steps was not continue{where}; Claude was pointed to the saved work")
     if event == "loop":
         return action(record, "loop", f"{record.get('label', '')} failed {record.get('count')} times in one turn, Claude told to stop retrying")
@@ -563,8 +592,11 @@ def since_install():
     per_turn = period_metrics(after_all)
     after["reread_per_turn"], after["turns"], after["mean_context"], after["high_share"] = per_turn["reread_per_turn"], per_turn["turns"], per_turn["mean_context"], per_turn["high_share"]
     b = period_metrics(before)
-    factor = round(b["reread_per_turn"] / after["reread_per_turn"], 1) if b["reread_per_turn"] and after["reread_per_turn"] else None
+    # A handful of steps on either side gives a ratio that the next session overturns.
+    enough = min(b["turns"], after["turns"]) >= constants.LENS_FACTOR_MIN_STEPS
+    factor = round(b["reread_per_turn"] / after["reread_per_turn"], 1) if enough and b["reread_per_turn"] and after["reread_per_turn"] else None
     return {"install_day": day, "before": b if before else None, "after": after if after_all else None, "factor": factor,
+            "factor_min_steps": constants.LENS_FACTOR_MIN_STEPS,
             "first_day": rows[0]["day"], "history_days": len(rows), "series": day_series(rows)}
 
 
@@ -667,8 +699,9 @@ def build(days):
     per_day = defaultdict(Counter)
     by_kind = defaultdict(lambda: {"count": 0, "saved": 0, "kept_out": 0})
     checks, pastes, budget_rows = [], [], []
+    logged = follow_ups(events)
     for t, record in events:
-        item = classify(t, record, sessions)
+        item = classify(t, record, sessions, logged)
         if not item:
             continue
         actions.append(item)
@@ -679,7 +712,8 @@ def build(days):
         if item["kind"] in ("reread_check", "delegated"):
             check = record.get("reread_check") or {}
             checks.append({"ts": item["ts"], "session": item["session"][:8], "context": record.get("context_tokens", 0), "steps": check.get("steps"),
-                           "here": check.get("here", 0), "delegated": check.get("delegated", 0), "mode": check.get("mode", "shown")})
+                           "here": check.get("here", 0), "delegated": check.get("delegated", 0),
+                           "mode": "delegate, no Agent call" if item["kind"] == "reread_check" and check.get("mode") == "delegate" else check.get("mode", "shown")})
         if item["kind"] in ("paste_saved", "paste_refused"):
             pastes.append({"ts": item["ts"], "session": item["session"][:8], "chars": record.get("prompt_chars", 0), "blocked": item["kind"] == "paste_refused",
                            "path": record.get("paste_saved") or record.get("paste_blocked") or ""})

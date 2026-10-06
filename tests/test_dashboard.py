@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 import time
 import unittest
 
@@ -52,6 +53,25 @@ class TestDashboardAutostart(KiasiTestCase):
         self.dashboard.write_state(self.port)
         self.assertEqual(self.dashboard.ensure(), (f"http://127.0.0.1:{self.port}/", False))
         self.assertEqual(self.starts, [])
+
+    def test_ensure_replaces_a_windows_dashboard_an_older_build_started(self):
+        stops = []
+        self.addCleanup(setattr, self.dashboard, "stop_running", self.dashboard.stop_running)
+        self.addCleanup(setattr, sys, "platform", sys.platform)
+        self.dashboard.stop_running = lambda: stops.append(1) or True
+        self.dashboard.write_state(self.port)
+        url = f"http://127.0.0.1:{self.port}/"
+        recorded = json.loads(constants.DASHBOARD_STATE.read_text())
+        self.assertEqual(recorded["build"], constants.DASHBOARD_BUILD)
+        sys.platform = "win32"
+        self.assertEqual(self.dashboard.ensure(), (url, False), "started by this build: left running")
+        constants.DASHBOARD_STATE.write_text(json.dumps({key: value for key, value in recorded.items() if key != "build"}))
+        sys.platform = "linux"
+        self.assertEqual(self.dashboard.ensure(), (url, False), "only Windows opens the windows")
+        self.assertEqual((stops, self.starts), ([], []))
+        sys.platform = "win32"
+        self.assertEqual(self.dashboard.ensure(), (url, True))
+        self.assertEqual((stops, self.starts), ([1], [1]))
 
     def test_ensure_starts_one_and_reports_when_it_does_not_come_up(self):
         self.assertEqual(self.dashboard.ensure(), (None, True))

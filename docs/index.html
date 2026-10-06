@@ -333,7 +333,7 @@ body { overflow-x: clip; }
           <div class="line" data-saved="11700"><span class="cmd">Bash(npm test) <span class="what">· <b>capped</b> full log saved to disk</span></span><span class="num">58,902 → 12,000 chars</span></div>
           <div class="line" data-saved="3100"><span class="cmd">Read(src/api/client.ts) <span class="what">· <b>skipped</b> unchanged, already in context</span></span><span class="num">pointer instead of text</span></div>
           <div class="line plain" data-saved="0"><span class="cmd">Bash(npm test) ×3 failed <span class="what">· <b>loop check</b> stop retrying, check the assumption</span></span><span class="num">turn ends early</span></div>
-          <div class="line plain" data-saved="0"><span class="cmd">30 tool calls in this turn <span class="what">· <b>budget</b> remaining work goes to a checklist</span></span><span class="num">warned</span></div>
+          <div class="line plain" data-saved="0"><span class="cmd">30 steps in this turn <span class="what">· <b>budget</b> remaining work goes to a checklist</span></span><span class="num">warned</span></div>
           <div class="line" data-saved="186000"><span class="cmd">Compaction <span class="what">· <b>pruned</b> old tool output, your words kept verbatim</span></span><span class="num">212k → 26k tokens</span></div>
         </div>
       </div>
@@ -425,7 +425,7 @@ body { overflow-x: clip; }
     </ul></div>
     <div class="rgrid">
       <div class="rule reveal"><span class="n">01</span><h3>Output cap and cleaning</h3><p>Over 12,000 chars is cut. Progress bars, spinners and repeated lines are stripped first. The full text is saved.</p><code>PostToolUse</code></div>
-      <div class="rule reveal" style="--d:1"><span class="n">02</span><h3>Turn budget and loop check</h3><p>Warned at 30 tool calls, stopped at 60. The same call failing three times tells Claude to rethink.</p><code>PostToolUse · PostToolUseFailure</code></div>
+      <div class="rule reveal" style="--d:1"><span class="n">02</span><h3>Turn budget and loop check</h3><p>Warned at 50 steps, paused at 60. The same call failing three times tells Claude to rethink.</p><code>PostToolUse · PostToolUseFailure · PostToolBatch</code></div>
       <div class="rule reveal" style="--d:2"><span class="n">03</span><h3>Re-read skip</h3><p>The same file, unchanged, returns a pointer to the copy already in context instead of the file again.</p><code>PreToolUse</code></div>
       <div class="rule reveal"><span class="n">04</span><h3>Paste manager</h3><p>Over 4,000 chars is saved to disk and replaced by a path. Over 40,000 is refused with the path to resend.</p><code>UserPromptSubmit</code></div>
       <div class="rule reveal" style="--d:1"><span class="n">05</span><h3>Pruner and state</h3><p>At compaction your prompts and Claude's replies stay word for word. Old tool output goes. Task, edited files and failing commands come back.</p><code>session.compact</code></div>
@@ -446,7 +446,7 @@ body { overflow-x: clip; }
       <div class="slline"><span class="l">ctx</span> <span class="ok">███</span><span class="d">░░░░░░░</span> <span class="ok">31%</span> <span class="d">62k</span><i>│</i><span class="l">turn</span> <span class="k">12/60</span><i>│</i><span class="l">5h</span> <span class="ok">████</span><span class="d">░░░░░░</span> <span class="ok">42%</span> <span class="d">⟳ 4:30 pm</span><i>│</i><span class="l">wk</span> <span class="warn">██████</span><span class="d">░░░░</span> <span class="warn">61%</span> <span class="d">⟳ Mon 9:00 am</span> <span class="warn">▲3</span><i>│</i><span class="k">kiasi −1.9M</span></div>
       <ul class="slkey">
         <li><b>ctx</b>how much of the context window this turn carries</li>
-        <li><b>turn</b>tool calls of the 60 before Kiasi stops the turn</li>
+        <li><b>turn</b>steps of the 60 before Kiasi pauses the turn</li>
         <li><b>5h · wk</b>your plan limits, when they reset, and <em>▲</em> when you are ahead of the week's pace</li>
         <li><b>kiasi −</b>tokens kept off your limit this session</li>
       </ul>

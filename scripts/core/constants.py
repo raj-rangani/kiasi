@@ -102,6 +102,23 @@ TURN_WARN_TOKENS = None
 TURN_REMIND_STEPS = 5
 # Calls refused after a pause before the turn is ended outright, so a model that ignores the refusals stops re-reading.
 TURN_DENY_BACKSTOP = 3
+# A desktop notification at a pause: auto (only in the apps below, whose chat raises none; the terminal gets
+# pause_alert's), always or off. pause_notification sets it; any other word leaves it as it is.
+PAUSE_NOTIFICATION_MODES = ("auto", "always", "off")
+PAUSE_NOTIFICATION = "auto"
+# CLAUDE_CODE_ENTRYPOINT in the VS Code extension and in the desktop app.
+PAUSE_NOTIFICATION_APPS = ("claude-vscode", "claude-desktop")
+# At a pause in the developer's own turn Claude asks how to go on, with the three options below: auto (only where a
+# question can be shown: CLAUDE_CODE_ENTRYPOINT in the terminal, the VS Code extension and the desktop app), always or
+# off. pause_question sets it; any other word leaves it as it is.
+PAUSE_QUESTION_MODES = ("auto", "always", "off")
+PAUSE_QUESTION = "auto"
+PAUSE_QUESTION_APPS = ("cli", "claude-vscode", "claude-desktop")
+PAUSE_QUESTION_HEADER = "Kiasi pause"
+# The option labels are fixed: pause_answer reads the developer's choice by them.
+PAUSE_CHOICES = {"continue": "Continue here", "subagent": "Hand to a subagent", "stop": "Stop here"}
+NOTIFY_TITLE_ENV = "KIASI_NOTIFY_TITLE"
+NOTIFY_BODY_ENV = "KIASI_NOTIFY_BODY"
 TURN_EXEMPT_TOOLS = {"Agent", "Write", "AskUserQuestion", "TodoWrite", "TaskCreate", "TaskUpdate"}
 # The first prompt after a pause resumes it from the checklist when it is a plain "continue" (or resume, go on, go
 # ahead, carry on, keep going, proceed); any other prompt is only told where the checklist is.
@@ -111,7 +128,7 @@ RESUME_TASK_CHARS = 300
 # A subagent's own turn budget: stated in its brief, warned TURN_WARN_MARGIN calls before the limit, paused at it.
 SUBAGENT_STEP_LIMIT = 40
 # The brief's budget sentence, left out when the budget is off.
-SUBAGENT_BRIEF_BUDGET = "Kiasi budget: finish within {steps} tool calls. "
+SUBAGENT_BRIEF_BUDGET = "Kiasi budget: finish within {steps} steps; the tool calls of one response are one step, so parallel calls count once. "
 SUBAGENT_BRIEF_SUFFIX = (
     "Batch shell commands, run each test suite once per round, never poll with sleep. "
     "When done or blocked, reply with at most 300 words: what changed (paths), what was verified, what remains."
@@ -282,6 +299,7 @@ LENS_COMPACT_JOIN_SECONDS = 180
 LENS_STEP_BUCKETS = ((1, 1), (2, 5), (6, 10), (11, 20), (21, 29), (30, 59), (60, None))
 LENS_CUT_BUCKETS = ((0, 2000), (2000, 5000), (5000, 10000), (10000, 20000), (20000, None))
 LENS_COMPLY_STEPS = 10
+LENS_FACTOR_MIN_STEPS = 300  # steps needed before and after the install before the per-step factor is shown
 LENS_CACHE_MISS_TOKENS = 20000
 LENS_CACHE_IDLE_SHORT = 300
 LENS_CACHE_IDLE_LONG = 3600
@@ -350,18 +368,18 @@ RULES_FILE = PLUGIN_ROOT / "rules.md"
 TURN_RULE_PREFIX = "- Every turn has a budget of"
 SUBAGENT_RULE_PREFIX = "- Each subagent has its own budget of"
 TURN_RULES = {
-    "pause": ("- Every turn has a budget of {steps} tool calls or {tokens} re-read tokens. At the warning, about {margin} calls before the pause, "
-              "finish the item in progress, write the remaining work as a checklist to the path kiasi names, and end the turn or hand the checklist "
-              "to one general-purpose subagent. At the pause every call except Write and Agent is refused: end the turn with the notice kiasi gives, "
-              "so the developer knows how to resume."),
-    "warn": ("- Every turn has a budget of {steps} tool calls or {tokens} re-read tokens, which kiasi reports but does not enforce. At the warning, "
-             "about {margin} calls before the budget, finish the item in progress, write the remaining work as a checklist to the path kiasi names, "
+    "pause": ("- Every turn has a budget of {steps} steps (the tool calls of one response are one step, so parallel calls count once) or {tokens} re-read tokens. At the warning, about {margin} steps before the pause, "
+              "finish the item in progress, write the remaining work as a checklist to the path kiasi names, then ask the developer the question kiasi gives "
+              "(continue here, hand to a subagent, or stop) and do what they choose; never choose for them. At the pause every call except Write, Agent and that question is refused: write the checklist and ask it. "
+              "When kiasi gives no question, end the turn or hand the checklist to one general-purpose subagent; at a pause, end with its notice, so the developer knows how to resume."),
+    "warn": ("- Every turn has a budget of {steps} steps (the tool calls of one response are one step, so parallel calls count once) or {tokens} re-read tokens, which kiasi reports but does not enforce. At the warning, "
+             "about {margin} steps before the budget, finish the item in progress, write the remaining work as a checklist to the path kiasi names, "
              "and end the turn or hand the checklist to one general-purpose subagent."),
 }
 SUBAGENT_RULES = {
-    "pause": ("- Each subagent has its own budget of {subagent_steps} tool calls, stated in its brief and enforced like the turn budget: at the pause "
+    "pause": ("- Each subagent has its own budget of {subagent_steps} steps, stated in its brief and enforced like the turn budget: at the pause "
               "it writes its checklist and replies. Scope review subagents to the diff, never the whole repo."),
-    "warn": ("- Each subagent has its own budget of {subagent_steps} tool calls, stated in its brief and reported like the turn budget. "
+    "warn": ("- Each subagent has its own budget of {subagent_steps} steps, stated in its brief and reported like the turn budget. "
              "Scope review subagents to the diff, never the whole repo."),
     "off": "- Scope review subagents to the diff, never the whole repo.",
 }
@@ -387,6 +405,8 @@ SUBAGENT_STEP_LIMIT = _env_int("CLAUDE_PLUGIN_OPTION_SUBAGENT_CALL_BUDGET", SUBA
 TURN_STOP_STEPS = _env_int("CLAUDE_PLUGIN_OPTION_TURN_CALL_BUDGET", TURN_STOP_STEPS)
 TURN_STOP_TOKENS = _env_int("CLAUDE_PLUGIN_OPTION_TURN_TOKEN_BUDGET", TURN_STOP_TOKENS)
 TURN_BUDGET_MODE = _env_choice("CLAUDE_PLUGIN_OPTION_TURN_BUDGET_MODE", TURN_BUDGET_MODE, TURN_BUDGET_MODES)
+PAUSE_NOTIFICATION = _env_choice("CLAUDE_PLUGIN_OPTION_PAUSE_NOTIFICATION", PAUSE_NOTIFICATION, PAUSE_NOTIFICATION_MODES)
+PAUSE_QUESTION = _env_choice("CLAUDE_PLUGIN_OPTION_PAUSE_QUESTION", PAUSE_QUESTION, PAUSE_QUESTION_MODES)
 PASTE_BLOCK_CHARS = _env_int("CLAUDE_PLUGIN_OPTION_PASTE_REFUSAL_CHARS", PASTE_BLOCK_CHARS)
 COMPACTION_WINDOW_TEXT = os.environ.get("CLAUDE_PLUGIN_OPTION_COMPACTION_WINDOW_TEXT", "200000")
 
@@ -408,7 +428,8 @@ PROJECT_KEYS = {
     "subagent_call_budget": "SUBAGENT_STEP_LIMIT",
 }
 # Settings that take one of a few words rather than a number; any other value is ignored.
-PROJECT_CHOICES = {"turn_budget_mode": ("TURN_BUDGET_MODE", TURN_BUDGET_MODES)}
+PROJECT_CHOICES = {"turn_budget_mode": ("TURN_BUDGET_MODE", TURN_BUDGET_MODES), "pause_notification": ("PAUSE_NOTIFICATION", PAUSE_NOTIFICATION_MODES),
+                   "pause_question": ("PAUSE_QUESTION", PAUSE_QUESTION_MODES)}
 
 
 def warn_steps(stop_steps):
@@ -465,6 +486,9 @@ DASHBOARD_SERVER = "kiasi-dashboard"
 DASHBOARD_PROBE_SECONDS = 1.0
 DASHBOARD_START_WAIT_SECONDS = 3.0
 DASHBOARD_REBUILD_SECONDS = 30 * 60
+# Recorded in DASHBOARD_STATE and raised when a dashboard that is already running must be replaced after an update. On
+# Windows one started before build 2 has no console, so every report rebuild it starts opens an empty window.
+DASHBOARD_BUILD = 2
 
 # Plan limits come only from the status line: Claude Code hands it rate_limits
 # and the Kiasi wrapper (statusline.py) saves them for the dashboard.

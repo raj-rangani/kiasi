@@ -135,7 +135,7 @@ function renderDid(d) {
   const rows = [
     ['Tool outputs capped', span, String(kind('cap').count), `${fmtM(kind('cap').kept_out)} tokens cut from the outputs${cuts ? ` · ${back} of ${cuts} cuts read back (${pct(back / cuts)})` : ''}`],
     ['Compactions pruned', span, `${t.pruned} of ${t.pruned + t.summaries}`, `${fmtM(kind('pruned').kept_out)} tokens removed by pruning · ${t.summaries} fell back to the built-in summary`],
-    ['Turn pauses', span, String(t.stops), t.stops ? `${t.resumed || 0} resumed with continue · ${t.stops_complied} complied · mean ${t.mean_steps_after_stop} steps after` : ''],
+    ['Turn pauses', span, String(t.stops), t.stops ? `${t.resumed || 0} resumed · ${t.stops_complied} complied · mean ${t.mean_steps_after_stop} steps after` : ''],
     ['Calls routed to the sandbox', span, String(kind('routed').count), `${kind('route_retry').count} repeated and let through`],
     ['Unchanged re-reads skipped', span, String(t.reads_skipped || 0), `${t.reads_retried || 0} repeated and let through`],
     ['Tokens cut or pruned', `since ${esc((all.first_day || '').slice(5) || 'today')}`, fmtM(all.kept_out), `${all.caps} caps and every pruned compaction over ${all.days} days`],
@@ -159,18 +159,18 @@ function cacheTiles(c) {
   const days = c.hit_days.map(day => day.rate);
   const delta = c.prior_avoidable == null ? 'no earlier week to compare' : c.avoidable === c.prior_avoidable ? 'same as the week before'
     : `${c.avoidable > c.prior_avoidable ? '▲' : '▼'} ${Math.abs(c.avoidable - c.prior_avoidable)} vs ${c.prior_avoidable} the week before`;
-  const cost = `a cache write is priced ${c.write_price}× input and a read ${c.read_price}×, so each missed token costs as much as ${Math.round((c.write_price - c.read_price) / c.read_price)} re-read tokens`;
+  const cost = `every miss outside compaction, idle expiry included; a cache write is priced ${c.write_price}× input and a read ${c.read_price}×, so each missed token costs as much as ${Math.round((c.write_price - c.read_price) / c.read_price)} re-read tokens`;
   return [
     ['Hit rate', `${rate}${days.length > 1 ? sparkline(days) : ''}`, `${met ? '✓ above' : 'below'} the ${pct(c.hit_target)} target`, met ? '' : 'warn', 'share of input read from the cache, per day on the line'],
-    ['Avoidable misses', `${c.avoidable}<small>of ${c.misses}</small>`, delta, c.prior_avoidable != null && c.avoidable > c.prior_avoidable ? 'warn' : '', 'misses not caused by compaction'],
+    ['Avoidable misses', `${c.avoidable}<small>of ${c.misses}</small>`, `${delta}${c.idle ? ` · ${c.idle} more from idle expiry` : ''}`, c.prior_avoidable != null && c.avoidable > c.prior_avoidable ? 'warn' : '', 'misses caused by neither compaction nor the cache expiring while the session was idle'],
     ['Extra cost', `${fmtM(c.extra)}<small>re-read tokens</small>${est('extra')}`, c.extra_share == null ? '' : `${(c.extra_share * 100).toFixed(1)}% of what you paid`, '', cost],
   ].map(([label, big, note, cls, tip]) => `<div class="cache-tile ${cls}" title="${esc(tip)}"><span class="cache-label">${label}</span><b>${big}</b><span>${esc(note)}</span></div>`).join('');
 }
 
 function cacheCauses(c) {
-  const avoidable = c.causes.filter(row => row.cause !== 'compaction');
-  const totalExtra = avoidable.reduce((sum, row) => sum + row.extra, 0);
-  const shown = avoidable.filter(row => row.extra >= totalExtra * CACHE_CAUSE_MIN_SHARE);
+  const outside = c.causes.filter(row => row.cause !== 'compaction');
+  const totalExtra = outside.reduce((sum, row) => sum + row.extra, 0);
+  const shown = outside.filter(row => row.extra >= totalExtra * CACHE_CAUSE_MIN_SHARE);
   const max = Math.max(...shown.map(row => row.extra), 1);
   const rows = shown.map(row => `<div class="cause-row" title="${esc(MISS_CAUSE_HELP[row.cause] || '')} · ${row.count} misses">
       <span class="cause-name">${esc(row.cause)}</span>
@@ -178,7 +178,7 @@ function cacheCauses(c) {
       <span class="cause-num">${fmtM(row.extra)}</span>
       <span class="cause-fix">${esc(MISS_CAUSE_FIX[row.cause] || '')}</span></div>`).join('');
   const left = [];
-  const small = avoidable.length - shown.length;
+  const small = outside.length - shown.length;
   if (small) left.push(`${small} smaller cause${small > 1 ? 's' : ''}`);
   const compaction = c.causes.find(row => row.cause === 'compaction');
   if (compaction) left.push(`${compaction.count} compaction misses (expected)`);

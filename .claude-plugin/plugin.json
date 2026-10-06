@@ -23,6 +23,18 @@
       "description": "pause (the default): at the budget kiasi pauses the turn, refuses further calls and saves the remaining work, so replying continue resumes it. warn: kiasi only warns, before and at the budget. off: no budget; calls are only counted. Subagent budgets follow the same mode.",
       "default": "pause"
     },
+    "pause_notification": {
+      "type": "string",
+      "title": "Pause notification",
+      "description": "A desktop notification when kiasi pauses a turn. auto (the default): only in the VS Code extension and the desktop app, whose chat raises none; the terminal already gets one. always: in every session. off: never.",
+      "default": "auto"
+    },
+    "pause_question": {
+      "type": "string",
+      "title": "Pause question",
+      "description": "At a pause Claude asks how to go on: continue here with a fresh budget, hand the rest to a subagent, or stop. auto (the default): where a question can be shown, in the terminal, the VS Code extension and the desktop app. always: in every session. off: the turn ends with the pause notice.",
+      "default": "auto"
+    },
     "turn_call_budget": {
       "type": "number",
       "title": "Turn call budget",
