@@ -275,7 +275,7 @@ def handle_session_start(payload):
         files = ", ".join(note.get("files") or []) or "none recorded"
         lines.append(f"Last session note for this project ({note['ts'][:16]}): task was \"{note['task']}\". Files edited: {files}. It ended with: {note.get('last_message', '')[:200]}")
     if paused:
-        lines.append(f"The last session in this project was paused by kiasi at {paused['steps']} tool calls; its remaining work is in "
+        lines.append(f"The last session in this project was paused by kiasi at {paused['steps']} steps; its remaining work is in "
                      f"{paused['checkpoint']}. If the developer says continue, read that file and resume from its first open item.")
     text = "\n".join(line for line in lines if line)
     if not text:

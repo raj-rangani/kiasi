@@ -1,3 +1,5 @@
+import os
+import signal
 import subprocess
 import sys
 
@@ -8,3 +10,32 @@ def detached_kwargs():
         flags = subprocess.CREATE_NEW_PROCESS_GROUP | getattr(subprocess, "CREATE_NO_WINDOW", 0)
         return {"creationflags": flags, "close_fds": True}
     return {"start_new_session": True, "close_fds": True}
+
+
+def run_tree(argv, timeout, **kwargs):
+    """Run a command and wait for it; at the timeout stop it together with everything it started, then raise TimeoutExpired.
+    subprocess.run's timeout kills only the command itself, so a sync stopped that way left its report script running."""
+    if sys.platform != "win32":
+        kwargs["start_new_session"] = True  # its own process group, which kill_tree signals as a whole
+    proc = subprocess.Popen(argv, **kwargs)
+    try:
+        return proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        kill_tree(proc)
+        raise
+
+
+def kill_tree(proc):
+    if sys.platform == "win32":
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, check=False,
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    else:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except OSError:
+            pass
+    try:
+        proc.kill()
+    except OSError:
+        pass
+    proc.wait()

@@ -12,7 +12,7 @@ On the machine it was built on, context re-sent per step went from 201k to 31k t
 ## Key features
 
 - **Output cap and cleaning**: tool output over 12,000 chars is cut, progress bars and repeated lines are stripped, the full text is saved to disk and named in the cut.
-- **Turn budget and loop check**: warned 10 tool calls before the pause at 60 (later calls are refused and Claude saves a checklist in the project's `.kiasi/` folder, which git ignores; reply "continue", here or after `/clear`, and Claude resumes from it; `turn_budget_mode` can make the budget only warn, or turn it off); the same call failing 3 times tells Claude to rethink instead of retry.
+- **Turn budget and loop check**: warned 10 steps before the pause at 60 (the tool calls of one response are one step, so parallel calls count once; later calls are refused and Claude saves a checklist in the project's `.kiasi/` folder, which git ignores; reply "continue", here or after `/clear`, and Claude resumes from it; `turn_budget_mode` can make the budget only warn, or turn it off); the same call failing 3 times tells Claude to rethink instead of retry.
 - **Re-read skip**: a file already in context and unchanged comes back as a pointer, not the text again.
 - **Paste manager**: a paste over 4,000 chars is saved to disk; over 40,000 it is refused and you resend with the path.
 - **Pruner and state** (experimental): at compaction your prompts and Claude's replies stay word for word while old tool output is pruned; the task, edited files and failing commands are re-injected.
@@ -53,7 +53,7 @@ Each rule is a Claude Code hook with a fixed threshold you can change. Nothing i
 | Leak | Rule | Hook |
 |---|---|---|
 | One install log rides along on every step after it | Output cap and cleaning | `PostToolUse` |
-| A 60-step turn chasing one failing test | Turn budget and loop check | `PostToolUse`, `PostToolUseFailure` |
+| A 60-step turn chasing one failing test | Turn budget and loop check | `PostToolUse`, `PostToolUseFailure`, `PostToolBatch` |
 | The same file, read again, unchanged | Re-read skip | `PreToolUse` |
 | A whole log pasted to ask one question | Paste manager | `UserPromptSubmit` |
 | Compaction forgets what you were doing | Pruner and state | `session.compact` (experimental) |
@@ -91,6 +91,8 @@ Set these with `/config` or as env vars. Every other threshold is a named consta
 |---|---|---|
 | `output_cap_chars` | `CLAUDE_PLUGIN_OPTION_OUTPUT_CAP_CHARS` | 12000 |
 | `turn_budget_mode` | `CLAUDE_PLUGIN_OPTION_TURN_BUDGET_MODE` | pause (or warn, off) |
+| `pause_notification` | `CLAUDE_PLUGIN_OPTION_PAUSE_NOTIFICATION` | auto (or always, off) |
+| `pause_question` | `CLAUDE_PLUGIN_OPTION_PAUSE_QUESTION` | auto (or always, off) |
 | `turn_call_budget` | `CLAUDE_PLUGIN_OPTION_TURN_CALL_BUDGET` | 60 |
 | `turn_token_budget` | `CLAUDE_PLUGIN_OPTION_TURN_TOKEN_BUDGET` | 8000000 |
 | `subagent_call_budget` | `CLAUDE_PLUGIN_OPTION_SUBAGENT_CALL_BUDGET` | 40 |
@@ -98,6 +100,10 @@ Set these with `/config` or as env vars. Every other threshold is a named consta
 | `compaction_window_text` | `CLAUDE_PLUGIN_OPTION_COMPACTION_WINDOW_TEXT` | "200000" |
 
 A `.kiasi.json` in the project root can set any of these except `compaction_window_text` for that project, plus `turn_warn_steps` and `turn_warn_tokens` (by default the warning comes 10 calls, or a fifth of the tokens, before the budget).
+
+`pause_question` is what your own turn does when its budget runs low. At the warning, and again at the pause if the turn gets that far, Claude writes the checklist and asks how to go on, with three options: continue here with a fresh budget, hand the rest to a subagent, or stop. Continue renews the budget in place; the other two leave the turn paused, so replying continue later still resumes it. With `auto` the question is asked in the terminal, the VS Code extension and the desktop app; a headless run (`claude -p`) and a subagent are paused without it. With `off` the turn ends with the pause notice.
+
+`pause_notification` is a desktop notification when a turn is paused, through `notify-send` on Linux, `osascript` on macOS and a PowerShell toast on Windows. With `auto` it shows only in the VS Code extension and the desktop app, where the pause is otherwise one grey line in the chat; the terminal already raises its own notification and bell.
 
 `KIASI_DASHBOARD=off` stops the session-start autostart of the dashboard.
 

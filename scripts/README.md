@@ -5,7 +5,7 @@ Python 3.10 or newer, standard library only. No install step.
 ## Layout
 
 - `kiasi.py`: the hook entry point. Reads the hook payload from stdin, dispatches on `hook_event_name` and prints the JSON result.
-- `core/`: the hook logic, imported by `kiasi.py`. `constants.py` (every threshold and path), `events.py` (event log, session state), `transcript.py` (transcript reading), `caps.py` (output caps, cleaning, archive), `prompt.py`, `turn.py`, `reads.py`, `session.py`, `launch.py`.
+- `core/`: the hook logic, imported by `kiasi.py`. `constants.py` (every threshold and path), `events.py` (event log, session state), `transcript.py` (transcript reading), `caps.py` (output caps, cleaning, archive), `prompt.py`, `turn.py`, `notify.py` (the desktop notification at a pause), `reads.py`, `session.py`, `launch.py`.
 - `reports/`: `budget.py`, `lens.py` and `sync.py`, which rebuild the dashboard reports.
 - `dashboard.py`, `search.py`, `sandbox.py`, `cleanup.py`, `benchmark.py`, `statusline.py`, `statusline_install.py`, `limits_data.py`: standalone tools, each run as `python3 scripts/<name>.py`.
 
@@ -13,7 +13,7 @@ Python 3.10 or newer, standard library only. No install step.
 
 | Caller | Script |
 | --- | --- |
-| `hooks/hooks.json` (UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PreCompact, Stop, SessionStart) | `kiasi.py` |
+| `hooks/hooks.json` (UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PostToolBatch, PreCompact, Stop, SessionStart) | `kiasi.py` |
 | `hooks/compact.js`, `hooks/quiet.js` (function hooks) | `kiasi.py` |
 | `hooks/search.js` (`mcp__kiasi__search`) | `search.py` |
 | `hooks/sandbox.js` (`mcp__kiasi__run`, `distill`, `fetch`) | `sandbox.py` |

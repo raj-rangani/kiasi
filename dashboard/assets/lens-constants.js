@@ -58,7 +58,7 @@ const KIND_SHORT = {
   reread_check: 'here-vs-subagent estimate shown to Claude',
   turn_stop: 'paused at the budget: calls refused, the rest saved to resume',
   turn_over: 'reached the budget in warn mode; nothing refused',
-  turn_resume: '"continue" picked a paused turn back up',
+  turn_resume: 'a paused turn was picked back up, by "continue" or at the pause question',
   turn_moved_on: 'the first prompt after a pause was something else',
   summary: "prune missed the ceiling; built-in summary ran",
   loop: 'same failing call stopped after repeats',
@@ -68,7 +68,7 @@ const KIND_SHORT = {
 const KIND_HELP = {
   cap: 'a tool result over its cap was cut; the full text is saved to disk',
   paste_refused: 'a prompt over 40 k chars was saved to disk and dropped from the conversation',
-  delegated: 'the re-read numbers said a subagent was cheaper, so Claude was told to delegate',
+  delegated: 'the re-read numbers said a subagent was cheaper, Claude was told to delegate, and an Agent call followed before the next prompt',
   pruned: 'the plugin replaced the summariser with a deterministic prune of the transcript',
   summary: 'the prune could not get under the ceiling, so the built-in summary ran',
   compaction: 'a compaction happened (PreCompact hook)',
@@ -80,7 +80,7 @@ const KIND_HELP = {
   turn_warn: 'the turn passed the warning step or re-read budget',
   turn_stop: 'the turn reached its budget and was paused: further calls were refused and the remaining work was saved to resume',
   turn_over: 'the turn reached its budget in warn mode; Kiasi said so and refused nothing',
-  turn_resume: 'the developer replied "continue" after a pause and Claude got the saved work back',
+  turn_resume: 'the developer replied "continue" after a pause, or chose to continue at the pause question, and Claude got the saved work back',
   turn_moved_on: 'the first prompt after a pause was not "continue", so Claude was only told where the saved work is',
   agent_model: 'a subagent got its model set by type',
   review_asked: 'a repeated review round became a permission prompt',
@@ -196,7 +196,7 @@ const EST_TIPS = {
   avoided: 'Estimate: tokens kept out of context, times the assistant steps that came after in the session.',
   cap: 'Estimate: (characters before the cut − characters shown) ÷ 4, times the assistant steps that came after.',
   pruner: 'Estimate: the context size before the compaction (tokens_before) that the pruned transcript did not have to rebuild.',
-  reread: 'Estimate: re-read tokens if this ran here, minus re-read tokens if it were delegated to a subagent.',
+  reread: 'Estimate: re-read tokens if this ran here, minus re-read tokens if it were delegated to a subagent. Counted only when an Agent call followed the instruction.',
   extra: 'Estimate: tokens written again after each miss, priced against a cache read.',
 };
 const EST_NOTE = 'Figures marked est. come from a formula; everything else is read from your transcripts.';

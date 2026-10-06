@@ -4,7 +4,7 @@ Claude Code writes a parallel batch as one assistant entry per call, all sharing
 result when its call ends. hooks/prune.js must rebuild such a batch as one message ahead of all its results;
 otherwise every call but the last loads as "[Tool result missing due to internal error]".
 
-It runs a real session of about eight short Haiku calls, so it is not part of the unit tests. Run it by hand after
+It runs a real session of about nine short Haiku calls, so it is not part of the unit tests. Run it by hand after
 changing hooks/prune.js or after a Claude Code update:
 
     python3 tests/e2e_parallel_compact.py [plugin dir, default: this repo]
@@ -120,8 +120,17 @@ def check(work):
     missing = [name for name in FILES if markers[name] not in answer]
     print(f'model answer:\n{answer}')
     print(f'calls without a result after compaction: {len(lost)}; markers missing from the answer: {missing or "none"}')
-    print('FAIL' if lost or missing else 'PASS')
-    return 1 if lost or missing else 0
+    # Every claude -p call resumes the session from the transcript. One more resume, now with a turn written after
+    # the compaction, has to load the same batch.
+    again = str(claude(work, QUESTION, session).get('result'))
+    path, rows = transcript(session)
+    boundaries = [i for i, e in enumerate(rows) if e.get('subtype') == 'compact_boundary']
+    lost_again = unanswered(rows[boundaries[-1]:], same_id_merges=True)
+    missing_again = [name for name in FILES if markers[name] not in again]
+    print(f'after one more resume: calls without a result: {len(lost_again)}; markers missing from the answer: {missing_again or "none"}')
+    failed = bool(lost or missing or lost_again or missing_again)
+    print('FAIL' if failed else 'PASS')
+    return 1 if failed else 0
 
 
 def main():
