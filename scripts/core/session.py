@@ -6,7 +6,7 @@ import time
 
 from core import constants
 from core.caps import failure_label
-from core.events import ensure_dirs, load_session, log_event, now_iso, project_slug, save_session
+from core.events import checklist_folder, ensure_dirs, load_session, log_event, now_iso, project_slug, save_session
 from core.launch import ensure_dashboard, launch_cleanup
 from core.reads import forget_reads
 from core.transcript import current_context_tokens, edited_files, failing_commands, fmt_k, fmt_m, last_task_prompt, tail_entries, tool_uses, transcript_key
@@ -241,7 +241,9 @@ def state_block(payload):
     files = edited_files(entries)[-constants.STATE_MAX_FILES:]
     failures = open_failures(entries)
     outputs = list(dict.fromkeys(r.get("saved_path") for r in session_events(session_id, "cap") if r.get("saved_path")))[-constants.STATE_MAX_OUTPUTS:]
-    checklists = sorted(constants.CHECKPOINT_DIR.glob(f"{transcript_key(payload.get('transcript_path'))[:8]}-*.md"), key=lambda p: p.stat().st_mtime)[-constants.STATE_MAX_CHECKLISTS:]
+    pattern = f"{transcript_key(payload.get('transcript_path'))[:8]}-*.md"
+    found = {path for folder in (checklist_folder(payload.get("cwd")), constants.CHECKPOINT_DIR) for path in folder.glob(pattern)}
+    checklists = sorted(found, key=lambda p: p.stat().st_mtime)[-constants.STATE_MAX_CHECKLISTS:]
     log_event({"event": "state", "session_id": session_id, "task": bool(task), "files": len(files), "failures": len(failures), "outputs": len(outputs), "checklists": len(checklists)})
     lines = []
     if task:

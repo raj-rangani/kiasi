@@ -187,6 +187,52 @@ class TestTurnGuard(KiasiTestCase):
             self.assertIn(part, context)
         self.assertIn("no checklist was written", resumed["systemMessage"])
 
+    def test_the_checklist_goes_in_the_project_in_a_folder_git_ignores(self):
+        # Claude Code refuses Claude's writes under ~/.claude, Kiasi's data folder included, as edits to a sensitive file.
+        project = self.tmp / "project"
+        project.mkdir()
+        post = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": "s-proj", "cwd": str(project),
+                "transcript_path": str(self.tmp / "s-proj.jsonl")}
+        for _ in range(constants.turn_warn_steps() - 1):
+            turn.turn_guard(post, 1000)
+        self.assertFalse((project / ".kiasi").exists(), "a turn far from its budget leaves the project alone")
+        results = [turn.turn_guard(post, 1000) for _ in range(constants.TURN_STOP_STEPS - constants.turn_warn_steps() + 1)]
+        checkpoint = Path(events.load_session("s-proj")["turns"]["s-proj"]["checkpoint"])
+        self.assertEqual(checkpoint.parent, project / ".kiasi" / "checkpoints")
+        self.assertTrue(checkpoint.parent.is_dir())
+        self.assertEqual((project / ".kiasi" / ".gitignore").read_text(), "*\n")
+        self.assertIn(str(checkpoint), results[0]["hookSpecificOutput"]["additionalContext"])
+        self.assertIn(str(checkpoint), results[-1]["systemMessage"])
+        self.assertEqual(json.loads(turn.paused_file(str(project)).read_text())["checkpoint"], str(checkpoint))
+
+    def test_without_a_writable_project_folder_the_checklist_stays_in_the_data_folder(self):
+        for cwd in (None, "", str(self.tmp / "missing")):
+            self.assertEqual(turn.checkpoint_path("abcdef12", {"index": 3}, cwd), constants.CHECKPOINT_DIR / "abcdef12-3.md")
+
+    def test_a_pause_in_a_resumed_turn_keeps_the_resumed_task_and_files(self):
+        first = self.tmp / "s-first.jsonl"
+        first.write_text("".join(json.dumps(entry) + "\n" for entry in (
+            {"type": "user", "message": {"content": "Build the CSV parser for the import screen and add tests for it"}},
+            {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Edit", "input": {"file_path": "/app/parser.py"}}]}},
+        )))
+        cwd = str(self.tmp / "app")
+        self._pause("s-first", cwd, first)
+        session.handle_session_start({"hook_event_name": "SessionStart", "session_id": "s-second", "source": "clear", "cwd": cwd})
+        self._prompt("s-second", "continue", cwd)
+        # The resumed turn's only prompt is "continue", and it pauses again before Claude writes a checklist.
+        second = self.tmp / "s-second.jsonl"
+        second.write_text("".join(json.dumps(entry) + "\n" for entry in (
+            {"type": "user", "message": {"content": "continue"}},
+            {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Edit", "input": {"file_path": "/app/test_parser.py"}}]}},
+        )))
+        self._pause("s-second", cwd, second)
+        paused = events.load_session("s-second")["paused"]
+        self.assertEqual(paused["task"], "Build the CSV parser for the import screen and add tests for it")
+        self.assertEqual(paused["files"], ["/app/parser.py", "/app/test_parser.py"])
+        self.assertIn("Build the CSV parser for the import screen", self._prompt("s-second", "continue", cwd)["hookSpecificOutput"]["additionalContext"])
+        self._prompt("s-second", "Now add a JSON exporter to the import screen, with its own tests", cwd)
+        self.assertNotIn("resumed", events.load_session("s-second"), "a new task is not mixed with the work resumed before it")
+
     def test_a_paused_subagent_leaves_nothing_to_resume(self):
         subagent = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": "s-subp", "cwd": str(self.tmp / "app"),
                     "transcript_path": str(self.tmp / "s-subp.jsonl"), "agent_id": "a7c2e19b04d5f3a68"}

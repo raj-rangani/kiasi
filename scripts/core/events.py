@@ -1,7 +1,9 @@
 import json
+import os
 import re
 import time
 from contextlib import contextmanager
+from pathlib import Path
 
 from core import constants
 
@@ -18,6 +20,25 @@ def now_iso():
 
 def project_slug(cwd):
     return re.sub(r"[^A-Za-z0-9]+", "-", cwd or "unknown").strip("-") or "unknown"
+
+
+def checklist_folder(cwd):
+    """Where a turn's checklist goes: the project's .kiasi/checkpoints when the project folder is writable, else the data folder."""
+    if cwd and os.path.isdir(cwd) and os.access(cwd, os.W_OK):
+        return Path(cwd) / constants.PROJECT_CHECKLIST_DIR
+    return constants.CHECKPOINT_DIR
+
+
+def make_checklist_folder(path):
+    """Create a checklist's folder before Claude is told its path. In a project, Kiasi's folder ignores itself in git."""
+    folder = Path(path).parent
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        ignore = folder.parent / ".gitignore"
+        if folder.parts[-2:] == constants.PROJECT_CHECKLIST_DIR.parts and not ignore.exists():
+            ignore.write_text("*\n")
+    except OSError:
+        pass
 
 
 def ensure_dirs():

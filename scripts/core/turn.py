@@ -4,7 +4,7 @@ import time
 
 from core import constants
 from core.caps import failure_label, handle_tool_output, leading_command
-from core.events import ensure_dirs, load_session, log_event, now_iso, project_slug, save_session
+from core.events import checklist_folder, ensure_dirs, load_session, log_event, make_checklist_folder, now_iso, project_slug, save_session
 from core.reads import handle_pre_tool, track_reads
 from core.transcript import caller_key, caller_transcript, current_context_tokens, edited_files, fmt_k, fmt_m, is_short_reply, is_system_prompt, is_task_prompt, last_task_prompt, prompt_text, tail_entries
 
@@ -60,14 +60,15 @@ def reread_check(prompt, tokens, entries, state):
     return {"context": context, "message": message, "steps": mean_steps, "here": here, "delegated": delegated, "mode": mode}
 
 
-def checkpoint_path(key, turn):
-    # Every checklist Write must create a file: Claude Code refuses to overwrite one outside the
-    # working directory without a read record, and a hook compaction clears those records.
+def checkpoint_path(key, turn, cwd=None):
+    # Every checklist Write must create a file: Claude Code refuses to overwrite one without a read
+    # record, and a hook compaction clears those records.
+    folder = checklist_folder(cwd)
     stem = f"{key[:8]}-{turn.get('index', 0)}"
-    path, number = constants.CHECKPOINT_DIR / f"{stem}.md", 1
+    path, number = folder / f"{stem}.md", 1
     while path.exists():
         number += 1
-        path = constants.CHECKPOINT_DIR / f"{stem}-{number}.md"
+        path = folder / f"{stem}-{number}.md"
     return path
 
 
@@ -91,7 +92,7 @@ def turn_guard(payload, tokens):
     # With the budget off the calls are only counted; in warn mode it is reported once at the warning and once at the limit.
     over_stop = mode != "off" and (turn["steps"] >= stop_steps or turn["reread"] >= constants.TURN_STOP_TOKENS)
     over_warn = mode != "off" and (turn["steps"] >= warn_steps or turn["reread"] >= constants.turn_warn_tokens())
-    checkpoint = checkpoint_path(key, turn)
+    checkpoint = checkpoint_path(key, turn, payload.get("cwd"))
     allowed = "Write" if subagent else "Write and Agent"
     if over_stop and mode == "warn":
         result = None if turn.get("over") else over_budget(payload, turn, scope, checkpoint, tokens)
@@ -101,6 +102,7 @@ def turn_guard(payload, tokens):
             # A pause, not a PostToolUse block: that block came after the call had run, stopped nothing and showed the
             # developer a hook error. paused_call refuses the calls that follow, before they run.
             turn.update(stopped=turn["steps"], checkpoint=str(checkpoint), context=tokens)
+            make_checklist_folder(checkpoint)
             if not subagent:
                 record_pause(payload, turn, state)
             hand_off = ("end with your reply to the caller: what is done, what is verified, what remains and the checklist path" if subagent else
@@ -122,6 +124,7 @@ def turn_guard(payload, tokens):
         log_event({"event": "turn_stop", "session_id": session_id, "transcript": key, "steps": turn["steps"], "reread": turn["reread"], "context_tokens": tokens, "first": first, "subagent": subagent})
     elif over_warn and not turn["warned"]:
         turn["warned"] = True
+        make_checklist_folder(checkpoint)
         next_step = "reply to the caller with that path" if subagent else "end the turn with that path or hand the checklist to one general-purpose subagent"
         # Each further call re-reads about the current context, so the tokens can run out before the calls do.
         left = max(1, min(stop_steps - turn["steps"], (constants.TURN_STOP_TOKENS - turn["reread"]) // max(tokens, 1)))
@@ -145,6 +148,7 @@ def over_budget(payload, turn, scope, checkpoint, tokens):
     """warn mode at the limit: say so once, to Claude and to the developer, but refuse nothing and save nothing to resume."""
     subagent = scope == "subagent"
     turn.update(over=turn["steps"], warned=True)
+    make_checklist_folder(checkpoint)
     next_step = "reply to the caller with that path" if subagent else "end the turn with that path or hand the checklist to one general-purpose subagent"
     context = (f"kiasi: this {scope} reached its budget at {turn['steps']} tool calls and {fmt_m(turn['reread'])} tokens re-read at a context of "
                f"{fmt_k(tokens)}. The budget is in warn mode, so no call is refused. Finish the item in progress, write what remains as a "
@@ -190,7 +194,7 @@ def paused_call(payload):
         return None
     subagent = bool(payload.get("agent_id"))
     turn["denied"] = turn.get("denied", 0) + 1
-    turn.setdefault("checkpoint", str(checkpoint_path(key, turn)))
+    turn.setdefault("checkpoint", str(checkpoint_path(key, turn, payload.get("cwd"))))
     save_session(session_id, state)
     scope, next_step = ("subagent", "end with your reply to the caller") if subagent else ("turn", "end the turn with the pause notice for the developer")
     reason = (f"kiasi paused this {scope} at {turn['stopped']} tool calls, so this call was not run. "
@@ -223,7 +227,7 @@ def pause_reminder(payload):
     turn = state.get("turns", {}).get(key)
     if not turn or not turn.get("stopped") or turn.get("reminded") or turn.get("denied", 0) >= constants.TURN_DENY_BACKSTOP:
         return None
-    turn.setdefault("checkpoint", str(checkpoint_path(key, turn)))
+    turn.setdefault("checkpoint", str(checkpoint_path(key, turn, payload.get("cwd"))))
     if turn["checkpoint"] in (payload.get("last_assistant_message") or ""):
         return None
     turn["reminded"] = True
@@ -242,8 +246,11 @@ def record_pause(payload, turn, state):
     """At a turn's pause, keep what a resume needs: this session's next prompt reads it from the state, a new session
     in the project from the paused file. The task and the edited files carry a resume when Claude wrote no checklist."""
     entries = tail_entries(payload.get("transcript_path"))
+    # A turn resumed with "continue" has no task prompt of its own: it keeps the task and files of the pause it resumed.
+    resumed = state.get("resumed") or {}
     paused = {"checkpoint": turn["checkpoint"], "steps": turn["stopped"], "reread": turn["reread"], "at": now_iso(), "session_id": payload.get("session_id", ""),
-              "task": last_task_prompt(entries)[:constants.RESUME_TASK_CHARS], "files": edited_files(entries)}
+              "task": (last_task_prompt(entries) or resumed.get("task", ""))[:constants.RESUME_TASK_CHARS],
+              "files": list(dict.fromkeys([*resumed.get("files", []), *edited_files(entries)]))}
     state["paused"] = paused
     ensure_dirs()
     paused_file(payload.get("cwd")).write_text(json.dumps(paused))
@@ -268,6 +275,9 @@ def pause_elsewhere(payload):
 def resume_context(state, prompt, cwd):
     """UserPromptSubmit: the first prompt after a pause uses it up. A plain "continue" resumes from the checklist; any
     other prompt is only told where it is."""
+    if is_task_prompt(prompt):
+        # A new task: a later pause records it, not the work resumed before it.
+        state.pop("resumed", None)
     paused = state.pop("paused", None)
     if not paused:
         return None
@@ -288,6 +298,7 @@ def resume_context(state, prompt, cwd):
         + (f"; files it edited: {', '.join(paused['files'])}" if paused.get("files") else ""))
     if not re.match(constants.RESUME_PATTERN, prompt.strip(), re.I | re.S):
         return {"mode": "pointer", "context": f"{when}; {saved}. If this prompt is about that work, start from there.", "log": follow_up}
+    state["resumed"] = {"task": paused.get("task", ""), "files": paused.get("files", [])}
     if checklist:
         cut = "\n[cut here: read the rest from the file]" if len(checklist) > constants.RESUME_CHECKLIST_CHARS else ""
         saved += f":\n{checklist[:constants.RESUME_CHECKLIST_CHARS].rstrip()}{cut}\n"

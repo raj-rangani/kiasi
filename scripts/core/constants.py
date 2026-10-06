@@ -52,6 +52,9 @@ PASTE_DIR = LOG_DIR / "pastes"
 OUTPUT_DIR = LOG_DIR / "outputs"
 NOTES_DIR = LOG_DIR / "notes"
 CHECKPOINT_DIR = LOG_DIR / "checkpoints"
+# Turn checklists go in the project, in a folder git ignores: Claude Code refuses Claude's writes anywhere under
+# ~/.claude, this data folder included, as edits to a sensitive file. CHECKPOINT_DIR is for a session without one.
+PROJECT_CHECKLIST_DIR = Path(".kiasi") / "checkpoints"
 BUDGET_FILE = LOG_DIR / "budget.json"
 # Every per-day row budget.py ever built, merged on each build so a day outlives the report window and
 # Claude Code's own transcript retention; the Overview before-and-after block is built from it.
