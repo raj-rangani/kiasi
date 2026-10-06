@@ -191,6 +191,13 @@ class TestHistory(ReportTestCase):
         self.assertEqual((since["after"]["days"], since["after"]["reread_per_turn"]), (1, 50_000))
         self.assertEqual(since["factor"], 4.0)
 
+    def test_savings_older_than_the_window_stay_in_the_all_time_total(self):
+        constants.SAVINGS_FILE.write_text(json.dumps({"per_day": [{"day": self.days_ago(20), "saved": 500, "kept_out": 100, "actions": 3, "caps": 3}]}))
+        constants.EVENT_LOG.write_text(json.dumps({"ts": f"{self.days_ago(2)}T10:00:00", "event": "cap"}) + "\n")
+        self.write(self.project / "s1.jsonl", [self.prompt(2), self.step("r1", 3, 50_000)])
+        all_time = self.lens.build(7)["all_time"]
+        self.assertEqual((all_time["first_day"], all_time["days"], all_time["saved"], all_time["caps"]), (self.days_ago(20), 2, 500, 4))
+
 
 class TestEmptyReport(ReportTestCase):
     """The dashboard keys its page-level empty state off these fields."""

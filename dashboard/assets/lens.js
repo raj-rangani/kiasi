@@ -51,14 +51,14 @@ function todayVersus(d, key) {
 
 function renderStats(d) {
   const t = d.totals;
-  const k = d.by_kind;
+  const all = d.all_time;
   const perPrompt = todayVersus(d, 'reread_per_prompt');
   const startup = todayVersus(d, 'startup');
   const versus = (row, what) => `${what} on ${row.day}; ${row.mean ? `${change(row.mean, row.today)} against the ${fmtK(row.mean)} daily mean since Kiasi was on` : 'no earlier day to compare with'}`;
   $('#stats').innerHTML = [
     [perPrompt.mean && perPrompt.today > perPrompt.mean ? 'warn' : '', fmtK(perPrompt.today), '<small>/ prompt</small>', versus(perPrompt, 're-read tokens per prompt')],
     [startup.mean && startup.today > startup.mean ? 'warn' : '', fmtK(startup.today), '<small>/ session</small>', versus(startup, 'first-request context per new session')],
-    ['', fmtM(t.saved), `<small>${est('avoided')}</small>`, `re-read tokens avoided in ${d.days} days by ${(k.cap || {}).count || 0} caps (${fmtM(t.kept_out)} kept out); grows with session length, so read it next to the two figures before it`],
+    ['', fmtM(all.saved), `<small>${est('avoided')}</small>`, `re-read tokens avoided in all, since ${all.first_day || 'today'}, by ${all.caps} caps (${fmtM(all.kept_out)} kept out); grows with session length, so read it next to the two figures before it`],
     [t.summaries ? 'warn' : '', String(t.pruned), `<small>/ ${t.pruned + t.summaries} plugin</small>`, `compactions pruned instead of summarised; ${t.compactions} compactions in all`],
     [t.stops && t.stops_complied < t.stops ? 'warn' : '', String(t.stops), '<small>stops</small>', `turns stopped at the budget, ${t.stops ? `${t.stops_complied} complied` : 'none yet'}, mean ${t.mean_steps_after_stop} steps after`],
   ].map(([cls, big, small, text]) => `<div class="stat ${cls}"><b>${big}${small}</b><span>${esc(text)}</span></div>`).join('');

@@ -99,6 +99,7 @@ export const QUIET_RULES = [
 
 
 export const MARKER_PREFIX = '[kiasi pruned';
+export const SIZE_MARKER_PATTERN = /^\[\d+ chars\]$/;
 export const ARCHIVE_MIN_CHARS = 2000;
 export const ARCHIVE_PATH_EVENT_NAME = 'PluginArchivePath';
 export const ARCHIVE_EVENT_NAME = 'PluginArchive';

@@ -57,7 +57,14 @@ def reread_check(prompt, tokens, entries, state):
 
 
 def checkpoint_path(key, turn):
-    return constants.CHECKPOINT_DIR / f"{key[:8]}-{turn.get('index', 0)}.md"
+    # Every checklist Write must create a file: Claude Code refuses to overwrite one outside the
+    # working directory without a read record, and a hook compaction clears those records.
+    stem = f"{key[:8]}-{turn.get('index', 0)}"
+    path, number = constants.CHECKPOINT_DIR / f"{stem}.md", 1
+    while path.exists():
+        number += 1
+        path = constants.CHECKPOINT_DIR / f"{stem}-{number}.md"
+    return path
 
 
 def turn_guard(payload, tokens):

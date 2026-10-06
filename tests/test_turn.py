@@ -26,6 +26,30 @@ class TestTurnGuard(KiasiTestCase):
         self.assertIsNotNone(blocked_at, "turn_guard should block once the step budget is exhausted")
         self.assertGreaterEqual(blocked_at, constants.TURN_STOP_STEPS)
 
+    def test_checkpoint_path_never_names_an_existing_file(self):
+        constants.CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+        record = {"index": 7}
+        names = []
+        for _ in range(3):
+            path = turn.checkpoint_path("0123abcd-transcript", record)
+            names.append(path.name)
+            path.write_text("- [ ] left\n")
+        self.assertEqual(names, ["0123abcd-7.md", "0123abcd-7-2.md", "0123abcd-7-3.md"])
+
+    def test_stop_names_a_new_file_once_the_warned_checklist_exists(self):
+        constants.CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+        payload = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": "sess-checklist",
+                   "transcript_path": str(self.tmp / "checklist.jsonl")}
+        warning = stop = ""
+        for _ in range(constants.TURN_STOP_STEPS):
+            result = turn.turn_guard(payload, 1000) or {}
+            if "hookSpecificOutput" in result:
+                warning = result["hookSpecificOutput"]["additionalContext"]
+                (constants.CHECKPOINT_DIR / "checklis-0.md").write_text("- [ ] left\n")
+            stop = result.get("reason", stop)
+        self.assertIn(str(constants.CHECKPOINT_DIR / "checklis-0.md"), warning)
+        self.assertIn(str(constants.CHECKPOINT_DIR / "checklis-0-2.md"), stop)
+
 
 class TestLoopCheck(KiasiTestCase):
     def fail(self, command):

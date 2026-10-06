@@ -34,6 +34,44 @@ test('prunes old tool results, keeps prompts, errors and the recent messages', (
   expect(charsOf(result.messages!)).toBeLessThan(result.before / 2);
 });
 
+// Steps of a three-call parallel batch in the order Claude Code wrote them: Ca is call a, Ra is its result.
+function batch(steps: string): any[] {
+  return steps.split(' ').map(([kind, id]) => (kind === 'C'
+    ? { role: 'assistant', text: id === 'a' ? 'Running three checks.' : '', toolUses: [{ tool_use_id: `toolu_${id}`, tool: 'Bash', input: { command: `sleep 3 && cat ${id}.txt` }, text: big(`${id} out `, 6000) }], handle: `call_${id}` }
+    : { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: `toolu_${id}`, text: big(`${id} out `, 6000), isError: false }], handle: `result_${id}` }));
+}
+
+const shape = (message: any) => `${message.role[0]}:${[...message.toolUses, ...(message.toolResults || [])].map((item: any) => item.tool_use_id.slice(6)).join(' ')}`;
+
+test('a pruned parallel batch keeps every call ahead of its result, whatever order the results were written in', () => {
+  const layouts: Record<string, string[]> = {
+    'Ca Cb Cc Rc Ra Rb': ['a:a b c', 'u:c', 'u:a', 'u:b'],
+    'Ca Cb Ra Cc Rb Rc': ['a:a b c', 'u:a', 'u:b', 'u:c'],
+    'Ca Ra Cb Rb Cc Rc': ['a:a', 'u:a', 'a:b', 'u:b', 'a:c', 'u:c'],
+  };
+  for (const [steps, expected] of Object.entries(layouts)) {
+    const [prompt, ...rounds] = fixture(10);
+    const result = pruneTranscript([prompt, ...batch(steps), ...rounds]);
+    expect(result.kept).toBe(true);
+    expect(result.messages!.slice(1, 1 + expected.length).map(shape)).toEqual(expected);
+    expect(result.messages![1].handle).toBeUndefined();
+    expect(result.messages![1].text).toBe('Running three checks.');
+    expect(result.messages![1].toolUses[0].text).toContain('[kiasi pruned');
+  }
+});
+
+test('the recent messages kept as they are never start inside a parallel batch', () => {
+  for (const [steps, tail] of [['Ca Cb Cc Rc Ra Rb', 3], ['Ca Cb Ra Cc Rb Rc', 5]] as const) {
+    const then = Array.from({ length: tail }, (_, i) => ({ role: i % 2 ? 'user' : 'assistant', text: `then ${i}`, toolUses: [], handle: `then_${i}` }));
+    const messages = [...fixture(30).slice(0, -1), ...batch(steps), ...then];
+    const result = pruneTranscript(messages);
+    expect(result.kept).toBe(true);
+    expect(result.level).toBe(0);
+    expect(result.messages!.slice(-6 - tail)).toEqual(messages.slice(-6 - tail));
+    expect(result.messages![result.messages!.length - 7 - tail].handle).toBeUndefined();
+  }
+});
+
 test('falls back to the summary when pruning cannot reach the target', () => {
   const messages = [
     { role: 'user', text: big('prompt ', 3000), toolUses: [], handle: 'h0' },
@@ -44,16 +82,25 @@ test('falls back to the summary when pruning cannot reach the target', () => {
   expect(result.messages).toBeNull();
 });
 
+function writes(from: number, count: number) {
+  return Array.from({ length: count }, (_, k) => from + k).flatMap((i) => [
+    { role: 'assistant', text: 'Writing.', toolUses: [{ tool_use_id: `w${i}`, tool: 'Write', input: { file_path: `/repo/f${i}.py`, content: big('code\n', 9000) }, text: 'ok' }], handle: `a${i}` },
+    { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: `w${i}`, text: 'File written', isError: false }], handle: `u${i}` },
+  ]);
+}
+
 test('replaces edit content with a size marker and keeps the path', () => {
-  const messages: any[] = [{ role: 'user', text: 'go', toolUses: [], handle: 'h0' }];
-  for (let i = 0; i < 12; i++) {
-    messages.push({ role: 'assistant', text: 'Writing.', toolUses: [{ tool_use_id: `w${i}`, tool: 'Write', input: { file_path: `/repo/f${i}.py`, content: big('code\n', 9000) }, text: 'ok' }], handle: `a${i}` });
-    messages.push({ role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: `w${i}`, text: 'File written', isError: false }], handle: `u${i}` });
-  }
-  const result = pruneTranscript(messages);
+  const result = pruneTranscript([{ role: 'user', text: 'go', toolUses: [], handle: 'h0' }, ...writes(0, 12)]);
   expect(result.kept).toBe(true);
   expect(result.messages![1].toolUses[0].input.file_path).toBe('/repo/f0.py');
   expect(result.messages![1].toolUses[0].input.content).toBe('[9000 chars]');
+});
+
+test('a second compaction keeps the sizes the first one wrote', () => {
+  const first = pruneTranscript([{ role: 'user', text: 'go', toolUses: [], handle: 'h0' }, ...writes(0, 12)]);
+  const second = pruneTranscript([...first.messages!, ...writes(12, 12)]);
+  expect(second.kept).toBe(true);
+  expect(second.messages![1].toolUses[0].input.content).toBe('[9000 chars]');
 });
 
 test('the hook defers to the engine when the event carries no message list', async ($) => {
