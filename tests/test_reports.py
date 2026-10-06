@@ -81,9 +81,23 @@ class TestLensSignals(KiasiTestCase):
                   {"t": now - 9 * 86400, "prev": now - 9 * 86400 - 5, "tokens": 30000, "cause": "other", "session": "s", "project": "p"}]
         report = lens.cache_report(7, per_day, misses, 10_000_000)
         self.assertEqual(report["hit_rate"], 0.9)
-        self.assertEqual((report["misses"], report["avoidable"], report["prior_avoidable"]), (3, 2, 1))
+        self.assertEqual((report["misses"], report["avoidable"], report["idle"], report["prior_avoidable"]), (3, 1, 1, 1),
+                         "a cache that expired while idle is a miss, but not an avoidable one")
         self.assertEqual([row["cause"] for row in report["causes"]], ["idle over 1h", "other", "compaction"], "by cost, compaction last")
-        self.assertEqual(report["extra"], lens.extra_cost(120000))
+        self.assertEqual(report["extra"], lens.extra_cost(120000), "the idle miss was paid for all the same")
+
+    def test_a_delegation_is_credited_only_when_an_agent_call_followed(self):
+        from reports import lens
+        prompt = {"event": "prompt", "ts": "2026-10-06T10:00:00", "session_id": "s", "context_tokens": 150_000,
+                  "reread_check": {"mode": "delegate", "steps": 10, "here": 900_000, "delegated": 300_000}}
+        agent, later_prompt = {"event": "agent", "session_id": "s"}, {"event": "prompt", "session_id": "s"}
+        followed = lens.classify(100, prompt, {}, lens.follow_ups([(100, prompt), (130, agent), (200, later_prompt)]))
+        self.assertEqual((followed["kind"], followed["saved"]), ("delegated", 600_000))
+        for why, rest in (("no Agent call", []), ("the Agent call came after the next prompt", [(120, later_prompt), (130, agent)]),
+                          ("the Agent call was another session's", [(130, {**agent, "session_id": "other"})])):
+            shown = lens.classify(100, prompt, {}, lens.follow_ups([(100, prompt), *rest]))
+            self.assertEqual((shown["kind"], shown["saved"]), ("reread_check", 0), why)
+            self.assertIn("no Agent call", shown["label"])
 
     def test_config_change_is_logged_from_the_second_prompt(self):
         cwd = self.tmp / "proj"
@@ -232,7 +246,8 @@ class TestHistory(ReportTestCase):
         constants.HISTORY_FILE.write_text(json.dumps({"per_day": [self.row(self.days_ago(20), 100, 200_000)]}))
         self.write(self.project / "s1.jsonl", [self.prompt(2), self.step("r1", 3, 50_000)])
         self.budget.build(7)
-        since = self.lens.since_install()
+        with mock.patch.object(constants, "LENS_FACTOR_MIN_STEPS", 1):
+            since = self.lens.since_install()
         self.assertEqual((since["install_day"], since["first_day"], since["history_days"]), (self.days_ago(5), self.days_ago(20), 2))
         self.assertEqual((since["before"]["days"], since["before"]["reread_per_turn"]), (1, 200_000))
         self.assertEqual((since["after"]["days"], since["after"]["reread_per_turn"]), (1, 50_000))
@@ -275,6 +290,16 @@ class TestLensReport(ReportTestCase):
         self.assertEqual(self.lens.steps_until_next_prompt(info["steps"], info["prompts"], info["prompts"][0]), 2)
         self.assertEqual(self.lens.steps_until_next_prompt(info["steps"], info["prompts"], info["prompts"][1]), 1)
 
+    def test_a_continue_at_the_pause_question_ends_the_steps_counted_after_the_pause(self):
+        asked = {"ts": "2026-10-06T11:00:05", "event": "turn_resume", "session_id": "s1", "mode": "resume", "asked": True, "checklist": True, "paused_session": "s1", "steps": 60}
+        logged = self.lens.follow_ups([(5.0, asked), (9.0, {**asked, "asked": False})])
+        self.assertEqual(logged["s1"]["renewals"], [5.0], "a continue prompt is already a prompt")
+        sessions = {"s1": {"steps": [1.0, 3.0, 4.0, 6.0, 7.0, 8.0], "prompts": [0.5]}}
+        pause = {"ts": "2026-10-06T11:00:02", "event": "turn_stop", "session_id": "s1", "steps": 60, "first": True, "subagent": False}
+        self.assertEqual(self.lens.classify(2.0, pause, sessions, logged)["later_steps"], 2, "the checklist and the question, not the renewed work")
+        self.assertEqual(self.lens.classify(2.0, pause, sessions)["later_steps"], 5)
+        self.assertIn("resumed at the pause question", json.dumps(self.lens.classify(5.0, asked, sessions, logged)))
+
     def test_the_report_counts_resumes_against_pauses(self):
         from core import events
         pause = {"event": "turn_stop", "session_id": "s1", "steps": 60, "first": True, "subagent": False}
@@ -313,11 +338,14 @@ class TestLensReport(ReportTestCase):
             row(day(2), 10, 100_000), row(day(1), 10, 100_000),   # after: 10k per turn
             row(day(0), 10, 100_000)]}))                          # today: per turn only
         constants.EVENT_LOG.write_text(json.dumps({"ts": day(3) + "T09:00:00", "event": "cap"}) + "\n")
-        result = self.lens.since_install()
+        with mock.patch.object(constants, "LENS_FACTOR_MIN_STEPS", 20):
+            result = self.lens.since_install()
         self.assertEqual(result["install_day"], day(3))
         self.assertEqual((result["before"]["days"], result["before"]["reread_per_turn"]), (2, 40_000))
         self.assertEqual((result["after"]["days"], result["after"]["reread_per_turn"], result["after"]["turns"]), (2, 10_000, 30))
         self.assertEqual(result["factor"], 4.0)
+        few = self.lens.since_install()
+        self.assertEqual((few["factor"], few["factor_min_steps"]), (None, constants.LENS_FACTOR_MIN_STEPS), "20 steps before the install are too few for a ratio")
 
     def test_since_install_has_no_per_day_figure_before_a_full_day(self):
         day = lambda n: time.strftime("%Y-%m-%d", time.localtime(time.time() - n * 86400))

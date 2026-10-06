@@ -6,7 +6,7 @@ from core.caps import handle_archive, handle_archive_path
 from core.events import session_lock
 from core.prompt import handle_prompt
 from core.session import handle_plugin_compact, handle_plugin_quiet, handle_pre_compact, handle_session_start, handle_stop
-from core.turn import handle_post_tool, handle_pre_tool_use, handle_tool_failure
+from core.turn import handle_post_tool, handle_pre_tool_use, handle_tool_batch, handle_tool_failure
 
 
 HANDLERS = {
@@ -14,6 +14,7 @@ HANDLERS = {
     "PreToolUse": handle_pre_tool_use,
     "PostToolUse": handle_post_tool,
     "PostToolUseFailure": handle_tool_failure,
+    "PostToolBatch": handle_tool_batch,
     "PreCompact": handle_pre_compact,
     "PluginArchivePath": handle_archive_path,
     "PluginArchive": handle_archive,

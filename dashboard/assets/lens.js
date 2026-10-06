@@ -22,7 +22,8 @@ function renderSince(d) {
   ];
   const headline = s.factor && s.factor >= 1.1
     ? `Each step costs <b>${s.factor}×</b> less than before`
-    : s.factor ? `Each step costs about the same as before (${s.factor}×)` : 'Not enough turns yet to compare';
+    : s.factor ? `Each step costs about the same as before (${s.factor}×)`
+    : `Not enough steps yet to compare: ${Math.min(b.turns, a.turns).toLocaleString()} of the ${s.factor_min_steps || 0} needed before and after`;
   const runway = s.factor && s.factor >= 1.1
     ? `The weekly limit mostly counts re-read tokens, so at the same pace of work it now lasts about <b>${s.factor}×</b> longer.`
     : 'The weekly limit is spent mostly on re-read tokens, so this number is the one to watch.';
@@ -60,7 +61,7 @@ function renderStats(d) {
     [startup.mean && startup.today > startup.mean ? 'warn' : '', fmtK(startup.today), '<small>/ session</small>', versus(startup, 'first-request context per new session')],
     ['', fmtM(all.saved), `<small>${est('avoided')}</small>`, `re-read tokens avoided in all, since ${all.first_day || 'today'}, by ${all.caps} caps (${fmtM(all.kept_out)} kept out); grows with session length, so read it next to the two figures before it`],
     [t.summaries ? 'warn' : '', String(t.pruned), `<small>/ ${t.pruned + t.summaries} plugin</small>`, `compactions pruned instead of summarised; ${t.compactions} compactions in all`],
-    [t.stops && t.stops_complied < t.stops ? 'warn' : '', String(t.stops), '<small>pauses</small>', `turns paused at the budget, ${t.stops ? `${t.resumed || 0} resumed with continue, ${t.stops_complied} complied` : 'none yet'}, mean ${t.mean_steps_after_stop} steps after`],
+    [t.stops && t.stops_complied < t.stops ? 'warn' : '', String(t.stops), '<small>pauses</small>', `turns paused at the budget, ${t.stops ? `${t.resumed || 0} resumed, ${t.stops_complied} complied` : 'none yet'}, mean ${t.mean_steps_after_stop} steps after`],
   ].map(([cls, big, small, text]) => `<div class="stat ${cls}"><b>${big}${small}</b><span>${esc(text)}</span></div>`).join('');
 }
 
@@ -79,18 +80,18 @@ function cacheTiles(c) {
   const days = c.hit_days.map(day => day.rate);
   const delta = c.prior_avoidable == null ? 'no earlier week to compare' : c.avoidable === c.prior_avoidable ? 'same as the week before'
     : `${c.avoidable > c.prior_avoidable ? '▲' : '▼'} ${Math.abs(c.avoidable - c.prior_avoidable)} vs ${c.prior_avoidable} the week before`;
-  const cost = `a cache write is priced ${c.write_price}× input and a read ${c.read_price}×, so each missed token costs as much as ${Math.round((c.write_price - c.read_price) / c.read_price)} re-read tokens`;
+  const cost = `every miss outside compaction, idle expiry included; a cache write is priced ${c.write_price}× input and a read ${c.read_price}×, so each missed token costs as much as ${Math.round((c.write_price - c.read_price) / c.read_price)} re-read tokens`;
   return [
     ['Hit rate', `${rate}${days.length > 1 ? sparkline(days) : ''}`, `${met ? '✓ above' : 'below'} the ${pct(c.hit_target)} target`, met ? '' : 'warn', 'share of input read from the cache, per day on the line'],
-    ['Avoidable misses', `${c.avoidable}<small>of ${c.misses}</small>`, delta, c.prior_avoidable != null && c.avoidable > c.prior_avoidable ? 'warn' : '', 'misses not caused by compaction'],
+    ['Avoidable misses', `${c.avoidable}<small>of ${c.misses}</small>`, `${delta}${c.idle ? ` · ${c.idle} more from idle expiry` : ''}`, c.prior_avoidable != null && c.avoidable > c.prior_avoidable ? 'warn' : '', 'misses caused by neither compaction nor the cache expiring while the session was idle'],
     ['Extra cost', `${fmtM(c.extra)}<small>re-read tokens</small>${est('extra')}`, c.extra_share == null ? '' : `${(c.extra_share * 100).toFixed(1)}% of what you paid`, '', cost],
   ].map(([label, big, note, cls, tip]) => `<div class="cache-tile ${cls}" title="${esc(tip)}"><span class="cache-label">${label}</span><b>${big}</b><span>${esc(note)}</span></div>`).join('');
 }
 
 function cacheCauses(c) {
-  const avoidable = c.causes.filter(row => row.cause !== 'compaction');
-  const totalExtra = avoidable.reduce((sum, row) => sum + row.extra, 0);
-  const shown = avoidable.filter(row => row.extra >= totalExtra * CACHE_CAUSE_MIN_SHARE);
+  const outside = c.causes.filter(row => row.cause !== 'compaction');
+  const totalExtra = outside.reduce((sum, row) => sum + row.extra, 0);
+  const shown = outside.filter(row => row.extra >= totalExtra * CACHE_CAUSE_MIN_SHARE);
   const max = Math.max(...shown.map(row => row.extra), 1);
   const rows = shown.map(row => `<div class="cause-row" title="${esc(MISS_CAUSE_HELP[row.cause] || '')} · ${row.count} misses">
       <span class="cause-name">${esc(row.cause)}</span>
@@ -98,7 +99,7 @@ function cacheCauses(c) {
       <span class="cause-num">${fmtM(row.extra)}</span>
       <span class="cause-fix">${esc(MISS_CAUSE_FIX[row.cause] || '')}</span></div>`).join('');
   const left = [];
-  const small = avoidable.length - shown.length;
+  const small = outside.length - shown.length;
   if (small) left.push(`${small} smaller cause${small > 1 ? 's' : ''}`);
   const compaction = c.causes.find(row => row.cause === 'compaction');
   if (compaction) left.push(`${compaction.count} compaction misses (expected)`);

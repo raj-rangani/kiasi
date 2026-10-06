@@ -51,7 +51,7 @@ function facts(d, rule) {
     const complied = pauses.filter(b => b.after != null && b.after < d.settings.comply_steps).length;
     const over = n('turn_over') ? ` · ${n('turn_over')} over budget in warn mode` : '';
     const mode = d.settings.turn_budget_mode && d.settings.turn_budget_mode !== 'pause' ? ` · budget set to ${d.settings.turn_budget_mode}` : '';
-    return `${n('turn_warn')} warnings at ${d.settings.turn_warn_steps} steps · ${n('turn_stop')} pauses at ${d.settings.turn_stop_steps}${pauses.length ? `, ${n('turn_resume')} resumed with continue, ${complied} complied` : ''}${over}${mode}`;
+    return `${n('turn_warn')} warnings at ${d.settings.turn_warn_steps} steps · ${n('turn_stop')} pauses at ${d.settings.turn_stop_steps}${pauses.length ? `, ${n('turn_resume')} resumed, ${complied} complied` : ''}${over}${mode}`;
   }
   if (rule.key === 'reread') return `${n('reread_check')} shown · ${n('delegated')} delegated`;
   if (rule.key === 'paste') return `${n('paste_saved')} saved · ${n('paste_refused')} refused`;

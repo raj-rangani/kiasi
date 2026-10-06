@@ -27,7 +27,7 @@ from datetime import datetime
 from pathlib import Path
 
 from core import constants
-from core.procs import detached_kwargs
+from core.procs import detached_kwargs, run_tree
 import limits_data
 
 PLUGIN_ROOT = constants.PLUGIN_ROOT
@@ -52,7 +52,7 @@ def run_sync_background():
 
 def _run_sync():
     try:
-        subprocess.run([sys.executable, str(SYNC_SCRIPT), str(constants.BUDGET_DAYS)], check=False, timeout=180)
+        run_tree([sys.executable, str(SYNC_SCRIPT), str(constants.BUDGET_DAYS)], timeout=180)
     except Exception as exc:  # noqa: BLE001
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         (DATA_DIR / "sync.json").write_text(json.dumps({"state": "failed", "error": str(exc)}))
@@ -78,7 +78,7 @@ def reports_stale():
 def write_state(port):
     constants.DATA_DIR.mkdir(parents=True, exist_ok=True)
     constants.DASHBOARD_STATE.write_text(json.dumps({
-        "pid": os.getpid(), "port": port, "url": f"http://127.0.0.1:{port}/",
+        "pid": os.getpid(), "port": port, "url": f"http://127.0.0.1:{port}/", "build": constants.DASHBOARD_BUILD,
         "started": datetime.now().replace(microsecond=0).isoformat()}, indent=1) + "\n")
 
 
@@ -159,10 +159,20 @@ def stop_running():
     return True
 
 
+def outdated():
+    """True on Windows when an older build started the running dashboard: it opens an empty window at every report rebuild until it is stopped once."""
+    if sys.platform != "win32":
+        return False
+    try:
+        return int(json.loads(constants.DASHBOARD_STATE.read_text()).get("build") or 0) < constants.DASHBOARD_BUILD
+    except (OSError, ValueError, AttributeError, TypeError):
+        return False
+
+
 def ensure():
-    """(url, started): the URL of a dashboard that answers, starting one first when none does. url is None if it did not come up."""
+    """(url, started): the URL of a dashboard that answers, starting one first when none does or the one running is outdated. url is None if it did not come up."""
     url = running_url()
-    if url:
+    if url and not (outdated() and stop_running()):
         return url, False
     start_detached()
     deadline = time.monotonic() + constants.DASHBOARD_START_WAIT_SECONDS
