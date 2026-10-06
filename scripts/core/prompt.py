@@ -74,6 +74,7 @@ def handle_prompt(payload):
         if "message" in resume:
             messages.append(resume["message"])
         record["resume"] = resume["mode"]
+        log_event({"event": "turn_resume", "session_id": session_id, "mode": resume["mode"], **resume["log"]})
     if len(prompt) >= constants.PASTE_MIN_CHARS:
         path = save_paste(session_id, state, prompt)
         context_lines.append(f"The pasted content in this prompt ({len(prompt)} chars) is also saved at {path}. After this turn refer to it by that path instead of quoting it, and expect it to be dropped from the conversation summary.")

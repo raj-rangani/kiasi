@@ -47,9 +47,11 @@ function facts(d, rule) {
     return `${n('pruned')} pruned · ${n('summary')} summary fallbacks${before ? ` · ${before} compactions before the plugin was loaded` : ''}`;
   }
   if (rule.key === 'turn') {
-    const stops = d.budget_rows.filter(b => b.kind === 'turn_stop');
-    const complied = stops.filter(b => b.after != null && b.after < d.settings.comply_steps).length;
-    return `${n('turn_warn')} warnings at ${d.settings.turn_warn_steps} steps · ${n('turn_stop')} stops at ${d.settings.turn_stop_steps}${stops.length ? `, ${complied} complied` : ''}`;
+    const pauses = d.budget_rows.filter(b => b.kind === 'turn_stop');
+    const complied = pauses.filter(b => b.after != null && b.after < d.settings.comply_steps).length;
+    const over = n('turn_over') ? ` · ${n('turn_over')} over budget in warn mode` : '';
+    const mode = d.settings.turn_budget_mode && d.settings.turn_budget_mode !== 'pause' ? ` · budget set to ${d.settings.turn_budget_mode}` : '';
+    return `${n('turn_warn')} warnings at ${d.settings.turn_warn_steps} steps · ${n('turn_stop')} pauses at ${d.settings.turn_stop_steps}${pauses.length ? `, ${n('turn_resume')} resumed with continue, ${complied} complied` : ''}${over}${mode}`;
   }
   if (rule.key === 'reread') return `${n('reread_check')} shown · ${n('delegated')} delegated`;
   if (rule.key === 'paste') return `${n('paste_saved')} saved · ${n('paste_refused')} refused`;
@@ -108,7 +110,7 @@ function evidence(d, rule) {
       before ? `${before} compactions from before the plugin was loaded carry no data and are not listed.` : '');
   }
   if (rule.key === 'turn') {
-    return section('Every warning and stop', table(['when', 'session', 'what', '#steps', '#re-read so far', 'after the stop'], d.budget_rows.map(r => [mono(stamp(r.ts)), mono(r.session), label(r.kind), num(r.steps), num(fmtM(r.reread)), r.after == null ? '' : `${r.after} steps${r.after < d.settings.comply_steps ? ', complied' : ', ignored'}`])));
+    return section('Every warning, pause and resume', table(['when', 'session', 'what', '#steps', '#re-read so far', 'after the pause'], d.budget_rows.map(r => [mono(stamp(r.ts)), mono(r.session), label(r.kind), num(r.steps), num(r.reread == null ? '' : fmtM(r.reread)), r.after == null ? esc(r.note || '') : `${r.after} steps${r.after < d.settings.comply_steps ? ', complied' : ', ignored'}`])));
   }
   if (rule.key === 'reread') {
     return section('Every check shown', table(['when', 'session', '#context', '#steps per prompt', '#here', '#in a subagent', 'chosen'], d.checks.map(r => [mono(stamp(r.ts)), mono(r.session), num(fmtK(r.context)), num(r.steps), num(fmtM(r.here)), num(fmtM(r.delegated)), r.mode])));
@@ -122,7 +124,7 @@ function evidence(d, rule) {
 function actionRow(a, i) {
   const tone = a.kind === 'turn_stop' ? (a.later_steps < data.settings.comply_steps ? 'ok' : 'bad') : a.kind;
   return `<div class="action click ${openRow === i ? 'open' : ''}" data-i="${i}"><span class="when">${esc(stamp(a.ts))}</span><span>${pill(tone, label(a.kind))}</span>
-    <span class="what">${esc(a.label)}</span><span class="saved${a.saved ? '' : ' zero'}">${a.saved ? fmtM(a.saved) : '·'}</span><span class="steps">${a.kind === 'turn_stop' ? `${a.later_steps} after` : a.later_steps ? `× ${a.later_steps}` : ''}</span></div>`;
+    <span class="what">${esc(a.label)}</span><span class="saved${a.saved ? '' : ' zero'}">${a.saved ? fmtM(a.saved) : '·'}</span><span class="steps">${['turn_stop', 'turn_over'].includes(a.kind) ? `${a.later_steps} after` : a.later_steps ? `× ${a.later_steps}` : ''}</span></div>`;
 }
 function detailRow(a) {
   const link = a.session ? ` · <a href="#sessions/${esc(a.session.slice(0, 8))}">session ${esc(a.session.slice(0, 8))}</a>` : '';

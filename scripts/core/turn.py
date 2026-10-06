@@ -282,11 +282,12 @@ def resume_context(state, prompt, cwd):
     except OSError:
         checklist = ""
     when = f"kiasi paused a turn at {paused['steps']} tool calls on {paused['at'][:16].replace('T', ' ')}"
+    follow_up = {"checklist": bool(checklist), "paused_session": paused.get("session_id", ""), "steps": paused["steps"]}
     saved = f"its remaining work is the checklist at {paused['checkpoint']}" if checklist else (
         f"no checklist was written to {paused['checkpoint']}" + (f'; its task was "{paused["task"]}"' if paused.get("task") else "")
         + (f"; files it edited: {', '.join(paused['files'])}" if paused.get("files") else ""))
     if not re.match(constants.RESUME_PATTERN, prompt.strip(), re.I | re.S):
-        return {"mode": "pointer", "context": f"{when}; {saved}. If this prompt is about that work, start from there."}
+        return {"mode": "pointer", "context": f"{when}; {saved}. If this prompt is about that work, start from there.", "log": follow_up}
     if checklist:
         cut = "\n[cut here: read the rest from the file]" if len(checklist) > constants.RESUME_CHECKLIST_CHARS else ""
         saved += f":\n{checklist[:constants.RESUME_CHECKLIST_CHARS].rstrip()}{cut}\n"
@@ -296,7 +297,7 @@ def resume_context(state, prompt, cwd):
         message = "Kiasi: resuming the paused turn from its task and edited files; no checklist was written."
     context = (f"{when}, and the developer asked to resume it: {saved}Check git status and the files involved first. An item stays "
                'open until you have verified it: do not call the work done while any item is unverified, and end with "n of m verified".')
-    return {"mode": "resume", "context": context, "message": message}
+    return {"mode": "resume", "context": context, "message": message, "log": follow_up}
 
 
 def handle_post_tool(payload):

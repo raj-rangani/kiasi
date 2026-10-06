@@ -145,6 +145,18 @@ class TestTurnGuard(KiasiTestCase):
         self.assertNotIn("systemMessage", told)
         self.assertNotIn(str(checkpoint), json.dumps(self._prompt("s-point", "continue", cwd)), "the first prompt after the pause uses it up")
 
+    def test_resumes_and_skipped_pauses_are_logged(self):
+        cwd = str(self.tmp / "app")
+        self._pause("s-log", cwd).write_text("- [ ] tests\n")
+        self._prompt("s-log", "continue", cwd)
+        self._pause("s-skip", cwd)
+        self._prompt("s-skip", "why did it stop?", cwd)
+        logged = [json.loads(line) for line in constants.EVENT_LOG.read_text().splitlines()]
+        follow_ups = [{k: e.get(k) for k in ("session_id", "mode", "checklist", "paused_session", "steps")} for e in logged if e.get("event") == "turn_resume"]
+        self.assertEqual(follow_ups, [
+            {"session_id": "s-log", "mode": "resume", "checklist": True, "paused_session": "s-log", "steps": constants.TURN_STOP_STEPS},
+            {"session_id": "s-skip", "mode": "pointer", "checklist": False, "paused_session": "s-skip", "steps": constants.TURN_STOP_STEPS}])
+
     def test_a_new_session_in_the_project_offers_the_paused_work_and_its_continue_resumes_it(self):
         cwd = str(self.tmp / "app")
         checkpoint = self._pause("s-old", cwd)

@@ -53,6 +53,7 @@
 
 ## 0.2.0 - 2026-09-30
 
+- The dashboard and the reports say a turn was paused, not stopped or blocked. Each prompt that follows a pause is logged as `turn_resume`, as a resume or as a pause skipped, with whether Claude wrote the checklist. The dashboard counts resumes against pauses, warn-mode overruns are counted, and both reports show the budget mode.
 - Dashboard server answers only requests whose Host is 127.0.0.1 or localhost (a page on another site cannot reach it through DNS rebinding), and runs `POST /sync` only when the Origin or Referer is the dashboard itself.
 - Tests for the report maths: one step per request id in budget.py and lens.py, subagent billing, the day window, compaction detection, typed prompts vs tool results, weighted period means and the before-and-after factor; lens and budget are checked to agree.
 - `/kiasi:limits setup|remove|status` installs the Kiasi status line (the only source of the plan limits on the dashboard), keeps any status line you had running before it, backs up `settings.json` once, and restores the previous status line on remove. The dashboard's empty limits hint points to it.

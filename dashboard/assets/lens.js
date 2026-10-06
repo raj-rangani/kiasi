@@ -60,7 +60,7 @@ function renderStats(d) {
     [startup.mean && startup.today > startup.mean ? 'warn' : '', fmtK(startup.today), '<small>/ session</small>', versus(startup, 'first-request context per new session')],
     ['', fmtM(all.saved), `<small>${est('avoided')}</small>`, `re-read tokens avoided in all, since ${all.first_day || 'today'}, by ${all.caps} caps (${fmtM(all.kept_out)} kept out); grows with session length, so read it next to the two figures before it`],
     [t.summaries ? 'warn' : '', String(t.pruned), `<small>/ ${t.pruned + t.summaries} plugin</small>`, `compactions pruned instead of summarised; ${t.compactions} compactions in all`],
-    [t.stops && t.stops_complied < t.stops ? 'warn' : '', String(t.stops), '<small>stops</small>', `turns stopped at the budget, ${t.stops ? `${t.stops_complied} complied` : 'none yet'}, mean ${t.mean_steps_after_stop} steps after`],
+    [t.stops && t.stops_complied < t.stops ? 'warn' : '', String(t.stops), '<small>pauses</small>', `turns paused at the budget, ${t.stops ? `${t.resumed || 0} resumed with continue, ${t.stops_complied} complied` : 'none yet'}, mean ${t.mean_steps_after_stop} steps after`],
   ].map(([cls, big, small, text]) => `<div class="stat ${cls}"><b>${big}${small}</b><span>${esc(text)}</span></div>`).join('');
 }
 

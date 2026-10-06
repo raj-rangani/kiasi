@@ -30,6 +30,20 @@ class TestLensSignals(KiasiTestCase):
         self.assertIsNone(lens.classify(0, {**stop, "event": "turn_warn", "steps": 20}, {}))
         self.assertEqual(lens.classify(0, {**stop, "steps": 60, "subagent": False}, {})["kind"], "turn_stop")
 
+    def test_pauses_follow_ups_and_warn_mode_overruns_are_classified(self):
+        from reports import lens
+        stop = {"ts": "2026-10-06T10:00:00", "event": "turn_stop", "session_id": "s1", "steps": 60, "first": True, "subagent": False}
+        self.assertTrue(lens.classify(0, stop, {})["label"].startswith("paused at 60 steps"))
+        over = {**stop, "event": "turn_over"}
+        self.assertEqual(lens.classify(0, over, {})["kind"], "turn_over")
+        self.assertIsNone(lens.classify(0, {**over, "subagent": True}, {}), "a subagent's overrun is not the turn's")
+        resume = {"ts": "2026-10-06T11:00:00", "event": "turn_resume", "session_id": "s2", "mode": "resume", "checklist": True, "paused_session": "s1", "steps": 60}
+        resumed = lens.classify(0, resume, {})
+        self.assertEqual(resumed["kind"], "turn_resume")
+        self.assertIn("in a new session", resumed["label"])
+        self.assertNotIn("in a new session", lens.classify(0, {**resume, "session_id": "s1"}, {})["label"])
+        self.assertEqual(lens.classify(0, {**resume, "mode": "pointer"}, {})["kind"], "turn_moved_on")
+
     def test_miss_cause_and_recall(self):
         from reports import lens
         self.assertEqual(lens.miss_cause(10, True, False), "compaction")
@@ -178,7 +192,16 @@ class TestBudgetReport(ReportTestCase):
         for subagent in (False, True, True):
             events.log_event({"event": "turn_stop", "session_id": "s1", "steps": 40, "first": True, "subagent": subagent})
         counts = self.budget.kiasi_actions(7)["counts"]
-        self.assertEqual((counts.get("turns stopped"), counts.get("subagents stopped")), (1, 2))
+        self.assertEqual((counts.get("turns paused"), counts.get("subagents paused")), (1, 2))
+
+    def test_resumes_skips_and_warn_mode_overruns_are_counted(self):
+        from core import events
+        for record in ({"event": "turn_resume", "mode": "resume"}, {"event": "turn_resume", "mode": "pointer"},
+                       {"event": "turn_over", "steps": 60, "subagent": False}, {"event": "turn_over", "steps": 40, "subagent": True}):
+            events.log_event({"session_id": "s1", **record})
+        counts = self.budget.kiasi_actions(7)["counts"]
+        self.assertEqual([counts.get(k) for k in ("pauses resumed", "pauses skipped", "turns over budget", "subagents over budget")], [1, 1, 1, 1])
+        self.assertEqual(self.budget.build(7)["settings"]["turn_budget_mode"], constants.TURN_BUDGET_MODE)
 
     def test_compaction_is_a_drop_to_under_half_from_over_150k(self):
         self.write(self.project / "s1.jsonl", [
@@ -251,6 +274,17 @@ class TestLensReport(ReportTestCase):
         self.assertEqual(sum(prompts.values()), 2)
         self.assertEqual(self.lens.steps_until_next_prompt(info["steps"], info["prompts"], info["prompts"][0]), 2)
         self.assertEqual(self.lens.steps_until_next_prompt(info["steps"], info["prompts"], info["prompts"][1]), 1)
+
+    def test_the_report_counts_resumes_against_pauses(self):
+        from core import events
+        pause = {"event": "turn_stop", "session_id": "s1", "steps": 60, "first": True, "subagent": False}
+        for record in (pause, pause, {"event": "turn_resume", "session_id": "s1", "mode": "resume", "checklist": True, "paused_session": "s1", "steps": 60}):
+            events.log_event(record)
+        report = self.lens.build(7)
+        self.assertEqual((report["totals"]["stops"], report["totals"]["resumed"], report["totals"]["skipped"]), (2, 1, 0))
+        self.assertEqual([row["kind"] for row in report["budget_rows"]], ["turn_resume", "turn_stop", "turn_stop"])
+        self.assertEqual((report["budget_rows"][0]["note"], report["budget_rows"][0]["reread"]), ("checklist written", None))
+        self.assertEqual(report["settings"]["turn_budget_mode"], constants.TURN_BUDGET_MODE)
 
     def test_lens_and_budget_agree_on_steps_and_reread(self):
         self.write(self.project / "s1.jsonl", [self.prompt(0), self.step("r1", 1, 1000), self.step("r1", 2, 1000), self.step("r2", 3, 2500)])
