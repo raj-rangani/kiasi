@@ -146,3 +146,20 @@ test('large cuts name their saved original and earlier markers are left whole', 
   expect(result.messages[1].toolUses[0].text).toContain('full text is #1 in /d/outputs/compact-b.txt');
   expect(result.messages[2].text).toBe(old);
 });
+
+test('a text that only mentions the marker is cut, and one an earlier compaction cut is left whole', () => {
+  const mention = `${big('row ', 20000)}\nexport const MARKER_PREFIX = '[kiasi pruned';\n${big('row ', 20000)}`;
+  const earlier = `${big('row ', 300)}\n[kiasi pruned 9000 chars at compaction]\n`;
+  const messages = [
+    { role: 'user', text: 'task', toolUses: [] },
+    { role: 'assistant', text: 'ok', toolUses: [
+      { tool_use_id: 't1', tool: 'Bash', input: { command: 'cat hooks/constants.js' }, text: mention },
+      { tool_use_id: 't2', tool: 'Bash', input: { command: 'ls' }, text: earlier },
+    ] },
+    ...Array.from({ length: 10 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', text: `m${i}`, toolUses: [] })),
+  ];
+  const result = pruneTranscript(messages);
+  expect(result.kept).toBe(true);
+  expect(result.messages![1].toolUses[0].text.length).toBeLessThan(mention.length / 2);
+  expect(result.messages![1].toolUses[1].text).toBe(earlier);
+});
