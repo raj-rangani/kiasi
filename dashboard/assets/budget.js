@@ -75,5 +75,35 @@ function renderFixes(b) {
     : `<p class="empty">No tool result over ${fmtK(b.settings.big_output_chars / CHARS_PER_TOKEN)} tokens this week.</p>`;
 }
 
-registerView('budget', b => { renderChart(b); renderFixes(b); }, 'budget');
+function table(head, rows) {
+  return `<table><thead><tr>${head.map((h, i) => `<th${i ? ' class="num"' : ''}>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map((c, i) => `<td${i ? ' class="num"' : ''}>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+}
+
+function renderNotes(b) {
+  let host = $('#cache-notes');
+  if (!host) {
+    host = document.createElement('section');
+    host.className = 'sheet';
+    host.id = 'cache-notes';
+    root.appendChild(host);
+  }
+  const t = b.totals, c = t.context || { mean: t.mean_context, median: 0, p90: 0 };
+  const lines = [`<p>Context per step: mean ${fmtK(c.mean)}, median ${fmtK(c.median)}, p90 ${fmtK(c.p90)}.</p>`];
+  if (t.cache_gaps_5_60 > 0 && t.cache_cold_after_gap > 0) {
+    lines.push(`<p>${t.cache_gaps_5_60} breaks of 5–60 min this week rewrote about ${fmtM(t.cache_gap_rewrite_tokens)} tokens. `
+      + (b.settings.cache_ttl_1h ? 'The 1-hour cache is already set in this environment.' : 'If this is an API key, set CLAUDE_CODE_PROMPT_CACHE_TTL=1h.') + '</p>');
+  }
+  if (t.model_switches > 0 || t.effort_switches > 0) {
+    const n = t.model_switches + t.effort_switches, cost = t.model_switch_rewrite_tokens + t.effort_switch_rewrite_tokens;
+    lines.push(`<p>${n} model or effort switches rewrote about ${fmtK(cost)}. A model or effort change invalidates the cached messages.</p>`);
+  }
+  const e = b.effort || { levels: [], models: [] };
+  const rows = e.known ? e.levels : e.models;
+  const out = rows.length ? table([e.known ? 'effort' : 'model', 'output per prompt', 'prompts'], rows.map(r => [esc(r.name), String(r.per_prompt), String(r.prompts)])) : '';
+  const thinking = t.thinking_per_prompt ? `<p>Thinking text: about ${fmtK(t.thinking_per_prompt)} characters per prompt.</p>` : '';
+  host.innerHTML = '<div class="sheet-head"><h2><span class="num">03</span>Cache and output</h2>'
+    + `<p>Output is ${fmtM(t.output_tokens)} tokens, ${t.output_per_prompt} per prompt.</p></div>` + lines.join('') + out + thinking;
+}
+
+registerView('budget', b => { renderChart(b); renderFixes(b); renderNotes(b); }, 'budget');
 })();

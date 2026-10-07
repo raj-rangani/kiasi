@@ -6,7 +6,8 @@ from pathlib import Path
 
 from core import constants
 from core.caps import failure_label, handle_tool_output, leading_command
-from core.events import checklist_folder, ensure_dirs, load_session, log_error, log_event, make_checklist_folder, now_iso, project_slug, save_session
+from core import taskfile
+from core.events import checklist_folder, ensure_dirs, first_context_tokens, load_session, log_error, log_event, make_checklist_folder, now_iso, project_slug, save_session
 from core.notify import notify_desktop
 from core.reads import handle_pre_tool, track_reads
 from core.transcript import caller_key, caller_transcript, current_context_tokens, edited_files, fmt_k, fmt_m, is_short_reply, is_system_prompt, is_task_prompt, last_task_prompt, prompt_text, response_id, tail_entries
@@ -86,6 +87,7 @@ def turn_guard(payload, tokens, loose=False):
     else:
         scope, warn_steps, stop_steps = "turn", constants.turn_warn_steps(), constants.TURN_STOP_STEPS
     state = load_session(session_id)
+    note_context(payload, state, tokens)
     turn = state.setdefault("turns", {}).setdefault(key, {"steps": 0, "reread": 0, "warned": False, "stopped": False, "index": state.get("prompts", 0)})
     turn["steps"] += 1
     turn["reread"] += tokens
@@ -485,6 +487,10 @@ def record_pause(payload, turn, state):
     paused = {"checkpoint": turn["checkpoint"], "steps": turn["stopped"], "reread": turn["reread"], "at": now_iso(), "session_id": payload.get("session_id", ""),
               "task": (last_task_prompt(entries) or resumed.get("task", ""))[:constants.RESUME_TASK_CHARS],
               "files": list(dict.fromkeys([*resumed.get("files", []), *edited_files(entries)]))}
+    task_file = taskfile.write(payload.get("cwd"), payload.get("session_id", ""), goal=paused["task"], files=paused["files"],
+                               next_step=f"Resume the paused turn: bring the checklist at {turn['checkpoint']} up to date, then work its first open item.")
+    if task_file:
+        paused["taskfile"] = turn["taskfile"] = str(task_file)
     state["paused"] = paused
     # The session's own state first: a pause record that cannot be written must not keep the budget from tripping.
     save_session(payload.get("session_id", ""), state)
@@ -550,6 +556,7 @@ def resume_context(state, prompt, cwd):
     else:
         saved += ". "
         message = "Kiasi: resuming the paused turn from its task and edited files; no checklist was written."
+    saved += f"The task file is {paused['taskfile']}. " if paused.get("taskfile") else ""
     context = (f"{when}, and the developer asked to resume it: {saved}Check git status and the files involved first. An item stays "
                'open until you have verified it: do not call the work done while any item is unverified, and end with "n of m verified".')
     return {"mode": "resume", "context": context, "message": message, "log": follow_up}
@@ -604,11 +611,27 @@ def handle_tool_batch(payload):
     return None
 
 
+def note_context(payload, state, tokens):
+    """The session's context numbers for the status line and the prompt notices: the latest total, the floor and the time of the call."""
+    if payload.get("agent_id"):
+        return
+    state.update(context_tokens=tokens, last_call_at=now_iso())
+    if not state.get("context_floor"):
+        floor = first_context_tokens(payload.get("transcript_path")) or (constants.CONTEXT_FLOOR_DEFAULT if tokens else 0)
+        if floor:
+            state["context_floor"] = floor
+
+
 def handle_post_tool(payload):
     entries = tail_entries(caller_transcript(payload))
     # The answer to the pause question comes first: a continue renews the budget before this call is counted against it.
     chosen = pause_choice(payload)
-    guard = None if batch_counted(payload) else turn_guard(payload, current_context_tokens(entries), loose=True)
+    counted = batch_counted(payload)
+    guard = None if counted else turn_guard(payload, current_context_tokens(entries), loose=True)
+    if counted and not payload.get("agent_id"):
+        state = load_session(payload.get("session_id", ""))
+        note_context(payload, state, current_context_tokens(entries))
+        save_session(payload.get("session_id", ""), state)
     guard = chosen or guard
     capped = handle_tool_output(payload)
     track_reads(payload, capped)

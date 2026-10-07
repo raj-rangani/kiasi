@@ -549,3 +549,25 @@ STATUSLINE_CHAIN_NAME = "statusline-chain.json"
 STATUSLINE_SCRIPT_NAME = "statusline.py"
 CLAUDE_SETTINGS_FILE = Path.home() / ".claude" / "settings.json"
 SETTINGS_BACKUP_SUFFIX = ".kiasi-bak"
+
+# Task file and context notices
+TASKFILE_PREFIX = "task-"
+TASKFILE_START_CHARS = 2000
+TASKFILE_GOAL_CHARS = 300
+TASKFILE_MAX_FILES = 40
+TASKFILE_CONTINUE_LINE = "Continue from here. Re-verify before marking anything done."
+CONTEXT_HANDOFF_TOKENS = 150_000
+CONTEXT_FLOOR_DEFAULT = 46_000
+CONTEXT_IDLE_HANDOFF_TOKENS = 100_000
+CACHE_TTL_MINUTES = 60
+CACHE_TTL_ENV = "CLAUDE_CODE_PROMPT_CACHE_TTL"
+CACHE_TTL_VALUES = {"1h": 60, "5m": 5}
+# The SessionStart block: the full text is rules.md, loaded on demand by /kiasi:rules.
+SESSION_RULE_LINES = (
+    "- One task per session. `/kiasi:handoff` saves the task to its task file under `.kiasi/checkpoints/`, `/clear` starts fresh, and the next session restores it.",
+    "- Commands, web pages and big files you only scan go through the `mcp__kiasi__run`, `fetch` and `distill` tools when available; a raw scan-only Bash or WebFetch call is refused once with the call to make.",
+    "- A line starting with `[kiasi kept` or `[kiasi trimmed` names a saved file with the full text; read it by path if the cut part matters.",
+    "- At /compact keep verbatim the current task, every file path edited, new names and failed commands with their errors; reduce other outputs to one line; end with the next steps.",
+    "Load /kiasi:rules for the full rules.",
+)
+TASKFILE_START_SOURCES = ("startup", "clear", "resume")

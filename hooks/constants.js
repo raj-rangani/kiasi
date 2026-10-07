@@ -35,6 +35,12 @@ export const LEVELS = [
   { recent: RECENT_MESSAGES_LAST, resultChars: RESULT_LINE_CHARS, assistantChars: ASSISTANT_TEXT_LAST_CHARS, userKeepChars: USER_TEXT_LAST_KEEP_CHARS },
 ];
 
+export const PRUNE_KEEP_EXCHANGES = 3;
+export const PRUNE_OLD_PROMPT_CHARS = 600;
+export const PRUNE_OUTCOME_CHARS = 200;
+export const PRUNE_REDUCE_MIN_CHARS = 200000;
+export const EXCHANGE_MARKER_PREFIX = '[kiasi reduced exchange';
+
 export const KIASI_SCRIPT = 'kiasi.py';
 export const LOG_EVENT_NAME = 'PluginCompact';
 export const TOAST_MS = 6000;

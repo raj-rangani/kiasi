@@ -107,6 +107,11 @@ A `.kiasi.json` in the project root can set any of these except `compaction_wind
 
 `KIASI_DASHBOARD=off` stops the session-start autostart of the dashboard.
 
+Two Claude Code settings outside Kiasi are worth setting too:
+
+- `CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000` under `env` in team settings: it caps runaway contexts, and the dashboard flags sessions that went past it.
+- `CLAUDE_CODE_PROMPT_CACHE_TTL=1h` on API keys: the default 5-minute TTL rewrites the whole context after a short break. The status line's `cache warm` countdown follows this value.
+
 ## Requirements
 
 - Claude Code 2.1.283+

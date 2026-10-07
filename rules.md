@@ -1,7 +1,7 @@
 ## Context rules
 
 Every turn re-sends the whole conversation, so context size times turns is the real cost. Keep both small:
-- One task per session. Start a new session or `/clear` when the task changes; kiasi writes a note at compaction and at stop, and injects the last one at session start.
+- One task per session. Start a new session or `/clear` when the task changes. Kiasi keeps one task file per task under `.kiasi/checkpoints/` (goal, decisions, verified checklist, files touched, next step), updated at compaction, stop and pause and by `/kiasi:handoff`, and restores the latest at session start. At about 150k context run `/kiasi:handoff`, then `/clear`; re-verify before marking anything in a restored task file done.
 - Scripts longer than twenty lines go to a file in the scratchpad once and run by path; never re-paste a script inline.
 - Never poll with sleep loops. Run background commands and wait for the notification.
 - Read documents and large files by section (offset and limit, sed ranges), not whole, and never twice.

@@ -3,7 +3,7 @@ import os
 import re
 import time
 
-from core import constants
+from core import constants, taskfile
 from core.events import ensure_dirs, load_session, log_event, save_session
 from core.transcript import current_context_tokens, fmt_k, is_system_prompt, last_prompt_epoch, tail_entries, transcript_key
 from core.turn import reread_check, resume_context
@@ -45,6 +45,32 @@ def config_changes(state, cwd):
     return [group for group in constants.CONFIG_FINGERPRINT if before.get(group) != prints.get(group)]
 
 
+def cache_ttl_minutes():
+    return constants.CACHE_TTL_VALUES.get(os.environ.get(constants.CACHE_TTL_ENV, ""), constants.CACHE_TTL_MINUTES)
+
+
+def last_call_gap_minutes(state):
+    try:
+        return (time.time() - time.mktime(time.strptime(state["last_call_at"], "%Y-%m-%dT%H:%M:%S"))) / 60
+    except (KeyError, ValueError, TypeError):
+        return 0
+
+
+def handoff_notice(state, tokens):
+    """One notice, the 150k one winning over the idle-return one: a handoff then /clear restarts from about the floor."""
+    floor = state.get("context_floor") or constants.CONTEXT_FLOOR_DEFAULT
+    if tokens >= constants.CONTEXT_HANDOFF_TOKENS and tokens - state.get("handoff_nudged_at", 0) >= constants.CONTEXT_NUDGE_STEP_TOKENS:
+        state["handoff_nudged_at"] = tokens
+        return f"Context {fmt_k(tokens)} (floor {fmt_k(floor)}). Run /kiasi:handoff, then /clear: this task continues from about {fmt_k(floor + 2000)}."
+    gap = last_call_gap_minutes(state)
+    held = state.get("context_tokens") or tokens
+    if gap > cache_ttl_minutes() and held > constants.CONTEXT_IDLE_HANDOFF_TOKENS and state.get("idle_nudged_for") != state.get("last_call_at"):
+        state["idle_nudged_for"] = state.get("last_call_at")
+        return (f"Cache cold after {int(gap)} min idle at {fmt_k(held)} context: the next prompt rewrites all of it. "
+                f"/kiasi:handoff then /clear starts from about {fmt_k(floor + 2000)}.")
+    return None
+
+
 def handle_prompt(payload):
     prompt = payload.get("prompt") or ""
     session_id = payload.get("session_id", "")
@@ -80,6 +106,8 @@ def handle_prompt(payload):
         if "message" in resume:
             messages.append(resume["message"])
         record["resume"] = resume["mode"]
+        if resume["mode"] == "resume" and resume["log"].get("paused_session"):
+            taskfile.adopt(payload.get("cwd"), session_id, resume["log"]["paused_session"])
         log_event({"event": "turn_resume", "session_id": session_id, "mode": resume["mode"], **resume["log"]})
     if len(prompt) >= constants.PASTE_MIN_CHARS:
         path = save_paste(session_id, state, prompt)
@@ -94,6 +122,10 @@ def handle_prompt(payload):
         messages.append(nudge)
         state["nudged_at"] = tokens
         record["nudge"] = nudge
+    handoff = handoff_notice(state, tokens)
+    if handoff:
+        messages.append(handoff)
+        record["handoff_notice"] = handoff
     check = reread_check(prompt, tokens, entries, state)
     if check:
         context_lines.append(check["context"])

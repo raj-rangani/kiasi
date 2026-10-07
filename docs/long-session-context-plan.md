@@ -224,6 +224,20 @@ Ordered by value for the effort.
 - On Opus 4.5+ and Sonnet 4.6+, thinking blocks stay in context, so higher effort also grows the context.
 - Show the effort level in the status line, and measure output per prompt by effort before recommending a default.
 
+## Status (2026-10-07)
+
+| Proposal | State |
+|---|---|
+| 1 Parallel-batch pruning | done 2026-10-06; report numbers (synthetic skip, message-id dedupe, median and p90) done |
+| 2 Clear-and-resume | task file, four writers, `/kiasi:handoff`, restore on start, 150k notice done; task-switch detection open |
+| 3 Cap at 200k | README recommendation, window in effect and runaway flag on the dashboard done |
+| 4 Lower the floor | prefix audit sheet, 7-line SessionStart block, leaner pruner done; MCP schema sizes are from the deferred-tool listing, not the schemas |
+| 5 Context meter | done in the status line |
+| 6 Cache-aware notices | idle-return notice, TTL check and model/effort switch counts done |
+| 7 Effort | measured per effort level on the Budget tab; no recommendation yet |
+
+Open items are tracked in the pull request that landed this.
+
 ## Decisions needed
 
 1. Where should the task file live: in the repo (`.kiasi/task.md`, visible and editable), or in Kiasi's data folder (private, per session)?

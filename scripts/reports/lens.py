@@ -24,6 +24,14 @@ PROBLEM_KINDS = {
     "bad_setting": "A value in .kiasi.json was ignored.",
     "checklist_folder": "The checklist folder could not be created.",
 }
+RUNAWAY_TOKENS = 200_000
+WINDOW_ENV = "CLAUDE_CODE_AUTO_COMPACT_WINDOW"
+PREFIX_PIECES = 12
+PREFIX_KINDS = ("CLAUDE.md files", "plugins and skills", "MCP tool schemas", "agents list", "memory", "other")
+ATTACHMENT_KINDS = {"skill_listing": "plugins and skills", "deferred_tools_delta": "MCP tool schemas", "mcp_instructions_delta": "MCP tool schemas",
+                    "agent_listing_delta": "agents list", "instructions": "CLAUDE.md files"}
+REMINDER_HINTS = (("MEMORY.md", "memory"), ("CLAUDE.md", "CLAUDE.md files"), ("skills are available", "plugins and skills"), ("mcp__", "MCP tool schemas"),
+                  ("deferred tools", "MCP tool schemas"), ("agent types", "agents list"))
 MARK_KINDS = {"compaction": "compaction", "pruned": "pruned", "reread_check": "check", "delegated": "check", "turn_stop": "stop"}
 
 
@@ -62,6 +70,69 @@ def is_prompt(message):
     return any(isinstance(b, dict) and b.get("type") == "text" and not b.get("text", "").lstrip().startswith("<") for b in blocks)
 
 
+def percentile(values, q):
+    ordered = sorted(values)
+    return ordered[min(len(ordered) - 1, ceil(q * len(ordered)) - 1)] if ordered else 0
+
+
+def window_in_effect():
+    """The auto-compact window this process sees: the env var if it is a number, else unset (the model's own window, 200k when unknown)."""
+    raw = os.environ.get(WINDOW_ENV, "").strip()
+    tokens = int(raw) if raw.isdigit() and int(raw) > 0 else None
+    return {"env": WINDOW_ENV, "tokens": tokens, "effective": tokens or RUNAWAY_TOKENS, "recommend": tokens is None or tokens > RUNAWAY_TOKENS}
+
+
+def text_size(value):
+    return len(value) if isinstance(value, str) else len(json.dumps(value, ensure_ascii=False)) if value else 0
+
+
+def piece(kind, chars, name=None):
+    return {"kind": kind, "chars": chars, **({"name": name} if name else {})}
+
+
+def prefix_pieces(entry):
+    """What one pre-first-reply entry adds to the fixed prefix, sized in chars; what cannot be attributed is 'other'."""
+    out = []
+    if entry.get("type") == "attachment":
+        a = entry.get("attachment") or {}
+        kind = ATTACHMENT_KINDS.get(a.get("type"))
+        if a.get("type") == "instructions":
+            for f in a.get("files") or []:
+                path = str(f.get("path", "")) if isinstance(f, dict) else ""
+                out.append(piece("memory" if "memory" in path.lower() else "CLAUDE.md files", text_size(f), path or None))
+        elif kind:
+            body = {k: v for k, v in a.items() if k not in ("type", "isInitial", "skillCount")}
+            out.append(piece(kind, text_size(body), a.get("type")))
+        elif a.get("type") in ("hook_additional_context", "session_context", "prompt_snapshot"):
+            out.append(piece("other", text_size(a.get("content") or a.get("context") or a.get("systemPrompt")), a.get("hookName") or a.get("type")))
+    elif entry.get("type") == "user":
+        content = (entry.get("message") or {}).get("content")
+        blocks = content if isinstance(content, list) else [{"type": "text", "text": content}] if isinstance(content, str) else []
+        for b in blocks:
+            text = b.get("text", "") if isinstance(b, dict) and b.get("type") == "text" else ""
+            if text.lstrip().startswith("<system-reminder>"):
+                kind = next((k for hint, k in REMINDER_HINTS if hint in text), "other")
+                out.append(piece(kind, len(text)))
+    return out
+
+
+def prefix_report(sessions):
+    """Per project: the median floor (first reply's context of sessions started in the window) and the pieces of its latest such session."""
+    by_project = defaultdict(list)
+    for info in sessions.values():
+        if info["new"] and info["pieces"]:
+            by_project[info["project"]].append(info)
+    report = {}
+    for project, infos in by_project.items():
+        infos.sort(key=lambda i: i["steps"][0])
+        merged = Counter()
+        for p in infos[-1]["pieces"]:
+            merged[(p["kind"], p.get("name"))] += p["chars"]
+        pieces = [piece(kind, chars, name) for (kind, name), chars in sorted(merged.items(), key=lambda x: -x[1])[:PREFIX_PIECES]]
+        report[project] = {"floor_tokens": int(percentile([i["contexts"][0] for i in infos], 0.5)), "sessions": len(infos), "pieces": pieces}
+    return report
+
+
 def usage_entries(path):
     seen = set()
     for entry in iter_entries(path):
@@ -70,10 +141,11 @@ def usage_entries(path):
             yield entry, None
             continue
         request = entry.get("requestId") or entry.get("uuid")
-        if request in seen:
+        keys = {request, message.get("id")} - {None}
+        if keys & seen:
             yield entry, None
             continue
-        seen.add(request)
+        seen |= keys
         yield entry, message["usage"]
 
 
@@ -212,7 +284,7 @@ def scan_sessions(days):
     bill = Counter()
     main_bill, prompts = Counter(), Counter()
     for path in main:
-        info = {"session": Path(path).stem, "project": project_of(path), "steps": [], "contexts": [], "prompts": [], "reread": 0, "recalls": [], "new": None}
+        info = {"session": Path(path).stem, "project": project_of(path), "steps": [], "contexts": [], "prompts": [], "reread": 0, "recalls": [], "new": None, "pieces": []}
         asked = set()
         for entry, usage in usage_entries(path):
             t = epoch_iso(entry["timestamp"])
@@ -220,6 +292,8 @@ def scan_sessions(days):
             if entry.get("type") == "assistant":
                 info["recalls"].extend((t, text) for text in recall_texts(message))
             day = local_day(t)
+            if info["new"] is None:
+                info["pieces"].extend(prefix_pieces(entry))
             if usage:
                 if info["new"] is None:
                     info["new"] = day >= first_day  # a session that began before the window was resumed, not started
@@ -601,7 +675,8 @@ def session_records(sessions, actions):
             "prompts": len(info["prompts"]), "steps": len(info["steps"]), "mean_steps": round(sum(steps_per_prompt) / max(1, len(steps_per_prompt)), 1),
             "long_turns": sum(1 for c in steps_per_prompt if c >= constants.TURN_STOP_STEPS),
             "startup": info["contexts"][0],
-            "mean_context": mean_context, "peak": max(info["contexts"]), "bill": info["reread"],
+            "mean_context": mean_context, "median_context": int(percentile(info["contexts"], 0.5)), "p90_context": int(percentile(info["contexts"], 0.9)),
+            "peak": max(info["contexts"]), "runaway": max(info["contexts"]) > RUNAWAY_TOKENS, "bill": info["reread"],
             "findings": postmortem(info, per_session.get(session, []), steps_per_prompt, mean_context),
             "compactions": max(sum(1 for a in per_session.get(session, []) if a["kind"] == "compaction"),
                                sum(1 for a in per_session.get(session, []) if a["kind"] in ("pruned", "summary"))),
@@ -844,6 +919,7 @@ def build(days):
         if info["new"]:  # a resumed session's first request in the window is no startup
             startups[local_day(info["steps"][0])].append(info["contexts"][0])
     all_startups = [value for values in startups.values() for value in values]
+    all_contexts = [c for info in sessions.values() for c in info["contexts"]]
     misses, miss_tokens = defaultdict(Counter), Counter()
     for miss in misses_all:
         misses[local_day(miss["t"])][miss["cause"]] += 1
@@ -859,6 +935,9 @@ def build(days):
                    "over_budget": by_kind["turn_over"]["count"], "mean_steps_after_stop": round(sum(a["later_steps"] for a in stops) / max(1, len(stops)), 1),
                    "sessions": len(sessions), "prompts": total_prompts, "steps": total_steps, "mean_steps": round(total_steps / max(1, total_prompts), 1),
                    "reread_per_prompt": int(sum(main_bill.values()) / total_prompts) if total_prompts else None,
+                   "context_mean": int(sum(all_contexts) / len(all_contexts)) if all_contexts else None,
+                   "context_median": int(percentile(all_contexts, 0.5)) if all_contexts else None, "context_p90": int(percentile(all_contexts, 0.9)) if all_contexts else None,
+                   "runaway_sessions": sum(1 for s in sessions.values() if max(s["contexts"]) > RUNAWAY_TOKENS),
                    "startup_mean": int(sum(all_startups) / len(all_startups)) if all_startups else None,
                    "turn_choices": dict(Counter(a["record"].get("choice") for a in actions if a["kind"] == "turn_choice")),
                    "reads_skipped": by_kind["read_skipped"]["count"], "reads_retried": by_kind["read_retry"]["count"]},
@@ -872,6 +951,8 @@ def build(days):
                      "hit_rate": round(cache_days[day]["read"] / cache_days[day]["input"], 4) if cache_days.get(day, {}).get("input") else None,
                      **{k: v for k, v in per_day[day].items() if v}} for day in days_seen],
         "sessions": session_rows,
+        "window": window_in_effect(),
+        "prefix": prefix_report(sessions),
         "steps_hist": step_histogram(sessions),
         "caps": cap_summary(actions),
         "recall": recall_rows(events, sessions),

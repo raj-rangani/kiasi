@@ -2,6 +2,15 @@
 
 ### Unreleased
 
+- One task file per task under the project's `.kiasi/checkpoints/` folder, with goal, decisions, a checklist checked only when verified, files touched and next step. The turn-budget pause, the compaction note, the stop note and the new `/kiasi:handoff` skill all write it, and a new session (start, clear or resume) is handed it with "continue from here; re-verify before marking anything done".
+- Two context notices at the prompt: at 150k tokens, "run /kiasi:handoff, then /clear: this task continues from about {floor}k"; and on return after the prompt cache has gone cold with over 100k of context. The floor is measured from the session's first reply. Session state carries `context_floor`, `context_tokens` and `last_call_at`.
+- The SessionStart block is 7 lines instead of about 40. The full rules live in `rules.md` and the new `/kiasi:rules` skill loads them on demand.
+- The compaction pruner keeps the last 3 exchanges word for word and reduces older ones to the prompt, a one-line outcome and a pointer to the archived exchange, once the transcript passes 200k chars. Hand-backs inside old exchanges keep their own pointer.
+- The status line shows a context meter: `ctx 118k (floor 46k) · turn 12/60 1.4M · cache warm 52m · idle 3m`, amber at 150k and red at 200k, honouring `CLAUDE_CODE_PROMPT_CACHE_TTL`.
+- Dashboard: median and p90 context next to the mean; sessions whose context passed 200k carry a "past 200k" badge and are counted on the Overview, with the `CLAUDE_CODE_AUTO_COMPACT_WINDOW` recommendation when the window is unset or larger; a "Context window and floor" sheet sizes what each project loads at session start (CLAUDE.md, skills, MCP tools, agents, memory) and suggests what to turn off.
+- Budget tab: a "Cache and output" section counts 5 to 60 minute breaks that found the cache cold and the tokens they rewrote, with the 1-hour TTL suggestion; counts model and effort switches and their rewrite cost; and shows output and thinking per prompt by effort level, which transcripts do record.
+- Report numbers dedupe assistant entries by message id and skip `<synthetic>` ones in both the lens and budget reports.
+- README recommends `CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000` and `CLAUDE_CODE_PROMPT_CACHE_TTL=1h`.
 ## 0.4.2 - 2026-10-07
 
 - After a pause, parallel refused calls now count as one refused response even before Claude Code has sent a tool batch, so a pause in the first response no longer ends the turn early.

@@ -133,6 +133,59 @@ class TestAuditReports(ReportTestCase):
         record = {"event": "turn_choice", "session_id": "s", "choice": "stop", "steps": 60, "ts": "2026-10-06T10:00:00"}
         self.assertEqual(self.lens.classify(0, record, {})["kind"], "turn_choice")
 
+class TestBudgetCacheAndEffort(ReportTestCase):
+    def msg(self, request, second, read, create=90, model="m1", effort=None, mid=None, thinking=None):
+        entry = self.step(request, second, read, create)
+        entry["message"]["model"] = model
+        if mid:
+            entry["message"]["id"] = mid
+        if effort:
+            entry["effort"] = effort
+        if thinking:
+            entry["message"]["content"].append({"type": "thinking", "thinking": thinking})
+        return entry
+
+    def test_synthetic_and_repeated_message_ids_are_skipped_and_context_has_median_and_p90(self):
+        entries = [self.prompt(0), self.msg("r1", 1, 1000, mid="a"), self.msg("r2", 2, 1000, mid="a"), self.msg("r3", 3, 1000, model="<synthetic>")]
+        entries += [self.msg(f"q{i}", 10 + i, 1000 * (i + 1)) for i in range(9)]
+        self.write(self.project / "s1.jsonl", entries)
+        report = self.budget.build(7)
+        self.assertEqual(report["totals"]["turns"], 10)
+        context = report["totals"]["context"]
+        self.assertEqual((context["median"], context["p90"]), (percentile_of(report), 8100))
+        self.assertEqual(report["per_day"][0]["context"]["p90"], 8100)
+
+    def test_breaks_of_five_to_sixty_minutes_are_counted_with_the_rewrite_and_the_cold_cache(self):
+        self.write(self.project / "s1.jsonl", [
+            self.prompt(0), self.msg("r1", 1, 1000),
+            {**self.msg("r2", 2, 0, create=5000), "timestamp": f"{self.day}T06:10:00Z"},
+            {**self.msg("r3", 3, 5000), "timestamp": f"{self.day}T06:10:30Z"},
+            {**self.msg("r4", 4, 5000), "timestamp": f"{self.day}T08:10:30Z"}])
+        report = self.budget.build(7)
+        [day] = report["per_day"]
+        self.assertEqual((day["cache_gaps_5_60"], day["cache_gap_rewrite_tokens"], day["cache_cold_after_gap"]), (1, 5010, 1))
+        self.assertEqual(report["totals"]["cache_gaps_5_60"], 1)
+        self.assertEqual(report["sessions"][0]["cold_after_gap"], 1)
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_PROMPT_CACHE_TTL": "1h"}):
+            self.assertTrue(self.budget.build(7)["settings"]["cache_ttl_1h"])
+
+    def test_model_and_effort_switches_cost_the_context_at_the_switch_and_effort_groups_output_per_prompt(self):
+        self.write(self.project / "s1.jsonl", [
+            self.prompt(0), self.msg("r1", 1, 1000, effort="high", thinking="abcd"),
+            self.prompt(2), self.msg("r2", 3, 2000, model="m2", effort="max")])
+        report = self.budget.build(7)
+        t = report["totals"]
+        self.assertEqual((t["model_switches"], t["model_switch_rewrite_tokens"], t["effort_switches"], t["effort_switch_rewrite_tokens"]), (1, 2100, 1, 2100))
+        levels = {row["name"]: (row["output"], row["prompts"], row["per_prompt"]) for row in report["effort"]["levels"]}
+        self.assertEqual(levels, {"high": (5, 1, 5), "max": (5, 1, 5)})
+        self.assertTrue(report["effort"]["known"])
+        self.assertEqual((t["output_tokens"], t["output_per_prompt"], t["thinking_chars"], t["thinking_per_prompt"]), (10, 5, 4, 2))
+        self.assertEqual([r["name"] for r in report["effort"]["models"]], ["m1", "m2"])
+
+
+def percentile_of(report):
+    return report["totals"]["context"]["median"]
+
 
 if __name__ == "__main__":
     unittest.main()

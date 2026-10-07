@@ -8,6 +8,7 @@ from core import constants
 from core.caps import failure_label
 from core.events import checklist_folder, ensure_dirs, load_session, log_event, now_iso, project_slug, save_session
 from core.launch import ensure_dashboard, launch_cleanup
+from core import taskfile
 from core.reads import forget_reads
 from core.transcript import current_context_tokens, edited_files, failing_commands, fmt_k, fmt_m, last_task_prompt, tail_entries, tool_uses, transcript_key
 from core.turn import pause_elsewhere, pause_reminder
@@ -46,6 +47,7 @@ def write_note(session_id, cwd, task, files, last_message, state, force=False):
     note = {"ts": now_iso(), "session_id": session_id, "cwd": cwd, "task": task[:300], "files": files, "last_message": last_message[: constants.NOTE_MESSAGE_HEAD_CHARS]}
     with open(constants.NOTES_DIR / f"{project_slug(cwd)}.jsonl", "a") as fh:
         fh.write(json.dumps(note, ensure_ascii=False) + "\n")
+    taskfile.write(cwd, session_id, goal=task, files=files, last_message=last_message)
     state["last_note_ts"] = time.time()
     save_session(session_id, state)
     return True
@@ -100,12 +102,13 @@ def env_warning():
 
 
 def rules_text():
+    """The short SessionStart block: the budget lines fitted to the settings, then constants.SESSION_RULE_LINES. The rest of rules.md is /kiasi:rules."""
     try:
         text = constants.RULES_FILE.read_text().strip()
     except OSError:
         return ""
-    lines = (budget_rule(line) for line in text.splitlines())
-    return "\n".join(line for line in lines if line is not None)
+    budget = (budget_rule(line) for line in text.splitlines() if line.startswith((constants.TURN_RULE_PREFIX, constants.SUBAGENT_RULE_PREFIX)))
+    return "\n".join(["## Context rules", *(line for line in budget if line is not None), *constants.SESSION_RULE_LINES])
 
 
 def budget_rule(line):
@@ -269,9 +272,12 @@ def handle_session_start(payload):
     dashboard_line = ensure_dashboard(payload.get("session_id", ""))
     note = last_note(payload.get("cwd") or "")
     paused = pause_elsewhere(payload)
-    log_event({"event": "session_start", "session_id": payload.get("session_id", ""), "source": payload.get("source"), "note": bool(note)})
     lines = [rules_text(), env_warning(), budget_line(), dashboard_line, state_block(payload) if payload.get("source") == "compact" else ""]
-    if note and note.get("session_id") != payload.get("session_id"):
+    restored = taskfile.start_block(payload.get("cwd") or "") if payload.get("source") in constants.TASKFILE_START_SOURCES else ""
+    log_event({"event": "session_start", "session_id": payload.get("session_id", ""), "source": payload.get("source"), "note": bool(note), "taskfile": bool(restored)})
+    if restored:
+        lines.append(restored)
+    elif note and note.get("session_id") != payload.get("session_id"):
         files = ", ".join(note.get("files") or []) or "none recorded"
         lines.append(f"Last session note for this project ({note['ts'][:16]}): task was \"{note['task']}\". Files edited: {files}. It ended with: {note.get('last_message', '')[:200]}")
     if paused:

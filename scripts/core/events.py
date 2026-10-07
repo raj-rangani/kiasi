@@ -42,6 +42,26 @@ def make_checklist_folder(path):
         log_error("checklist_folder", path=str(folder), error=str(exc))
 
 
+def first_context_tokens(transcript_path):
+    """The context of the session's first assistant message: what loads before the developer says anything (the floor)."""
+    if not transcript_path:
+        return 0
+    try:
+        with open(transcript_path, "rb") as fh:
+            head = fh.read(constants.TRANSCRIPT_TAIL_BYTES).decode("utf-8", "replace")
+    except OSError:
+        return 0
+    for line in head.splitlines():
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        usage = (entry.get("message") or {}).get("usage") if entry.get("type") == "assistant" else None
+        if usage:
+            return (usage.get("input_tokens") or 0) + (usage.get("cache_creation_input_tokens") or 0) + (usage.get("cache_read_input_tokens") or 0)
+    return 0
+
+
 def ensure_dirs():
     for d in (constants.LOG_DIR, constants.SESSION_DIR, constants.PASTE_DIR, constants.OUTPUT_DIR, constants.NOTES_DIR, constants.CHECKPOINT_DIR):
         d.mkdir(parents=True, exist_ok=True)

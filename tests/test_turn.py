@@ -434,7 +434,8 @@ class TestTurnGuard(KiasiTestCase):
 
     def test_the_session_rules_follow_the_budget_settings(self):
         self.settings(TURN_BUDGET_MODE="pause", TURN_STOP_STEPS=60, TURN_STOP_TOKENS=8_000_000, TURN_WARN_STEPS=None, SUBAGENT_STEP_LIMIT=40)
-        self.assertEqual(session.rules_text(), constants.RULES_FILE.read_text().strip(), "the defaults render rules.md as written")
+        budget = [line for line in constants.RULES_FILE.read_text().strip().splitlines() if line.startswith(("- Every turn has a budget", "- Each subagent has its own budget"))]
+        self.assertEqual(session.rules_text().splitlines()[1:3], budget, "the defaults render the budget lines of rules.md as written")
         self.settings(TURN_STOP_STEPS=80, TURN_STOP_TOKENS=2_500_000, SUBAGENT_STEP_LIMIT=25)
         text = session.rules_text()
         self.assertIn("budget of 80 steps (the tool calls of one response are one step, so parallel calls count once) or 2.5M re-read tokens. At the warning, about 10 steps before the pause", text)
@@ -447,6 +448,38 @@ class TestTurnGuard(KiasiTestCase):
         lines = session.rules_text().splitlines()
         self.assertEqual([line for line in lines if "Every turn has a budget" in line], [])
         self.assertIn("- Scope review subagents to the diff, never the whole repo.", lines)
+
+    def test_the_session_start_block_is_short_and_points_at_the_full_rules(self):
+        lines = session.rules_text().splitlines()
+        self.assertLessEqual(len(lines), 12)
+        self.assertIn("Load /kiasi:rules for the full rules.", lines)
+        self.assertTrue((constants.PLUGIN_ROOT / "skills" / "rules" / "SKILL.md").exists())
+
+    def test_a_tool_call_records_the_context_numbers(self):
+        path = self.tmp / "t.jsonl"
+        rows = [{"type": "assistant", "message": {"usage": {"input_tokens": 3, "cache_creation_input_tokens": 40000, "cache_read_input_tokens": 5000}}},
+                {"type": "assistant", "message": {"usage": {"input_tokens": 5, "cache_creation_input_tokens": 100, "cache_read_input_tokens": 90000}}}]
+        path.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+        state = {}
+        turn.note_context({"session_id": "s-ctx", "transcript_path": str(path)}, state, 90105)
+        self.assertEqual((state["context_floor"], state["context_tokens"]), (45003, 90105))
+        self.assertRegex(state["last_call_at"], r"^\d{4}-\d\d-\d\dT")
+        turn.note_context({"session_id": "s-ctx", "transcript_path": str(path)}, state, 100000)
+        self.assertEqual(state["context_floor"], 45003, "the floor is measured once")
+
+    def test_the_guard_stores_the_context_keys_on_each_call(self):
+        turn.turn_guard({"session_id": "s-keys", "tool_name": "Bash", "transcript_path": ""}, 70000)
+        state = events.load_session("s-keys")
+        self.assertEqual((state["context_tokens"], state["context_floor"]), (70000, constants.CONTEXT_FLOOR_DEFAULT))
+        self.assertIn("last_call_at", state)
+
+    def test_a_pause_writes_the_task_file_and_a_resume_names_it(self):
+        state = {}
+        turn_state = {"checkpoint": str(self.tmp / "cp.md"), "stopped": 3, "reread": 1}
+        turn.record_pause({"session_id": "s-tf", "cwd": str(self.tmp), "transcript_path": ""}, turn_state, state)
+        self.assertTrue(turn_state["taskfile"].endswith(".md"))
+        self.assertIn(str(self.tmp / "cp.md"), open(turn_state["taskfile"]).read())
+        self.assertEqual(state["paused"]["taskfile"], turn_state["taskfile"])
 
     def test_a_subagent_brief_states_its_budget_unless_the_budget_is_off(self):
         brief = {"session_id": "s-brief", "tool_input": {"prompt": "Fix the failing test in a.py", "subagent_type": "general-purpose"}}

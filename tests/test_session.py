@@ -42,7 +42,8 @@ class TestSessionStart(KiasiTestCase):
         self.assertIsNotNone(result)
         text = result["hookSpecificOutput"]["additionalContext"]
         self.assertIn("Context rules", text)
-        self.assertIn("Compact instructions", text)
+        self.assertIn("Load /kiasi:rules for the full rules.", text)
+        self.assertLessEqual(text.count("\n"), 12 + 3)
 
 
 class TestPluginCompactSession(KiasiTestCase):
@@ -94,6 +95,23 @@ class TestStateBlock(KiasiTestCase):
         checklist.write_text("- [ ] ship the exporter")
         payload = {"session_id": "abcdef12-0000", "cwd": str(self.tmp), "transcript_path": str(path), "source": "compact"}
         self.assertIn(str(checklist), session.handle_session_start(payload)["hookSpecificOutput"]["additionalContext"])
+
+    def test_the_latest_task_file_is_restored_on_start_and_a_note_is_the_fallback(self):
+        from core import taskfile
+        payload = {"session_id": "sess-new", "cwd": str(self.tmp), "source": "startup"}
+        session.write_note("sess-old", str(self.tmp), "refactor the cart", ["/r/cart.py"], "stopped here", {}, force=True)
+        path = taskfile.latest(str(self.tmp))
+        self.assertIn("refactor the cart", path.read_text(), "the note writer feeds the task file")
+        text = session.handle_session_start(payload)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn(str(path), text)
+        self.assertIn("Re-verify before marking anything done.", text)
+        self.assertNotIn("Last session note", text)
+        path.unlink()
+        text = session.handle_session_start(payload)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("Last session note for this project", text)
+        taskfile.write(str(self.tmp), "sess-old", goal="again")
+        for source in ("clear", "resume"):
+            self.assertIn("Re-verify", session.handle_session_start({**payload, "source": source})["hookSpecificOutput"]["additionalContext"])
 
     def test_injected_only_after_compaction(self):
         path = self.transcript()

@@ -1,5 +1,6 @@
 import importlib
 import json
+import os
 import time
 import unittest
 from pathlib import Path, PureWindowsPath
@@ -294,6 +295,49 @@ class TestEmptyReport(ReportTestCase):
 
 
 class TestLensReport(ReportTestCase):
+    def test_synthetic_and_repeated_message_ids_count_once(self):
+        def with_id(entry, mid):
+            entry["message"]["id"] = mid
+            return entry
+        synthetic = self.step("s1", 2, 0)
+        synthetic["message"]["model"] = "<synthetic>"
+        self.write(self.project / "s1.jsonl", [
+            self.prompt(0), with_id(self.step("a", 1, 1000), "m1"), synthetic,
+            with_id(self.step("b", 3, 1000), "m1"), with_id(self.step("c", 4, 5000), "m2")])
+        info = self.lens.scan_sessions(7)[0]["s1"]
+        self.assertEqual(info["contexts"], [1100, 5100])
+
+    def test_median_p90_and_the_runaway_flag_past_200k(self):
+        steps = [self.prompt(0)] + [self.step(f"r{i}", i + 1, read) for i, read in enumerate([50000, 100000, 150000, 210000])]
+        self.write(self.project / "s1.jsonl", steps)
+        os.environ.pop(self.lens.WINDOW_ENV, None)
+        report = self.lens.build(7)
+        [session] = report["sessions"]
+        self.assertTrue(session["runaway"])
+        self.assertEqual((session["median_context"], session["p90_context"], session["peak"]), (100100, 210100, 210100))
+        self.assertEqual((report["totals"]["runaway_sessions"], report["totals"]["context_median"]), (1, 100100))
+        self.assertEqual(report["window"], {"env": self.lens.WINDOW_ENV, "tokens": None, "effective": 200000, "recommend": True})
+        os.environ[self.lens.WINDOW_ENV] = "200000"
+        try:
+            self.assertFalse(self.lens.window_in_effect()["recommend"])
+        finally:
+            del os.environ[self.lens.WINDOW_ENV]
+
+    def test_prefix_audit_sizes_the_first_attachments_per_project(self):
+        reminder = {"type": "user", "timestamp": self.stamp(0), "message": {"role": "user", "content": [
+            {"type": "text", "text": "<system-reminder>Contents of /repo/CLAUDE.md:\n" + "x" * 400 + "</system-reminder>"},
+            {"type": "text", "text": "<system-reminder>The following deferred tools are now available: mcp__db__query\n" + "y" * 200 + "</system-reminder>"},
+            {"type": "text", "text": "<system-reminder>something unknown</system-reminder>"}]}}
+        skills = {"type": "attachment", "timestamp": self.stamp(0), "attachment": {"type": "skill_listing", "content": "z" * 300, "skillCount": 3}}
+        self.write(self.project / "s1.jsonl", [reminder, skills, self.prompt(1), self.step("r1", 2, 40000)])
+        [prefix] = self.lens.build(7)["prefix"].values()
+        self.assertEqual(prefix["floor_tokens"], 40100)
+        kinds = {p["kind"]: p["chars"] for p in prefix["pieces"]}
+        self.assertGreater(kinds["CLAUDE.md files"], 400)
+        self.assertGreater(kinds["MCP tool schemas"], 200)
+        self.assertGreater(kinds["plugins and skills"], 300)
+        self.assertIn("other", kinds)
+
     def test_sessions_count_steps_once_and_only_typed_prompts(self):
         self.write(self.project / "s1.jsonl", [
             self.prompt(0), self.step("r1", 1, 1000), self.step("r1", 2, 1000),

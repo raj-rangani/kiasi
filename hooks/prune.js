@@ -1,6 +1,7 @@
 import {
   LEVELS, ERROR_KEEP_CHARS, USER_TEXT_KEEP_CHARS, USER_TEXT_HEAD_CHARS, INJECTED_HEAD_CHARS, INJECTED_PATTERN, HANDBACK_PATTERNS, HANDBACK_SCAN_CHARS,
   INPUT_FIELD_KEEP_CHARS, CONTENT_FIELDS, CHARS_PER_TOKEN, MAX_KEEP_TOKENS, MAX_KEEP_RATIO, MARKER_PREFIX, SIZE_MARKER_PATTERN, ARCHIVE_MIN_CHARS,
+  PRUNE_KEEP_EXCHANGES, PRUNE_OLD_PROMPT_CHARS, PRUNE_OUTCOME_CHARS, PRUNE_REDUCE_MIN_CHARS, EXCHANGE_MARKER_PREFIX,
 } from './constants.js';
 
 const marker = (dropped, ref) => (ref
@@ -149,10 +150,64 @@ function batchStart(messages, index) {
   return start;
 }
 
-function applyLevel(messages, level) {
+// An exchange starts at a real prompt: not a tool-result message, an injected notice or a subagent hand-back.
+function isPrompt(message) {
+  const text = (message.text || '').trim();
+  return message.role === 'user' && !(message.toolResults || []).length && Boolean(text) && !INJECTED_PATTERN.test(text) && !isHandback(text);
+}
+
+function isReduced(exchange) {
+  const last = exchange[exchange.length - 1];
+  return last.role === 'assistant' && !last.toolUses.length && (last.text || '').trimEnd().split('\n').pop().startsWith(EXCHANGE_MARKER_PREFIX);
+}
+
+const isHandbackMessage = (message) => message.role === 'user' && isHandback(message.text || '');
+
+function flatten(messages) {
+  return messages.map((message) => {
+    const uses = (message.toolUses || []).map((use) => `[${use.tool}] ${JSON.stringify(use.input || {})}${use.text ? `\n${use.text}` : ''}`);
+    const results = (message.toolResults || []).map((result) => result.text || '');
+    return [`[${message.role}] ${message.text || ''}`, ...uses, ...results].join('\n');
+  }).join('\n');
+}
+
+function outcomeOf(exchange) {
+  const last = [...exchange].reverse().find((message) => message.role === 'assistant' && (message.text || '').trim());
+  return last ? last.text.trim().split('\n')[0].slice(0, PRUNE_OUTCOME_CHARS) : '';
+}
+
+// Prompt, a one-line outcome and a pointer; hand-backs stay whole or archived with their own pointer, the rest is in the archive.
+function reduceExchange(exchange, number, level) {
+  const [prompt, ...rest] = exchange;
+  level.archive.items.push(`--- exchange ${number} ---\n${flatten([prompt, ...rest.filter((message) => !isHandbackMessage(message))])}`);
+  const pointer = `${EXCHANGE_MARKER_PREFIX} ${number} (${flatten(exchange).length} chars) at compaction; full text is #${level.archive.items.length} in ${level.archive.path}]`;
+  const handbacks = rest.filter(isHandbackMessage)
+    .map((message) => ({ role: 'user', text: pruneHandback(message.text, level.userKeepChars ?? USER_TEXT_KEEP_CHARS, level.archive), toolUses: [] }));
+  const text = prompt.text || '';
+  return [
+    { role: 'user', text: text.length > PRUNE_OLD_PROMPT_CHARS ? `${text.slice(0, PRUNE_OLD_PROMPT_CHARS)} ...` : text, toolUses: [] },
+    ...handbacks,
+    { role: 'assistant', text: [outcomeOf(exchange), pointer].filter(Boolean).join('\n'), toolUses: [] },
+  ];
+}
+
+const rebuildAll = (messages, level) => mergeBatches(messages.map((message) => (message.role === 'user' ? rebuildUser(message, level) : rebuildAssistant(message, level))));
+
+function pruneRecent(messages, level) {
   const cut = batchStart(messages, Math.max(0, messages.length - level.recent));
-  const rebuilt = messages.slice(0, cut).map((message) => (message.role === 'user' ? rebuildUser(message, level) : rebuildAssistant(message, level)));
-  return [...mergeBatches(rebuilt), ...messages.slice(cut)];
+  return [...rebuildAll(messages.slice(0, cut), level), ...messages.slice(cut)];
+}
+
+// Older exchanges shrink to a pointer when there is an archive to point at; the last few are only tool-pruned.
+function applyLevel(messages, level, total) {
+  const starts = messages.flatMap((message, at) => (isPrompt(message) ? [at] : []));
+  if (!level.archive || total < PRUNE_REDUCE_MIN_CHARS || starts.length <= PRUNE_KEEP_EXCHANGES) return pruneRecent(messages, level);
+  const old = [rebuildAll(messages.slice(0, starts[0]), level)];
+  starts.slice(0, -PRUNE_KEEP_EXCHANGES).forEach((from, index) => {
+    const exchange = messages.slice(from, starts[index + 1]);
+    old.push(isReduced(exchange) || charsOf(exchange) < ARCHIVE_MIN_CHARS ? rebuildAll(exchange, level) : reduceExchange(exchange, index + 1, level));
+  });
+  return [...old.flat(), ...pruneRecent(messages.slice(starts[starts.length - PRUNE_KEEP_EXCHANGES]), level)];
 }
 
 export function pruneTranscript(messages, archivePath) {
@@ -161,7 +216,7 @@ export function pruneTranscript(messages, archivePath) {
   let after = before;
   for (const [index, level] of LEVELS.entries()) {
     const archive = archivePath ? { path: archivePath, items: [] } : null;
-    const pruned = applyLevel(messages, { ...level, archive });
+    const pruned = applyLevel(messages, { ...level, archive }, before);
     after = charsOf(pruned);
     if (after <= limit) return { kept: true, messages: pruned, before, after, level: index, archive };
   }
