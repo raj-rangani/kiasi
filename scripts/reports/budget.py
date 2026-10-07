@@ -12,7 +12,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core import constants
 from core.events import unlock, wait_lock
 
+REPLACE_TRIES = 5
+REPLACE_WAIT = 0.02  # seconds between tries: on Windows a reader holding the file open makes the replace fail briefly
+
 SYNTHETIC_MODEL = "<synthetic>"
+EFFORT_MIN_PROMPTS = 50  # prompts a level needs before two levels are compared
+EFFORT_RECOMMEND_RATIO = 1.5  # output per step of the high level over the low level before a recommendation
+EFFORT_RECOMMEND_MIN_TOKENS = 500_000  # extra output over the period before a recommendation
+EFFORT_HARDER_STEPS_RATIO = 2.0  # steps per prompt over this ratio: the high level's prompts were harder, not just wordier
+CACHE_GAP_MIN_SECONDS = 300  # the default prompt cache TTL on API keys
+CACHE_GAP_MAX_SECONDS = 3600  # the long TTL: a longer break loses the cache either way
+CACHE_COLD_SHARE = 0.5  # a step whose input is over this share cache writes after a break found a cold cache
+TTL_ENV = ("CLAUDE_CODE_PROMPT_CACHE_TTL", "ENABLE_PROMPT_CACHING_1H")
 SKIPPED = Counter()  # what a build could not read: files that vanished, JSON lines that are no event, unreadable timestamps
 _SKIPPED_KEYS = set()  # a build reads a file more than once; each unreadable thing counts once
 
@@ -52,7 +63,14 @@ def write_atomic(path, text):
     """Write beside the file, then replace it: a reader sees the old file or the new one, never half of it."""
     tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
     tmp.write_text(text)
-    os.replace(tmp, path)
+    for attempt in range(REPLACE_TRIES):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if attempt == REPLACE_TRIES - 1:
+                raise
+            time.sleep(REPLACE_WAIT)
 
 
 @contextmanager
@@ -95,6 +113,34 @@ def first_ask(entry, asked):
     asked.add(prompt)
     return True
 
+
+def percentile(values, share):
+    """Nearest-rank percentile of a list; 0 for none."""
+    if not values:
+        return 0
+    ordered = sorted(values)
+    return ordered[max(0, -(-len(ordered) * share // 100) - 1)]
+
+
+def context_stats(values):
+    return {"mean": sum(values) // max(1, len(values)), "median": percentile(values, 50), "p90": percentile(values, 90)}
+
+
+def long_ttl_set():
+    return os.environ.get(TTL_ENV[0], "").strip().lower() == "1h" or os.environ.get(TTL_ENV[1], "").strip().lower() in ("1", "true", "yes")
+
+
+def seconds_of(entry):
+    try:
+        return datetime.fromisoformat(entry["timestamp"].replace("Z", "+00:00")).timestamp()
+    except (KeyError, ValueError, TypeError, AttributeError, OverflowError, OSError):
+        return None
+
+
+def per_prompt(output, prompts):
+    return output // prompts if prompts else 0
+
+
 USAGE_KEYS = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens")
 
 
@@ -125,16 +171,23 @@ def install_day():
     return None
 
 
-HISTORY_COUNTING = 3  # 2: the messages a pruned compaction writes back are not steps; 3: days are local days, not UTC days
+HISTORY_COUNTING = 5  # 5: effort buckets count tool calls; 2: the messages a pruned compaction writes back are not steps; 3: days are local days, not UTC days; 4: rows carry median/p90 context, cache gaps, switches, output per prompt, effort
 HISTORY_RECOUNT_DAYS = 45
+
+
+DAY_COUNTERS = ("prompts", "cache_gaps_5_60", "cache_gap_rewrite_tokens", "cache_cold_after_gap", "model_switches", "model_switch_rewrite_tokens",
+                "effort_switches", "effort_switch_rewrite_tokens", "thinking_chars")
 
 
 def day_rows(per_day):
     rows = []
     for day in sorted(per_day):
         b = per_day[day]
-        rows.append({"day": day, "turns": b["turns"], "sub_turns": b["sub_turns"], "mean_context": b["context_sum"] // max(1, b["turns"]), "high_share": round(b["high_turns"] / max(1, b["turns"]), 2),
-                         "main": dict(b["main"]), "sub": dict(b["sub"])})
+        rows.append({"day": day, "turns": b["turns"], "sub_turns": b["sub_turns"], "mean_context": b["context_sum"] // max(1, b["turns"]), "context": context_stats(b["contexts"]), "high_share": round(b["high_turns"] / max(1, b["turns"]), 2),
+                         "main": dict(b["main"]), "sub": dict(b["sub"]),
+                         **{k: b[k] for k in DAY_COUNTERS}, "output_tokens": b["main"].get("output_tokens", 0), "output_per_prompt": per_prompt(b["main"].get("output_tokens", 0), b["prompts"]),
+                         "thinking_per_prompt": per_prompt(b["thinking_chars"], b["prompts"]),
+                         "by_effort": {k: dict(v) for k, v in b["by_effort"].items()}, "by_model": {k: dict(v) for k, v in b["by_model"].items()}})
     return rows
 
 
@@ -188,7 +241,8 @@ def day_of(entry):
 
 
 def blank_day():
-    return {"main": Counter(), "sub": Counter(), "turns": 0, "sub_turns": 0, "context_sum": 0, "high_turns": 0}
+    return {"main": Counter(), "sub": Counter(), "turns": 0, "sub_turns": 0, "context_sum": 0, "high_turns": 0, "contexts": [],
+            **dict.fromkeys(DAY_COUNTERS, 0), "by_effort": defaultdict(Counter), "by_model": defaultdict(Counter)}
 
 
 def scan(days):
@@ -218,6 +272,10 @@ def scan(days):
         turn_reread = 0
         first_day = None
         asked, results = set(), set()
+        seen_ids = set()
+        prev_time = prev_model = prev_effort = None
+        cold = 0
+        awaiting = False  # a prompt not yet answered by a counted step
         for entry in read_lines(path):
             kind = entry.get("type")
             message = entry.get("message") or {}
@@ -227,9 +285,20 @@ def scan(days):
                         tool_names[block.get("id")] = (block.get("name"), block.get("input") or {})
                 usage = message.get("usage") or {}
                 request = entry.get("requestId") or entry.get("uuid")
-                if not usage or request in seen or message.get("model") == SYNTHETIC_MODEL:
+                if message.get("model") == SYNTHETIC_MODEL:
+                    continue
+                thinking = sum(len(b.get("thinking") or "") for b in message.get("content") or [] if isinstance(b, dict) and b.get("type") == "thinking")
+                if thinking and (day := day_of(entry)) >= min_day:  # a block of its own line: counted before the usage dedupe
+                    per_day[day]["thinking_chars"] += thinking
+                tools = sum(1 for b in message.get("content") or [] if isinstance(b, dict) and b.get("type") == "tool_use")
+                if tools and entry.get("effort") and (day := day_of(entry)) >= min_day:  # per effort level, before the usage dedupe
+                    per_day[day]["by_effort"][entry["effort"]]["tools"] += tools
+                message_id = message.get("id")
+                if not usage or request in seen or (message_id and message_id in seen_ids):
                     continue
                 seen.add(request)
+                if message_id:
+                    seen_ids.add(message_id)
                 day = day_of(entry)
                 if day < min_day:
                     continue
@@ -238,12 +307,37 @@ def scan(days):
                 if prev > 150_000 and context < prev * 0.5:
                     session_compactions += 1
                 prev = context
+                bucket = per_day[day]
+                model, effort, now = message.get("model"), entry.get("effort"), seconds_of(entry)
+                if now is not None and prev_time is not None and now - prev_time > CACHE_GAP_MIN_SECONDS:
+                    if now - prev_time <= CACHE_GAP_MAX_SECONDS:
+                        bucket["cache_gaps_5_60"] += 1
+                        bucket["cache_gap_rewrite_tokens"] += context
+                    if (usage.get("cache_creation_input_tokens") or 0) > CACHE_COLD_SHARE * context:
+                        bucket["cache_cold_after_gap"] += 1
+                        cold += 1
+                if model and prev_model and model != prev_model:
+                    bucket["model_switches"] += 1
+                    bucket["model_switch_rewrite_tokens"] += context
+                if effort and prev_effort and effort != prev_effort:
+                    bucket["effort_switches"] += 1
+                    bucket["effort_switch_rewrite_tokens"] += context
+                prev_time, prev_model, prev_effort = now if now is not None else prev_time, model or prev_model, effort or prev_effort
+                bucket["contexts"].append(context)
+                for group, name in (("by_effort", effort), ("by_model", model)):
+                    if name:
+                        bucket[group][name]["output"] += usage.get("output_tokens") or 0
+                        bucket[group][name]["steps"] += 1
+                        if awaiting:
+                            bucket[group][name]["prompts"] += 1
+                if awaiting:
+                    bucket["prompts"] += 1
+                    awaiting = False
                 turns += 1
                 turn_steps += 1
                 turn_reread += context
                 peak = max(peak, context)
                 context_sum += context
-                bucket = per_day[day]
                 bucket["turns"] += 1
                 bucket["context_sum"] += context
                 bucket["high_turns"] += 1 if context >= constants.BUDGET_HIGH_CONTEXT_TOKENS else 0
@@ -264,6 +358,7 @@ def scan(days):
                         continue
                     if block.get("type") == "text" and not block.get("text", "").lstrip().startswith("<"):
                         session_prompts += 1
+                        awaiting = True
                         long_turns += 1 if turn_steps >= constants.TURN_STOP_STEPS else 0
                         long_turn_reread += turn_reread if turn_steps >= constants.TURN_STOP_STEPS else 0
                         turn_steps = 0
@@ -287,7 +382,7 @@ def scan(days):
         long_turn_reread += turn_reread if turn_steps >= constants.TURN_STOP_STEPS else 0
         prompt_count += session_prompts
         if turns:
-            sessions.append({"session": Path(path).stem[:8], "project": project_of(path)[:40], "day": first_day, "turns": turns, "peak": peak, "mean": context_sum // turns, "compactions": session_compactions, "pastes": session_pastes,
+            sessions.append({"session": Path(path).stem[:8], "project": project_of(path)[:40], "day": first_day, "turns": turns, "peak": peak, "mean": context_sum // turns, "compactions": session_compactions, "pastes": session_pastes, "cold_after_gap": cold,
                              "steps_per_prompt": round(turns / max(1, session_prompts), 1)})
     for path in subs:
         seen = set()
@@ -356,6 +451,36 @@ def kiasi_actions(days):
     return {"counts": dict(actions), "chars_kept_out": saved_chars}
 
 
+def effort_comparison(levels):
+    """The inputs of the Budget tab's effort line. Among levels with EFFORT_MIN_PROMPTS prompts or more it compares
+    the highest and lowest output per step (a harder prompt has more steps, so per step controls for difficulty), and
+    reports output per prompt and steps per prompt too. `recommendation` is set only when the per-step ratio reaches
+    EFFORT_RECOMMEND_RATIO, the extra output reaches EFFORT_RECOMMEND_MIN_TOKENS and the step counts per prompt are
+    within EFFORT_HARDER_STEPS_RATIO; else a `note` says the gap is partly harder work. Not ready: the level closest to the bar."""
+    enough = [r for r in levels if r["prompts"] >= EFFORT_MIN_PROMPTS and r["per_prompt"] > 0 and r["steps"] > 0 and r["output"] > 0]
+    if len(enough) >= 2:
+        step_rate = lambda r: r["output"] / r["steps"]  # noqa: E731
+        spp = lambda r: r["steps"] / r["prompts"]  # noqa: E731
+        high, low = max(enough, key=step_rate), min(enough, key=step_rate)
+        pick = lambda r: {"name": r["name"], "per_prompt": r["per_prompt"], "prompts": r["prompts"], "steps": r["steps"], "per_step": round(step_rate(r)), "steps_per_prompt": round(spp(r), 1)}  # noqa: E731
+        step_ratio, steps_ratio = step_rate(high) / step_rate(low), spp(high) / spp(low)
+        extra = round((step_rate(high) - step_rate(low)) * high["steps"])
+        out = {"ready": True, "min_prompts": EFFORT_MIN_PROMPTS, "high": pick(high), "low": pick(low), "ratio": round(high["per_prompt"] / low["per_prompt"], 1),
+               "step_ratio": round(step_ratio, 1), "steps_ratio": round(steps_ratio, 1), "extra_tokens": (high["per_prompt"] - low["per_prompt"]) * high["prompts"],
+               "extra_step_tokens": extra, "recommendation": None, "note": None}
+        if steps_ratio > EFFORT_HARDER_STEPS_RATIO:
+            out["note"] = f"the {high['name']} prompts ran {round(steps_ratio, 1)}x the steps, so part of the gap is harder work"
+        elif step_ratio >= EFFORT_RECOMMEND_RATIO and extra >= EFFORT_RECOMMEND_MIN_TOKENS:
+            out["recommendation"] = (f"Set effort to {low['name']} for routine work; {high['name']} spent {extra:,} tokens more than {low['name']} would have on the same steps this week. "
+                                     f"Keep {high['name']} for tasks that need it.")
+        return out
+    ranked = sorted(levels, key=lambda r: -r["prompts"])[:2]
+    if not ranked:
+        return None
+    near = ranked[-1]
+    return {"ready": False, "min_prompts": EFFORT_MIN_PROMPTS, "level": near["name"], "prompts": near["prompts"]}
+
+
 def build(days):
     reset_skips()
     per_day, sessions, projects, big_outputs, pastes, paste_chars, compactions, steps = scan(days)
@@ -367,21 +492,35 @@ def build(days):
         total_sub.update(b["sub"])
     turns = sum(b["turns"] for b in per_day.values())
     context_sum = sum(b["context_sum"] for b in per_day.values())
+    sums = {k: sum(b[k] for b in per_day.values()) for k in DAY_COUNTERS}
+    output = total_main.get("output_tokens", 0)
+    groups = {}
+    for group in ("by_effort", "by_model"):
+        merged = defaultdict(Counter)
+        for b in per_day.values():
+            for name, c in b[group].items():
+                merged[name].update(c)
+        groups[group] = [{"name": n, "output": c["output"], "prompts": c["prompts"], "steps": c["steps"], "tools": c["tools"], "per_prompt": per_prompt(c["output"], c["prompts"]),
+                          "per_step": per_prompt(c["output"], c["steps"]), "steps_per_prompt": round(c["steps"] / max(1, c["prompts"]), 1), "tools_per_prompt": round(c["tools"] / max(1, c["prompts"]), 1)} for n, c in sorted(merged.items(), key=lambda x: -x[1]["output"])]
     report = {
         "generated": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "days": days,
         "install_day": install_day(),
         "totals": {"main": dict(total_main), "sub": dict(total_sub), "turns": turns, "sub_turns": sum(b["sub_turns"] for b in per_day.values()),
-                   "mean_context": context_sum // max(1, turns), "high_share": round(sum(b["high_turns"] for b in per_day.values()) / max(1, turns), 2),
+                   "mean_context": context_sum // max(1, turns), "context": context_stats([c for b in per_day.values() for c in b["contexts"]]), "high_share": round(sum(b["high_turns"] for b in per_day.values()) / max(1, turns), 2),
                    "compactions": compactions, "pastes": pastes, "paste_chars": paste_chars, "sessions": len(sessions),
-                   "prompts": steps["prompts"], "mean_steps": round(turns / max(1, steps["prompts"]), 1), "long_turns": steps["long_turns"], "long_turn_reread": steps["long_turn_reread"]},
+                   "prompts": steps["prompts"], "mean_steps": round(turns / max(1, steps["prompts"]), 1), "long_turns": steps["long_turns"], "long_turn_reread": steps["long_turn_reread"],
+                   **{k: sums[k] for k in DAY_COUNTERS if k not in ("prompts", "thinking_chars")}, "output_tokens": output, "output_per_prompt": per_prompt(output, sums["prompts"]),
+                   "answered_prompts": sums["prompts"], "thinking_chars": sums["thinking_chars"], "thinking_per_prompt": per_prompt(sums["thinking_chars"], sums["prompts"])},
+        "effort": {"known": bool(groups["by_effort"]), "levels": groups["by_effort"], "models": groups["by_model"], "comparison": effort_comparison(groups["by_effort"])},
         "per_day": days_out,
         "sessions": sorted(sessions, key=lambda s: -s["turns"] * s["mean"])[: constants.BUDGET_TOP_SESSIONS],
         "projects": [{"project": p, **dict(c)} for p, c in sorted(projects.items(), key=lambda x: -x[1]["cache_read_input_tokens"])],
         "big_outputs": sorted(big_outputs, key=lambda o: -o["chars"])[: constants.BUDGET_TOP_OUTPUTS],
         "kiasi": kiasi_actions(days),
         "settings": {"warn_tokens": constants.CONTEXT_WARN_TOKENS, "hard_tokens": constants.CONTEXT_HARD_TOKENS, "high_context_tokens": constants.BUDGET_HIGH_CONTEXT_TOKENS,
-                     "turn_budget_mode": constants.TURN_BUDGET_MODE, "turn_stop_steps": constants.TURN_STOP_STEPS, "turn_stop_tokens": constants.TURN_STOP_TOKENS, "big_output_chars": constants.BUDGET_BIG_OUTPUT_CHARS},
+                     "turn_budget_mode": constants.TURN_BUDGET_MODE, "turn_stop_steps": constants.TURN_STOP_STEPS, "turn_stop_tokens": constants.TURN_STOP_TOKENS, "big_output_chars": constants.BUDGET_BIG_OUTPUT_CHARS,
+                     "cache_ttl_1h": long_ttl_set()},
     }
     constants.LOG_DIR.mkdir(parents=True, exist_ok=True)
     report["history_days"] = len(merge_history(days_out, days))
@@ -396,7 +535,7 @@ def fmt_m(tokens):
 
 def print_report(report):
     t = report["totals"]
-    print(f"last {report['days']} days: {t['sessions']} sessions, {t['turns']} turns (+{t['sub_turns']} subagent), mean context {t['mean_context'] // 1000}k, {int(t['high_share'] * 100)}% of turns over {constants.BUDGET_HIGH_CONTEXT_TOKENS // 1000}k, {t['compactions']} compactions, {t['pastes']} pastes, {t['mean_steps']} steps per prompt, {t['long_turns']} turns of {constants.TURN_STOP_STEPS}+ steps re-read {fmt_m(t['long_turn_reread'])}")
+    print(f"last {report['days']} days: {t['sessions']} sessions, {t['turns']} turns (+{t['sub_turns']} subagent), mean context {t['mean_context'] // 1000}k (median {t['context']['median'] // 1000}k, p90 {t['context']['p90'] // 1000}k), {int(t['high_share'] * 100)}% of turns over {constants.BUDGET_HIGH_CONTEXT_TOKENS // 1000}k, {t['compactions']} compactions, {t['pastes']} pastes, {t['mean_steps']} steps per prompt, {t['long_turns']} turns of {constants.TURN_STOP_STEPS}+ steps re-read {fmt_m(t['long_turn_reread'])}")
     print(f"  re-read (cache read)  main {fmt_m(t['main'].get('cache_read_input_tokens', 0))}  subagents {fmt_m(t['sub'].get('cache_read_input_tokens', 0))}")
     print(f"  written (cache write) main {fmt_m(t['main'].get('cache_creation_input_tokens', 0))}  subagents {fmt_m(t['sub'].get('cache_creation_input_tokens', 0))}")
     print(f"  output                main {fmt_m(t['main'].get('output_tokens', 0))}  subagents {fmt_m(t['sub'].get('output_tokens', 0))}")

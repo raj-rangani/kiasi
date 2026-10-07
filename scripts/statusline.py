@@ -10,6 +10,7 @@ to statusline-chain.json, so it must not import anything from the plugin.
 """
 import json
 import os
+from datetime import datetime, timezone
 from contextlib import contextmanager
 import re
 import subprocess
@@ -39,6 +40,12 @@ SEPARATOR = " │ "
 BAR_WIDTH = 10
 BAR_FULL = "█"
 BAR_EMPTY = "░"
+CTX_WARN_TOKENS = 150_000
+CTX_BAD_TOKENS = 200_000
+DEFAULT_CONTEXT_FLOOR = 46_000
+DEFAULT_CACHE_TTL_SECONDS = 3600
+CACHE_TTL_ENV = "CLAUDE_CODE_PROMPT_CACHE_TTL"
+TTL_UNIT_SECONDS = {"s": 1, "m": 60, "h": 3600}
 COLORS = {
     "ok": "\033[38;2;110;215;140m",
     "mid": "\033[38;2;235;205;100m",
@@ -240,17 +247,56 @@ def branch_part(payload):
     return None
 
 
-def context_part(payload):
+def context_part(payload, session, standalone=True):
     window = payload.get("context_window") or {}
     usage = window.get("current_usage") or {}
     used = sum(int(usage.get(k) or 0) for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"))
+    used = used or int(session.get("context_tokens") or 0)
     size = int(window.get("context_window_size") or 0)
     if not used:
         return None
-    if not size:
-        return f"ctx {fmt_tokens(used)}"
-    percent = used * 100 / size
-    return gauge("ctx", percent, tone_for(percent, WARN_PERCENT, BAD_PERCENT, MID_PERCENT), paint(f" {fmt_tokens(used)}", "dim"))
+    tone = tone_for(used, CTX_WARN_TOKENS, CTX_BAD_TOKENS)
+    floor = int(session.get("context_floor") or DEFAULT_CONTEXT_FLOOR)
+    text = f"{paint(fmt_tokens(used), tone)} {paint(f'(floor {fmt_tokens(floor)})', 'dim')}"
+    if not size or not standalone:
+        return f"{paint('ctx', 'label')} {text}"
+    return gauge("ctx", used * 100 / size, tone, f" {text}")
+
+
+def cache_ttl_seconds():
+    match = re.fullmatch(r"\s*(\d+)\s*([smh]?)\s*", os.environ.get(CACHE_TTL_ENV) or "")
+    if not match:
+        return DEFAULT_CACHE_TTL_SECONDS
+    return int(match.group(1)) * TTL_UNIT_SECONDS[match.group(2) or "s"] or DEFAULT_CACHE_TTL_SECONDS
+
+
+def idle_seconds(session, now):
+    try:
+        last = datetime.fromisoformat(str(session.get("last_call_at")).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    return max(0, now - last.timestamp())
+
+
+def fmt_span(seconds):
+    minutes = int(seconds // 60)
+    if minutes < 1:
+        return "<1m"
+    return f"{minutes // 60}h{minutes % 60:02d}m" if minutes >= 60 else f"{minutes}m"
+
+
+def cache_part(session, standalone, now):
+    idle = idle_seconds(session, now)
+    if idle is None:
+        return None
+    left = cache_ttl_seconds() - idle
+    state = paint(f"warm {fmt_span(left)}", "ok") if left > 0 else paint("cold", "warn")
+    parts = [f"{paint('cache', 'label')} {state}"]
+    if standalone:
+        parts.append(f"{paint('idle', 'label')} {paint(fmt_span(idle), 'time')}")
+    return paint(SEPARATOR, "dim").join(parts)
 
 
 def turn_part(payload, session):
@@ -261,7 +307,11 @@ def turn_part(payload, session):
     if not steps or not stop or budget.get("mode") == "off":
         return None
     tone = tone_for(steps, int(budget.get("warn") or stop), stop)
-    return f"{paint('turn', 'label')} {paint(f'{steps}/{stop}', 'turn' if tone == 'ok' else tone)}"
+    reread = int(turn.get("reread") or 0)
+    count = f"{paint('steps', 'label')} {paint(f'{steps}/{stop}', 'turn' if tone == 'ok' else tone)}"
+    if not reread:
+        return count
+    return paint(SEPARATOR, "dim").join([count, f"{paint('turn', 'label')} {paint(fmt_tokens(reread), 'dim')}"])
 
 
 def weekly_run_out(target_dir, window):
@@ -317,14 +367,15 @@ def kept_part(session):
     return paint(f"kiasi −{fmt_tokens(kept)}", "kiasi") if kept else None
 
 
-def kiasi_line(payload, session, standalone, target_dir):
+def kiasi_line(payload, session, standalone, target_dir, now=None):
     limits = payload.get("rate_limits") or {}
     parts = [
         paint((payload.get("model") or {}).get("display_name") or "Claude", "model") if standalone else None,
         paint(folder_part(payload), "folder") if standalone and folder_part(payload) else None,
         branch_part(payload) if standalone else None,
-        context_part(payload),
+        context_part(payload, session, standalone),
         turn_part(payload, session),
+        cache_part(session, standalone, now or time.time()),
         limit_part("5h", limits.get("five_hour")),
         limit_part("wk", limits.get("seven_day"), WEEK_SECONDS,
                    weekly_run_out(target_dir, limits.get("seven_day"))),

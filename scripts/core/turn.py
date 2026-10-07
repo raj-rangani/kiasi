@@ -6,7 +6,8 @@ from pathlib import Path
 
 from core import constants
 from core.caps import failure_label, handle_tool_output, leading_command
-from core.events import checklist_folder, ensure_dirs, load_session, log_error, log_event, make_checklist_folder, now_iso, project_slug, save_session
+from core import taskfile
+from core.events import checklist_folder, ensure_dirs, first_context_tokens, load_session, log_error, log_event, make_checklist_folder, now_iso, project_slug, save_session
 from core.notify import notify_desktop
 from core.reads import handle_pre_tool, track_reads
 from core.transcript import caller_key, caller_transcript, current_context_tokens, edited_files, fmt_k, fmt_m, is_short_reply, is_system_prompt, is_task_prompt, last_task_prompt, prompt_text, response_id, tail_entries
@@ -63,6 +64,13 @@ def reread_check(prompt, tokens, entries, state):
     return {"context": context, "message": message, "steps": mean_steps, "here": here, "delegated": delegated, "mode": mode}
 
 
+def turn_file(key, turn, payload):
+    """The task file is the turn's checklist; the old per-turn checkpoint path stays only for a session without an id."""
+    session_id = payload.get("session_id", "")
+    path = taskfile.path_for(payload.get("cwd"), session_id) if session_id else None
+    return path or checkpoint_path(key, turn, payload.get("cwd"))
+
+
 def checkpoint_path(key, turn, cwd=None):
     # Every checklist Write must create a file: Claude Code refuses to overwrite one without a read
     # record, and a hook compaction clears those records.
@@ -86,6 +94,7 @@ def turn_guard(payload, tokens, loose=False):
     else:
         scope, warn_steps, stop_steps = "turn", constants.turn_warn_steps(), constants.TURN_STOP_STEPS
     state = load_session(session_id)
+    note_context(payload, state, tokens)
     turn = state.setdefault("turns", {}).setdefault(key, {"steps": 0, "reread": 0, "warned": False, "stopped": False, "index": state.get("prompts", 0)})
     turn["steps"] += 1
     turn["reread"] += tokens
@@ -99,8 +108,8 @@ def turn_guard(payload, tokens, loose=False):
     over_stop = mode != "off" and (turn["steps"] >= stop_steps or turn["reread"] >= constants.TURN_STOP_TOKENS)
     over_warn = mode != "off" and (turn["steps"] >= warn_steps or turn["reread"] >= constants.turn_warn_tokens())
     # The path the warning named stays the turn's checklist: a later call would see the file written and name the next free one.
-    checkpoint = Path(turn["checkpoint"]) if turn.get("checkpoint") else checkpoint_path(key, turn, payload.get("cwd"))
-    allowed = "the checklist's Write, Read and Edit" if subagent else "the checklist's Write, Read and Edit, and Agent"
+    checkpoint = Path(turn["checkpoint"]) if turn.get("checkpoint") else turn_file(key, turn, payload)
+    allowed = "the task file's Write, Read and Edit" if subagent else "the task file's Write, Read and Edit, and Agent"
     ask = question_wanted(payload)
     if over_stop and mode == "warn":
         result = None if turn.get("over") else over_budget(payload, turn, scope, checkpoint, tokens)
@@ -114,24 +123,24 @@ def turn_guard(payload, tokens, loose=False):
             if not subagent:
                 record_pause(payload, turn, state)
             if subagent:
-                hand_off = "end with your reply to the caller: what is done, what is verified, what remains and the checklist path"
+                hand_off = "end with your reply to the caller: what is done, what is verified, what remains and the task file path"
             elif ask:
-                allowed = "the checklist's Write, Read and Edit, Agent and the one question below"
+                allowed = "the task file's Write, Read and Edit, Agent and the one question below"
                 hand_off = (f"{pause_question(turn, tokens)} If that call cannot be made or is refused, end the turn reporting what is done, what is "
                             f'verified and what remains, and close your final message with this line for the developer: "{pause_line(turn)}"')
             else:
-                hand_off = ("either make one Agent call with subagent_type general-purpose whose brief is that checklist path plus the done condition, "
+                hand_off = ("either make one Agent call with subagent_type general-purpose whose brief is that task file path plus the done condition, "
                             "or end the turn reporting what is done, what is verified and what remains. If work remains when the turn ends, close "
                             f'your final message with this line for the developer: "{pause_line(turn)}"')
             # A Write cannot overwrite a file Claude has not read, so a checklist written at the warning is updated, not written again.
-            write = f"Bring the checklist at {checkpoint} up to date (read it, then Edit it)" if checkpoint.exists() else f"Write what remains as a checklist to {checkpoint}"
+            write = f"Bring the task file at {checkpoint} up to date (read it, then Edit it)" if checkpoint.exists() else f"Write the task file at {checkpoint} (goal, decisions, verified checklist, files, next step)"
             context = (
                 f"kiasi paused this {scope}: {turn['steps']} steps and {fmt_m(turn['reread'])} tokens re-read at a context of {fmt_k(tokens)}. "
                 f"Every further call except {allowed} is refused. {write}, then {hand_off}."
             )
         else:
             context = (f"kiasi: this {scope} is still paused ({turn['steps']} steps, {fmt_m(turn['reread'])} tokens). "
-                       f"Write the checklist to {turn.get('checkpoint', checkpoint)} and {'reply to the caller' if subagent else 'end the turn or delegate'}.")
+                       f"Update the task file at {turn.get('checkpoint', checkpoint)} and {'reply to the caller' if subagent else 'end the turn or delegate'}.")
         result = {"hookSpecificOutput": {"hookEventName": payload.get("hook_event_name", "PostToolUse"), "additionalContext": context}}
         if first and subagent:
             result["systemMessage"] = f"Kiasi paused a subagent at {turn['steps']} steps; it hands the remaining work back in {checkpoint}."
@@ -149,11 +158,11 @@ def turn_guard(payload, tokens, loose=False):
         elif ask_now:
             # Claude follows the warning and so seldom reaches the pause: the developer is asked here, or Claude would choose for them.
             turn["context"] = tokens
-            allowed = "the checklist's Write, Read and Edit, Agent and the question below"
+            allowed = "the task file's Write, Read and Edit, Agent and the question below"
             next_step = (f"when work remains, {pause_question(turn, tokens)} Do not choose for the developer. If that call cannot be made, "
-                         "end the turn with that path or hand the checklist to one general-purpose subagent")
+                         "end the turn with that path or hand the task file to one general-purpose subagent")
         else:
-            next_step = "end the turn with that path or hand the checklist to one general-purpose subagent"
+            next_step = "end the turn with that path or hand the task file to one general-purpose subagent"
         # Each further call re-reads about the current context, so the tokens can run out before the calls do.
         left = max(1, min(stop_steps - turn["steps"], (constants.TURN_STOP_TOKENS - turn["reread"]) // max(tokens, 1)))
         limit = (f"it pauses at {stop_steps} steps or {fmt_m(constants.TURN_STOP_TOKENS)} tokens, and then every call except {allowed} is refused"
@@ -161,7 +170,7 @@ def turn_guard(payload, tokens, loose=False):
                  f"its budget is {stop_steps} steps or {fmt_m(constants.TURN_STOP_TOKENS)} tokens, which kiasi reports but does not enforce")
         context = (
             f"kiasi {scope} budget: about {left} steps left; the tool calls of one response are one step, so parallel calls count once. This {scope} has made {turn['steps']} steps and re-read {fmt_m(turn['reread'])} "
-            f"tokens at a context of {fmt_k(tokens)}; {limit}. Finish the item in progress, keep the remaining items as a checklist at {checkpoint}, then {next_step}."
+            f"tokens at a context of {fmt_k(tokens)}; {limit}. Finish the item in progress, update the task file at {checkpoint} (goal, decisions, verified checklist, files, next step), then {next_step}."
         )
         result = {"hookSpecificOutput": {"hookEventName": payload.get("hook_event_name", "PostToolUse"), "additionalContext": context}}
         if not subagent:
@@ -177,21 +186,21 @@ def over_budget(payload, turn, scope, checkpoint, tokens):
     subagent = scope == "subagent"
     turn.update(over=turn["steps"], warned=True, checkpoint=str(checkpoint))
     make_checklist_folder(checkpoint)
-    next_step = "reply to the caller with that path" if subagent else "end the turn with that path or hand the checklist to one general-purpose subagent"
+    next_step = "reply to the caller with that path" if subagent else "end the turn with that path or hand the task file to one general-purpose subagent"
     context = (f"kiasi: this {scope} reached its budget at {turn['steps']} steps and {fmt_m(turn['reread'])} tokens re-read at a context of "
-               f"{fmt_k(tokens)}. The budget is in warn mode, so no call is refused. Finish the item in progress, write what remains as a "
-               f"checklist to {checkpoint}, then {next_step}.")
+               f"{fmt_k(tokens)}. The budget is in warn mode, so no call is refused. Finish the item in progress, update the "
+               f"task file at {checkpoint}, then {next_step}.")
     result = {"hookSpecificOutput": {"hookEventName": payload.get("hook_event_name", "PostToolUse"), "additionalContext": context}}
     if not subagent:
         result["systemMessage"] = (f"Kiasi: this turn reached its budget at {turn['steps']} steps ({fmt_m(turn['reread'])} tokens re-read). "
-                                   f"The budget is in warn mode, so nothing is refused; Claude was asked to wrap up and keep the rest in {checkpoint}.")
+                                   f"The budget is in warn mode, so nothing is refused; Claude was asked to wrap up and keep the rest in the task file {checkpoint}.")
     log_event({"event": "turn_over", "session_id": payload.get("session_id", ""), "transcript": caller_key(payload), "steps": turn["steps"],
                "reread": turn["reread"], "context_tokens": tokens, "subagent": subagent, "checkpoint": str(checkpoint)})
     return result
 
 
 def pause_line(turn):
-    return (f"Paused by Kiasi at {turn['stopped']} steps; the rest is in {turn['checkpoint']}. "
+    return (f"Paused by Kiasi at {turn['stopped']} steps; the rest is in the task file {turn['checkpoint']}. "
             "Reply continue to resume here, or run /clear and then reply continue, which is cheaper.")
 
 
@@ -200,7 +209,7 @@ def pause_notice(turn, ask=False):
     resume = (f'eply "continue" to resume in this session (each step re-reads about {fmt_k(turn.get("context", 0))} tokens), '
               'or run /clear and then reply "continue", which is cheaper.')
     return (f"Kiasi paused this turn at {turn['stopped']} steps ({fmt_m(turn['reread'])} tokens re-read). "
-            f"The remaining work goes to {turn['checkpoint']}. "
+            f"The remaining work goes to the task file {turn['checkpoint']}. "
             + ("Claude will now ask how to go on: continue here, hand the rest to a subagent, or stop. To resume later instead, r" if ask else "R") + resume)
 
 
@@ -245,7 +254,7 @@ def pause_question(turn, tokens):
     return (f'make one AskUserQuestion call with one question, the header "{constants.PAUSE_QUESTION_HEADER}", the question '
             f'"{reached} ({fmt_m(turn["reread"])} tokens re-read). How should the rest go on?" '
             f'and exactly these three options: "{labels["continue"]}" (keep going in this session with a fresh budget of {constants.TURN_STOP_STEPS} steps; '
-            f'each step re-reads about {fmt_k(tokens)} tokens), "{labels["subagent"]}" (one subagent with a fresh context works through the checklist), '
+            f'each step re-reads about {fmt_k(tokens)} tokens), "{labels["subagent"]}" (one subagent with a fresh context works through the task file), '
             f'"{labels["stop"]}" (end the turn; replying continue later resumes it, and /clear first makes that cheaper). '
             "Kiasi reads the answer and tells you what to do next. If AskUserQuestion is not loaded yet, load it first with the ToolSearch "
             'query "select:AskUserQuestion", which is let through.')
@@ -321,7 +330,7 @@ def pause_choice(payload):
     if not turn or not (turn.get("stopped") or turn.get("warned")):
         return None
     paused = bool(turn.get("stopped"))
-    checkpoint = turn.get("checkpoint") or str(checkpoint_path(key, turn, payload.get("cwd")))
+    checkpoint = turn.get("checkpoint") or str(turn_file(key, turn, payload))
     log_event({"event": "turn_choice", "session_id": session_id, "choice": choice, "steps": turn["stopped"] or turn["steps"], "paused": paused,
                "answers": type(payload.get("tool_response")).__name__})
     if paused:
@@ -332,10 +341,10 @@ def pause_choice(payload):
     if choice == "continue":
         renew_turn(payload, state, turn)
         context = (f"kiasi: the developer chose to continue in this session, so this turn has a fresh budget of {constants.TURN_STOP_STEPS} steps. "
-                   f"Carry on from the checklist at {checkpoint}. An item stays open until you have verified it.")
+                   f"Carry on from the task file at {checkpoint}. An item stays open until you have verified it.")
         output["systemMessage"] = f"Kiasi: continuing in this session with a fresh budget of {constants.TURN_STOP_STEPS} steps."
     elif choice == "subagent":
-        context = (f"kiasi: the developer chose a subagent. Make one Agent call with subagent_type general-purpose whose brief is the checklist at "
+        context = (f"kiasi: the developer chose a subagent. Make one Agent call with subagent_type general-purpose whose brief is the task file at "
                    f"{checkpoint} plus the done condition, then relay its summary and what remains, naming that path. This turn stays paused, "
                    "so every other call is refused.")
     elif choice == "stop":
@@ -343,7 +352,7 @@ def pause_choice(payload):
                    f'your final message with this line: "{pause_line(turn)}"')
     elif not paused:
         context = (f'kiasi: the developer answered in their own words ("{answer[:200]}"). Do what they ask within the steps this turn has left; '
-                   f"what remains after that goes to the checklist at {checkpoint}.")
+                   f"what remains after that goes to the task file at {checkpoint}.")
     else:
         context = (f'kiasi: the developer answered in their own words ("{answer[:200]}"), and this turn stays paused, so no call but Write and '
                    f'Agent will run. Answer them in your final message and close it with this line: "{pause_line(turn)}"')
@@ -353,11 +362,16 @@ def pause_choice(payload):
 
 
 def checklist_call(payload, turn):
-    """A Read or Edit of the turn's own checklist, let through at a pause so the checklist is updated and not written blind."""
+    """A Read or Edit of the turn's task file, let through at a pause so it is updated and not written blind."""
     path = (payload.get("tool_input") or {}).get("file_path") or ""
     if payload.get("tool_name") not in constants.TURN_CHECKLIST_TOOLS or not path or not turn.get("checkpoint"):
         return False
-    return os.path.abspath(os.path.expanduser(path)) == os.path.abspath(os.path.expanduser(turn["checkpoint"]))
+    here = os.path.abspath(os.path.expanduser(path))
+    # A turn started before the task file named the checklist keeps its own checkpoint path: accepted for one release.
+    named = [turn["checkpoint"]]
+    if payload.get("session_id"):
+        named.append(str(taskfile.path_for(payload.get("cwd"), payload["session_id"])))
+    return any(here == os.path.abspath(os.path.expanduser(item)) for item in named)
 
 
 def count_refusal(payload, turn):
@@ -374,7 +388,7 @@ def count_refusal(payload, turn):
 
 
 def paused_call(payload):
-    """PreToolUse: once a turn or subagent is paused, refuse every call but the checklist Write and the hand-off."""
+    """PreToolUse: once a turn or subagent is paused, refuse every call but the task file Write and the hand-off."""
     # Only pause mode refuses, so a turn paused before the mode was changed is let go.
     if constants.TURN_BUDGET_MODE != "pause" or payload.get("tool_name") in constants.TURN_EXEMPT_TOOLS or loads_question(payload):
         return None
@@ -389,11 +403,11 @@ def paused_call(payload):
     if payload.get("tool_use_id"):
         # Marked here, so the batch knows a refused call by its id and not by what a tool's output says.
         turn["refused"] = [*turn.get("refused", []), payload["tool_use_id"]][-constants.TURN_CALLS_KEPT:]
-    turn.setdefault("checkpoint", str(checkpoint_path(key, turn, payload.get("cwd"))))
+    turn.setdefault("checkpoint", str(turn_file(key, turn, payload)))
     save_session(session_id, state)
     scope, next_step = ("subagent", "end with your reply to the caller") if subagent else ("turn", "end the turn with the pause notice for the developer")
     reason = (f"kiasi paused this {scope} at {turn['stopped']} steps, so this call was not run. "
-              f"Bring the checklist at {turn['checkpoint']} up to date (Read it, then Edit it; Write it if it is not there yet), then {next_step}.")
+              f"Bring the task file at {turn['checkpoint']} up to date (Read it, then Edit it; Write it if it is not there yet), then {next_step}.")
     output = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": reason}}
     if not subagent and turn.get("denied", 0) >= constants.TURN_DENY_BACKSTOP:
         # Claude kept calling tools after the pause, so the turn ends here. A subagent is only refused:
@@ -438,13 +452,13 @@ def pause_reminder(payload):
     turn = state.get("turns", {}).get(key)
     if not turn or not turn.get("stopped") or turn.get("reminded") or turn.get("denied", 0) >= constants.TURN_DENY_BACKSTOP:
         return None
-    turn.setdefault("checkpoint", str(checkpoint_path(key, turn, payload.get("cwd"))))
+    turn.setdefault("checkpoint", str(turn_file(key, turn, payload)))
     if turn["checkpoint"] in (payload.get("last_assistant_message") or ""):
         return None
     turn["reminded"] = True
     save_session(session_id, state)
     context = (f"kiasi: this turn was paused at {turn['stopped']} steps, and your final message does not tell the developer. "
-               f"If work remains, write it to {turn['checkpoint']} if you have not, then reply in two or three lines ending with: "
+               f"If work remains, update the task file at {turn['checkpoint']} if you have not, then reply in two or three lines ending with: "
                f'"{pause_line(turn)}" If nothing remains, say so in one line. Make no other tool calls.')
     return {"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": context}}
 
@@ -485,6 +499,10 @@ def record_pause(payload, turn, state):
     paused = {"checkpoint": turn["checkpoint"], "steps": turn["stopped"], "reread": turn["reread"], "at": now_iso(), "session_id": payload.get("session_id", ""),
               "task": (last_task_prompt(entries) or resumed.get("task", ""))[:constants.RESUME_TASK_CHARS],
               "files": list(dict.fromkeys([*resumed.get("files", []), *edited_files(entries)]))}
+    task_file = taskfile.write(payload.get("cwd"), payload.get("session_id", ""), goal=paused["task"], files=paused["files"],
+                               next_step=f"Resume the paused turn: bring the task file at {turn['checkpoint']} up to date, then work its first open item.")
+    if task_file:
+        paused["taskfile"] = turn["taskfile"] = str(task_file)
     state["paused"] = paused
     # The session's own state first: a pause record that cannot be written must not keep the budget from tripping.
     save_session(payload.get("session_id", ""), state)
@@ -533,12 +551,14 @@ def resume_context(state, prompt, cwd):
     try:
         with open(paused["checkpoint"]) as fh:
             checklist = fh.read()
+        if "## Checklist" in checklist and not taskfile.parse(checklist).get("Checklist"):
+            checklist = ""
     except OSError:
         checklist = ""
     when = f"kiasi paused a turn at {paused['steps']} steps on {paused['at'][:16].replace('T', ' ')}"
     follow_up = {"checklist": bool(checklist), "paused_session": paused.get("session_id", ""), "steps": paused["steps"]}
-    saved = f"its remaining work is the checklist at {paused['checkpoint']}" if checklist else (
-        f"no checklist was written to {paused['checkpoint']}" + (f'; its task was "{paused["task"]}"' if paused.get("task") else "")
+    saved = f"its remaining work is in the task file {paused['checkpoint']}" if checklist else (
+        f"the task file {paused['checkpoint']} has no checklist yet" + (f'; its task was "{paused["task"]}"' if paused.get("task") else "")
         + (f"; files it edited: {', '.join(paused['files'])}" if paused.get("files") else ""))
     if not re.match(constants.RESUME_PATTERN, prompt.strip(), re.I | re.S):
         return {"mode": "pointer", "context": f"{when}; {saved}. If this prompt is about that work, start from there.", "log": follow_up}
@@ -549,7 +569,8 @@ def resume_context(state, prompt, cwd):
         message = f"Kiasi: resuming from {paused['checkpoint']}"
     else:
         saved += ". "
-        message = "Kiasi: resuming the paused turn from its task and edited files; no checklist was written."
+        message = "Kiasi: resuming the paused turn from its task and edited files; the task file has no checklist yet."
+    saved += f"The task file is {paused['taskfile']}. " if paused.get("taskfile") and paused["taskfile"] != paused["checkpoint"] else ""
     context = (f"{when}, and the developer asked to resume it: {saved}Check git status and the files involved first. An item stays "
                'open until you have verified it: do not call the work done while any item is unverified, and end with "n of m verified".')
     return {"mode": "resume", "context": context, "message": message, "log": follow_up}
@@ -604,11 +625,27 @@ def handle_tool_batch(payload):
     return None
 
 
+def note_context(payload, state, tokens):
+    """The session's context numbers for the status line and the prompt notices: the latest total, the floor and the time of the call."""
+    if payload.get("agent_id"):
+        return
+    state.update(context_tokens=tokens, last_call_at=now_iso())
+    if not state.get("context_floor"):
+        floor = first_context_tokens(payload.get("transcript_path")) or (constants.CONTEXT_FLOOR_DEFAULT if tokens else 0)
+        if floor:
+            state["context_floor"] = floor
+
+
 def handle_post_tool(payload):
     entries = tail_entries(caller_transcript(payload))
     # The answer to the pause question comes first: a continue renews the budget before this call is counted against it.
     chosen = pause_choice(payload)
-    guard = None if batch_counted(payload) else turn_guard(payload, current_context_tokens(entries), loose=True)
+    counted = batch_counted(payload)
+    guard = None if counted else turn_guard(payload, current_context_tokens(entries), loose=True)
+    if counted and not payload.get("agent_id"):
+        state = load_session(payload.get("session_id", ""))
+        note_context(payload, state, current_context_tokens(entries))
+        save_session(payload.get("session_id", ""), state)
     guard = chosen or guard
     capped = handle_tool_output(payload)
     track_reads(payload, capped)

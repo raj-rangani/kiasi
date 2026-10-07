@@ -46,6 +46,16 @@ The first compacts at 200k instead of the full window and is the biggest single 
 
 Restart Claude Code and work as usual. Run `/kiasi:limits setup` once so the dashboard can show your plan limits. The dashboard starts itself with every session.
 
+## Updating
+
+Claude Code does not update plugins on its own. A new Kiasi version becomes visible when the version in the repo changes, and you pick it up with:
+
+```
+/plugin marketplace update kiasi
+```
+
+or `claude plugin update kiasi@kiasi` from a shell, then restart Claude Code. To update automatically at session start, open `/plugin`, pick the Kiasi marketplace under Marketplaces and choose Enable auto-update. If you use the status line, run `/kiasi:limits setup` again after an update that changed it; the release notes say when. Releases and their notes are at https://github.com/raj-rangani/kiasi/releases.
+
 ## How it works
 
 Each rule is a Claude Code hook with a fixed threshold you can change. Nothing is decided by a model.
@@ -106,6 +116,11 @@ A `.kiasi.json` in the project root can set any of these except `compaction_wind
 `pause_notification` is a desktop notification when a turn is paused, through `notify-send` on Linux, `osascript` on macOS and a PowerShell toast on Windows. With `auto` it shows only in the VS Code extension and the desktop app, where the pause is otherwise one grey line in the chat; the terminal already raises its own notification and bell.
 
 `KIASI_DASHBOARD=off` stops the session-start autostart of the dashboard.
+
+Two Claude Code settings outside Kiasi are worth setting too:
+
+- `CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000` under `env` in team settings: it caps runaway contexts, and the dashboard flags sessions that went past it.
+- `CLAUDE_CODE_PROMPT_CACHE_TTL=1h` on API keys: the default 5-minute TTL rewrites the whole context after a short break. The status line's `cache warm` countdown follows this value.
 
 ## Requirements
 

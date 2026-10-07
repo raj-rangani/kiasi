@@ -1,5 +1,6 @@
 import importlib
 import json
+import os
 import time
 import unittest
 from pathlib import Path, PureWindowsPath
@@ -8,6 +9,8 @@ from unittest import mock
 from helpers import KiasiTestCase
 from core import constants  # noqa: E402
 from core import prompt  # noqa: E402
+
+NOW = int(os.environ.get("KIASI_TEST_NOW", time.time()))
 
 
 class PromptRows(unittest.TestCase):
@@ -72,14 +75,16 @@ class TestLensSignals(KiasiTestCase):
 
     def test_cache_report_ranks_by_cost_and_compares_windows(self):
         from reports import lens
-        now = time.time()
+        # A fixed clock: the report and the day keys below must agree on the day, which they cannot across midnight.
+        now = time.mktime((2026, 10, 7, 12, 0, 0, 0, 0, -1))
         day = lambda t: lens.local_day(t)
         per_day = {day(now): {"read": 900, "input": 1000}, day(now - 9 * 86400): {"read": 1, "input": 10}}
         misses = [{"t": now - 60, "prev": now - 90, "tokens": 30000, "cause": "other", "session": "s", "project": "p"},
                   {"t": now - 120, "prev": now - 150, "tokens": 90000, "cause": "idle over 1h", "session": "s", "project": "p"},
                   {"t": now - 180, "prev": now - 200, "tokens": 500000, "cause": "compaction", "session": "s", "project": "p"},
                   {"t": now - 9 * 86400, "prev": now - 9 * 86400 - 5, "tokens": 30000, "cause": "other", "session": "s", "project": "p"}]
-        report = lens.cache_report(7, per_day, misses, 10_000_000)
+        with mock.patch.object(lens.time, "time", return_value=now):
+            report = lens.cache_report(7, per_day, misses, 10_000_000)
         self.assertEqual(report["hit_rate"], 0.9)
         self.assertEqual((report["misses"], report["avoidable"], report["idle"], report["prior_avoidable"]), (3, 1, 1, 1),
                          "a cache that expired while idle is a miss, but not an avoidable one")
@@ -139,9 +144,9 @@ class TestPostmortem(KiasiTestCase):
 
 
 class ReportTestCase(KiasiTestCase):
-    """Synthetic transcripts under a temp TRANSCRIPT_ROOT; timestamps sit at 06:00 UTC
-    yesterday so the UTC day (budget.py) and the local day (lens.py) agree in any zone
-    from UTC-6 to UTC+14."""
+    """Synthetic transcripts under a temp TRANSCRIPT_ROOT; timestamps sit at local noon
+    yesterday, so the local day both reports count by is the same in any zone.
+    KIASI_TEST_NOW pins the clock (seconds since the epoch)."""
 
     def setUp(self):
         super().setUp()
@@ -151,10 +156,20 @@ class ReportTestCase(KiasiTestCase):
         constants.TRANSCRIPT_ROOT = self.tmp / "projects"
         self.project = constants.TRANSCRIPT_ROOT / "-home-user-app"
         self.project.mkdir(parents=True)
-        self.day = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 86400))
+        if "KIASI_TEST_NOW" in os.environ:
+            patcher = mock.patch("time.time", return_value=NOW)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.day = time.strftime("%Y-%m-%d", time.localtime(NOW - 86400))
 
     def stamp(self, second, day=None):
-        return f"{day or self.day}T06:00:{second:02d}Z"
+        noon = time.mktime(time.strptime(f"{day or self.day} 12:00:{second:02d}", "%Y-%m-%d %H:%M:%S"))  # local noon: the same local day in every zone
+        return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(noon))
+
+    def at(self, clock, day=None):
+        """The UTC stamp of a local clock time (HH:MM:SS) on a local day, default yesterday."""
+        local_time = time.mktime(time.strptime(f"{day or self.day} {clock}", "%Y-%m-%d %H:%M:%S"))
+        return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(local_time))
 
     def step(self, request, second, read, create=90, day=None):
         return {"type": "assistant", "requestId": request, "timestamp": self.stamp(second, day),
@@ -196,7 +211,7 @@ class TestBudgetReport(ReportTestCase):
         self.assertEqual((day["main"]["cache_read_input_tokens"], day["sub"]["cache_read_input_tokens"]), (1000, 1200))
 
     def test_steps_older_than_the_window_are_dropped_by_day_not_file_age(self):
-        old = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 10 * 86400))
+        old = time.strftime("%Y-%m-%d", time.localtime(NOW - 10 * 86400))
         self.write(self.project / "s1.jsonl", [self.step("old", 1, 9999, day=old), self.prompt(2), self.step("r1", 3, 1000)])
         days = [row["day"] for row in self.budget.build(7)["per_day"]]
         self.assertEqual(days, [self.day])
@@ -227,7 +242,7 @@ class TestBudgetReport(ReportTestCase):
 
 class TestHistory(ReportTestCase):
     def days_ago(self, n):
-        return time.strftime("%Y-%m-%d", time.gmtime(time.time() - n * 86400))
+        return time.strftime("%Y-%m-%d", time.localtime(NOW - n * 86400))
 
     def row(self, day, turns, read):
         return {"day": day, "turns": turns, "sub_turns": 0, "mean_context": read, "high_share": 0.0,
@@ -294,6 +309,75 @@ class TestEmptyReport(ReportTestCase):
 
 
 class TestLensReport(ReportTestCase):
+    def test_synthetic_and_repeated_message_ids_count_once(self):
+        def with_id(entry, mid):
+            entry["message"]["id"] = mid
+            return entry
+        synthetic = self.step("s1", 2, 0)
+        synthetic["message"]["model"] = "<synthetic>"
+        self.write(self.project / "s1.jsonl", [
+            self.prompt(0), with_id(self.step("a", 1, 1000), "m1"), synthetic,
+            with_id(self.step("b", 3, 1000), "m1"), with_id(self.step("c", 4, 5000), "m2")])
+        info = self.lens.scan_sessions(7)[0]["s1"]
+        self.assertEqual(info["contexts"], [1100, 5100])
+
+    def test_median_p90_and_the_runaway_flag_past_200k(self):
+        steps = [self.prompt(0)] + [self.step(f"r{i}", i + 1, read) for i, read in enumerate([50000, 100000, 150000, 210000])]
+        self.write(self.project / "s1.jsonl", steps)
+        os.environ.pop(self.lens.WINDOW_ENV, None)
+        report = self.lens.build(7)
+        [session] = report["sessions"]
+        self.assertTrue(session["runaway"])
+        self.assertEqual((session["median_context"], session["p90_context"], session["peak"]), (100100, 210100, 210100))
+        self.assertEqual((report["totals"]["runaway_sessions"], report["totals"]["context_median"]), (1, 100100))
+        self.assertEqual(report["window"], {"env": self.lens.WINDOW_ENV, "tokens": None, "effective": 200000, "recommend": True})
+        os.environ[self.lens.WINDOW_ENV] = "200000"
+        try:
+            self.assertFalse(self.lens.window_in_effect()["recommend"])
+        finally:
+            del os.environ[self.lens.WINDOW_ENV]
+
+    def test_prefix_audit_sizes_the_first_attachments_per_project(self):
+        reminder = {"type": "user", "timestamp": self.stamp(0), "message": {"role": "user", "content": [
+            {"type": "text", "text": "<system-reminder>Contents of /repo/CLAUDE.md:\n" + "x" * 400 + "</system-reminder>"},
+            {"type": "text", "text": "<system-reminder>The following deferred tools are now available: mcp__db__query\n" + "y" * 200 + "</system-reminder>"},
+            {"type": "text", "text": "<system-reminder>something unknown</system-reminder>"}]}}
+        skills = {"type": "attachment", "timestamp": self.stamp(0), "attachment": {"type": "skill_listing", "content": "z" * 300, "skillCount": 3}}
+        self.write(self.project / "s1.jsonl", [reminder, skills, self.prompt(1), self.step("r1", 2, 40000)])
+        [prefix] = self.lens.build(7)["prefix"].values()
+        self.assertEqual(prefix["floor_tokens"], 40100)
+        kinds = {p["kind"]: p["chars"] for p in prefix["pieces"]}
+        self.assertGreater(kinds["CLAUDE.md files"], 400)
+        self.assertGreater(kinds["MCP tool schemas"], 200)
+        self.assertGreater(kinds["plugins and skills"], 300)
+        self.assertIn("other", kinds)
+
+    def test_synthetic_entries_are_counted_per_session_and_in_the_totals(self):
+        synthetic = {**self.step("x", 1, 0), "message": {"model": "<synthetic>", "content": [{"type": "text", "text": "old"}], "usage": {}}}
+        self.write(self.project / "s1.jsonl", [self.prompt(0), synthetic, {**synthetic, "requestId": "y"}, self.step("r1", 2, 1000)])
+        report = self.lens.build(7)
+        self.assertEqual((report["sessions"][0]["synthetic_skipped"], report["totals"]["synthetic_skipped"]), (2, 2))
+
+    def test_synthetic_entries_are_classified_by_kind(self):
+        def synth(uuid, text, **extra):
+            return {**self.step(uuid, 1, 0), "message": {"model": "<synthetic>", "content": [{"type": "text", "text": text}], "usage": {}}, **extra}
+        entries = [self.prompt(0), synth("a", "an earlier answer"), synth("b", "[Request interrupted by user]"), synth("c", "API Error: The response stopped arriving."),
+                   synth("d", "No response requested."), synth("e", "boom", isApiErrorMessage=True), self.step("r1", 2, 1000)]
+        self.write(self.project / "s1.jsonl", entries)
+        report = self.lens.build(7)
+        want = {"replayed": 1, "interrupted": 1, "api_error": 2, "no_response": 1}
+        self.assertEqual(report["sessions"][0]["synthetic_kinds"], want)
+        self.assertEqual(report["totals"]["synthetic_kinds"], want)
+        self.assertEqual(report["totals"]["synthetic_skipped"], 5)
+
+    def test_the_since_table_carries_median_only_when_every_day_has_it(self):
+        rows = [{"day": "d1", "turns": 10, "mean_context": 100, "context": {"median": 80, "p90": 200}, "main": {}},
+                {"day": "d2", "turns": 30, "mean_context": 100, "context": {"median": 40, "p90": 100}, "main": {}}]
+        metrics = self.lens.period_metrics(rows)
+        self.assertEqual((metrics["median_context"], metrics["p90_context"]), (50, 125))
+        del rows[1]["context"]
+        self.assertIsNone(self.lens.period_metrics(rows)["median_context"])
+
     def test_sessions_count_steps_once_and_only_typed_prompts(self):
         self.write(self.project / "s1.jsonl", [
             self.prompt(0), self.step("r1", 1, 1000), self.step("r1", 2, 1000),
@@ -306,6 +390,43 @@ class TestLensReport(ReportTestCase):
         self.assertEqual(sum(prompts.values()), 2)
         self.assertEqual(self.lens.steps_until_next_prompt(info["steps"], info["prompts"], info["prompts"][0]), 2)
         self.assertEqual(self.lens.steps_until_next_prompt(info["steps"], info["prompts"], info["prompts"][1]), 1)
+
+    def cap_rows(self, entries, sub=None):
+        self.write(self.project / "s1.jsonl", entries)
+        if sub:
+            self.write(self.project / "s1" / "subagents" / "agent-a.jsonl", sub)
+        sessions = self.lens.scan_sessions(7)[0]
+        saved = "/d/outputs/run-1.txt"
+        events = [(self.lens.epoch_iso(self.stamp(1)), {"event": "cap", "session_id": "s1", "kind": "bulk", "saved_path": saved})]
+        return self.lens.recall_rows(events, sessions)
+
+    def use(self, second, name, tool_id, **inp):
+        entry = self.step(f"u{second}", second, 100)
+        entry["message"]["content"] = [{"type": "tool_use", "id": tool_id, "name": name, "input": inp}]
+        return entry
+
+    def test_a_subagent_read_of_the_saved_path_is_a_read_back(self):
+        base = [self.prompt(0), self.step("r1", 1, 1000)]
+        read = [self.use(5, "Read", "a1", file_path="/d/outputs/run-1.txt")]
+        self.assertEqual(self.cap_rows(base, read), [{"kind": "bulk", "cuts": 1, "recalled": 1}])
+
+    def test_a_search_result_naming_the_saved_path_is_a_read_back(self):
+        result = {"type": "user", "timestamp": self.stamp(6), "message": {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "q1", "content": [{"type": "text", "text": "hit in /d/outputs/run-1.txt"}]}]}}
+        entries = [self.prompt(0), self.step("r1", 1, 1000), self.use(5, "mcp__kiasi__search", "q1", query="x"), result]
+        self.assertEqual(self.cap_rows(entries), [{"kind": "bulk", "cuts": 1, "recalled": 1}])
+
+    def test_a_cap_nobody_read_back_keeps_its_credit(self):
+        self.assertEqual(self.cap_rows([self.prompt(0), self.step("r1", 1, 1000), self.tool_result(5)]), [{"kind": "bulk", "cuts": 1, "recalled": 0}])
+
+    def test_a_session_with_entries_before_the_window_is_partial(self):
+        old = time.strftime("%Y-%m-%d", time.localtime(NOW - 10 * 86400))
+        self.write(self.project / "s1.jsonl", [self.step("old", 1, 9999, day=old), self.prompt(2), self.step("r1", 3, 1000)])
+        self.write(self.project / "s2.jsonl", [self.prompt(2), self.step("r2", 3, 1000)])
+        sessions = self.lens.scan_sessions(7)[0]
+        self.assertTrue(sessions["s1"]["partial"])
+        self.assertEqual(sessions["s1"]["first_day"], self.lens.local_day(self.lens.epoch_iso(self.stamp(3))))
+        self.assertFalse(sessions["s2"]["partial"])
 
     def test_messages_replayed_by_a_pruned_compaction_are_not_counted_again(self):
         """The kept prompt comes back under its promptId and the kept answer as a zero-usage synthetic entry."""

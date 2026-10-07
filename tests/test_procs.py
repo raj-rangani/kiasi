@@ -10,6 +10,9 @@ from helpers import SCRIPTS  # noqa: F401  puts scripts/ on the path
 from core import procs  # noqa: E402
 
 
+SHORT_DEADLINE = 1  # run_tree's timeout is already a parameter; production callers pass their own
+
+
 def running(pid):
     try:
         os.kill(pid, 0)
@@ -29,12 +32,12 @@ class TestRunTree(unittest.TestCase):
     def test_the_timeout_stops_what_the_command_started(self):
         with tempfile.TemporaryDirectory() as tmp:
             pid_file = Path(tmp) / "child.pid"
-            command = ("import subprocess, sys, time; child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)']); "
+            command = ("import subprocess, sys, time; child = subprocess.Popen([sys.executable, '-S', '-c', 'import time; time.sleep(60)']); "
                        f"open({str(pid_file)!r}, 'w').write(str(child.pid)); time.sleep(60)")
             with self.assertRaises(subprocess.TimeoutExpired):
-                procs.run_tree([sys.executable, "-c", command], timeout=2)
+                procs.run_tree([sys.executable, "-S", "-c", command], timeout=SHORT_DEADLINE)
             child = int(pid_file.read_text())
-            deadline = time.time() + 5
+            deadline = time.time() + 5  # a poll limit only; it returns as soon as the child is gone
             while running(child) and time.time() < deadline:
                 time.sleep(0.05)
             self.assertFalse(running(child), "subprocess.run's timeout left this process running")

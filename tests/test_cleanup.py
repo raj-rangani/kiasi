@@ -117,6 +117,19 @@ class TestCleanup(KiasiTestCase):
         self.assertIn(stale, found)
         self.assertNotIn(fresh, found)
 
+    def test_expired_pause_records_go_and_fresh_ones_stay(self):
+        def record(days):
+            return json.dumps({"at": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(time.time() - days * 86400)), "session_id": self.SID, "checkpoint": "c"})
+        stale = self.put(constants.NOTES_DIR / "proj.paused.s1.json", self.old, record(20))
+        fresh = self.put(constants.NOTES_DIR / "proj.paused.s2.json", self.old, record(2))
+        found = {row[1] for row in self.cleanup.candidates(time.time(), "")}
+        self.assertIn(stale, found)
+        self.assertNotIn(fresh, found)
+
+    def test_sandbox_digests_of_an_unknown_session_match_the_patterns(self):
+        digest = self.put(constants.OUTPUT_DIR / "run-20260901-101010-4242.txt", self.old)
+        self.assertIn(digest, {row[1] for row in self.cleanup.candidates(time.time(), "")})
+
     def test_schedule_dates_each_file_by_its_last_use(self):
         used = time.time() - 2 * 86400
         out = self.put(constants.OUTPUT_DIR / f"compact-{self.SID[:8]}-20260901-101010.txt", used)

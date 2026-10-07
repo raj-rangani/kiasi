@@ -35,6 +35,47 @@ class TestLegacyMigration(KiasiTestCase):
         self.assertTrue(old.is_dir() and not old.is_symlink())
 
 
+class TestSaveSession(KiasiTestCase):
+    def test_replace_is_retried_after_permission_errors(self):
+        import os
+        from unittest import mock
+        real, calls = os.replace, []
+
+        def flaky(src, dst):
+            calls.append(1)
+            if len(calls) <= 2:
+                raise PermissionError("held open")
+            return real(src, dst)
+        with mock.patch.object(events.os, "replace", flaky), mock.patch.object(events.time, "sleep"):
+            events.save_session("sess-retry", {"prompts": 7})
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(events.load_session("sess-retry")["prompts"], 7)
+
+    def test_a_crashed_writes_old_temp_file_is_removed(self):
+        import os
+        path = events.session_path("sess-tmp")
+        old = path.with_name(path.name + ".999.tmp")
+        old.write_text("{")
+        os.utime(old, (1, 1))
+        events.save_session("sess-tmp", {"prompts": 1})
+        self.assertFalse(old.exists())
+
+
+class TestChecklistFolder(KiasiTestCase):
+    def test_temp_folder_is_per_user_and_private(self):
+        import stat
+        from unittest import mock
+        with mock.patch.object(constants.getpass, "getuser", return_value="dana"):
+            self.assertEqual(constants._user_token(), "dana")
+        with mock.patch.object(constants.getpass, "getuser", side_effect=KeyError):
+            self.assertTrue(constants._user_token())
+        constants.TEMP_CHECKLIST_DIR = self.tmp / "kiasi-u" / "checkpoints"
+        events.make_checklist_folder(constants.TEMP_CHECKLIST_DIR / "x.md")
+        if hasattr(__import__("os"), "getuid"):
+            self.assertEqual(stat.S_IMODE(constants.TEMP_CHECKLIST_DIR.stat().st_mode), 0o700)
+            self.assertEqual(stat.S_IMODE(constants.TEMP_CHECKLIST_DIR.parent.stat().st_mode), 0o700)
+
+
 class TestSessionStart(KiasiTestCase):
     def test_injects_rules(self):
         payload = {"session_id": "sess-start", "cwd": str(self.tmp), "source": "startup"}
@@ -42,7 +83,8 @@ class TestSessionStart(KiasiTestCase):
         self.assertIsNotNone(result)
         text = result["hookSpecificOutput"]["additionalContext"]
         self.assertIn("Context rules", text)
-        self.assertIn("Compact instructions", text)
+        self.assertIn("Load /kiasi:rules for the full rules.", text)
+        self.assertLessEqual(text.count("\n"), 12 + 3)
 
 
 class TestPluginCompactSession(KiasiTestCase):
@@ -94,6 +136,23 @@ class TestStateBlock(KiasiTestCase):
         checklist.write_text("- [ ] ship the exporter")
         payload = {"session_id": "abcdef12-0000", "cwd": str(self.tmp), "transcript_path": str(path), "source": "compact"}
         self.assertIn(str(checklist), session.handle_session_start(payload)["hookSpecificOutput"]["additionalContext"])
+
+    def test_the_latest_task_file_is_restored_on_start_and_a_note_is_the_fallback(self):
+        from core import taskfile
+        payload = {"session_id": "sess-new", "cwd": str(self.tmp), "source": "startup"}
+        session.write_note("sess-old", str(self.tmp), "refactor the cart", ["/r/cart.py"], "stopped here", {}, force=True)
+        path = taskfile.latest(str(self.tmp))
+        self.assertIn("refactor the cart", path.read_text(), "the note writer feeds the task file")
+        text = session.handle_session_start(payload)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn(str(path), text)
+        self.assertIn("Re-verify before marking anything done.", text)
+        self.assertNotIn("Last session note", text)
+        path.unlink()
+        text = session.handle_session_start(payload)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("Last session note for this project", text)
+        taskfile.write(str(self.tmp), "sess-old", goal="again")
+        for source in ("clear", "resume"):
+            self.assertIn("Re-verify", session.handle_session_start({**payload, "source": source})["hookSpecificOutput"]["additionalContext"])
 
     def test_injected_only_after_compaction(self):
         path = self.transcript()

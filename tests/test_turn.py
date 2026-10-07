@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 from helpers import SCRIPTS, KiasiTestCase
-from core import constants  # noqa: E402
+from core import constants, taskfile  # noqa: E402
 from core import events  # noqa: E402
 from core import prompt  # noqa: E402
 from core import reads  # noqa: E402
@@ -143,11 +143,11 @@ class TestTurnGuard(KiasiTestCase):
         reminder = session.handle_stop(stop)
         self.assertNotIn("decision", reminder, "a Stop block shows the developer a hook error")
         self.assertEqual(reminder["hookSpecificOutput"]["hookEventName"], "Stop")
-        self.assertIn(f"Paused by Kiasi at {constants.TURN_STOP_STEPS} steps; the rest is in {checkpoint('s-remind')}",
+        self.assertIn(f"Paused by Kiasi at {constants.TURN_STOP_STEPS} steps; the rest is in the task file {checkpoint('s-remind')}",
                       reminder["hookSpecificOutput"]["additionalContext"])
         self.assertIsNone(session.handle_stop(stop), "the reminder is sent once")
         told = paused("s-told")
-        self.assertIsNone(session.handle_stop({**told, "last_assistant_message": f"Paused by Kiasi; the rest is in {checkpoint('s-told')}."}))
+        self.assertIsNone(session.handle_stop({**told, "last_assistant_message": f"Paused by Kiasi; the rest is in the task file {checkpoint('s-told')}."}))
         self.assertIsNone(session.handle_stop({**paused("s-active"), "stop_hook_active": True}), "another Stop hook already made Claude reply")
         ended = paused("s-ended")
         for response in range(constants.TURN_DENY_BACKSTOP):
@@ -229,9 +229,9 @@ class TestTurnGuard(KiasiTestCase):
         self._pause("s-task", cwd, transcript)
         resumed = self._prompt("s-task", "continue", cwd)
         context = resumed["hookSpecificOutput"]["additionalContext"]
-        for part in ("no checklist was written", "Build the CSV parser for the import screen", "/app/parser.py", "n of m verified"):
+        for part in ("has no checklist yet", "Build the CSV parser for the import screen", "/app/parser.py", "n of m verified"):
             self.assertIn(part, context)
-        self.assertIn("no checklist was written", resumed["systemMessage"])
+        self.assertIn("has no checklist yet", resumed["systemMessage"])
 
     def test_the_checklist_goes_in_the_project_in_a_folder_git_ignores(self):
         # Claude Code refuses Claude's writes under ~/.claude, Kiasi's data folder included, as edits to a sensitive file.
@@ -373,11 +373,11 @@ class TestTurnGuard(KiasiTestCase):
             context = result.get("hookSpecificOutput", {}).get("additionalContext", "")
             if context and not warning:
                 warning = context
-                (constants.TEMP_CHECKLIST_DIR / "checklis-0.md").write_text("- [ ] left\n")
+                (taskfile.path_for(None, "sess-checklist")).write_text("- [ ] left\n")
             elif context:
                 stop = context
-        self.assertIn(str(constants.TEMP_CHECKLIST_DIR / "checklis-0.md"), warning)
-        self.assertIn(str(constants.TEMP_CHECKLIST_DIR / "checklis-0.md"), stop)
+        self.assertIn(str(taskfile.path_for(None, "sess-checklist")), warning)
+        self.assertIn(str(taskfile.path_for(None, "sess-checklist")), stop)
         self.assertIn("up to date", stop)
 
     def settings(self, **values):
@@ -434,7 +434,8 @@ class TestTurnGuard(KiasiTestCase):
 
     def test_the_session_rules_follow_the_budget_settings(self):
         self.settings(TURN_BUDGET_MODE="pause", TURN_STOP_STEPS=60, TURN_STOP_TOKENS=8_000_000, TURN_WARN_STEPS=None, SUBAGENT_STEP_LIMIT=40)
-        self.assertEqual(session.rules_text(), constants.RULES_FILE.read_text().strip(), "the defaults render rules.md as written")
+        budget = [line for line in constants.RULES_FILE.read_text().strip().splitlines() if line.startswith(("- Every turn has a budget", "- Each subagent has its own budget"))]
+        self.assertEqual(session.rules_text().splitlines()[1:3], budget, "the defaults render the budget lines of rules.md as written")
         self.settings(TURN_STOP_STEPS=80, TURN_STOP_TOKENS=2_500_000, SUBAGENT_STEP_LIMIT=25)
         text = session.rules_text()
         self.assertIn("budget of 80 steps (the tool calls of one response are one step, so parallel calls count once) or 2.5M re-read tokens. At the warning, about 10 steps before the pause", text)
@@ -447,6 +448,38 @@ class TestTurnGuard(KiasiTestCase):
         lines = session.rules_text().splitlines()
         self.assertEqual([line for line in lines if "Every turn has a budget" in line], [])
         self.assertIn("- Scope review subagents to the diff, never the whole repo.", lines)
+
+    def test_the_session_start_block_is_short_and_points_at_the_full_rules(self):
+        lines = session.rules_text().splitlines()
+        self.assertLessEqual(len(lines), 12)
+        self.assertIn("Load /kiasi:rules for the full rules.", lines)
+        self.assertTrue((constants.PLUGIN_ROOT / "skills" / "rules" / "SKILL.md").exists())
+
+    def test_a_tool_call_records_the_context_numbers(self):
+        path = self.tmp / "t.jsonl"
+        rows = [{"type": "assistant", "message": {"usage": {"input_tokens": 3, "cache_creation_input_tokens": 40000, "cache_read_input_tokens": 5000}}},
+                {"type": "assistant", "message": {"usage": {"input_tokens": 5, "cache_creation_input_tokens": 100, "cache_read_input_tokens": 90000}}}]
+        path.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+        state = {}
+        turn.note_context({"session_id": "s-ctx", "transcript_path": str(path)}, state, 90105)
+        self.assertEqual((state["context_floor"], state["context_tokens"]), (45003, 90105))
+        self.assertRegex(state["last_call_at"], r"^\d{4}-\d\d-\d\dT")
+        turn.note_context({"session_id": "s-ctx", "transcript_path": str(path)}, state, 100000)
+        self.assertEqual(state["context_floor"], 45003, "the floor is measured once")
+
+    def test_the_guard_stores_the_context_keys_on_each_call(self):
+        turn.turn_guard({"session_id": "s-keys", "tool_name": "Bash", "transcript_path": ""}, 70000)
+        state = events.load_session("s-keys")
+        self.assertEqual((state["context_tokens"], state["context_floor"]), (70000, constants.CONTEXT_FLOOR_DEFAULT))
+        self.assertIn("last_call_at", state)
+
+    def test_a_pause_writes_the_task_file_and_a_resume_names_it(self):
+        state = {}
+        turn_state = {"checkpoint": str(self.tmp / "cp.md"), "stopped": 3, "reread": 1}
+        turn.record_pause({"session_id": "s-tf", "cwd": str(self.tmp), "transcript_path": ""}, turn_state, state)
+        self.assertTrue(turn_state["taskfile"].endswith(".md"))
+        self.assertIn(str(self.tmp / "cp.md"), open(turn_state["taskfile"]).read())
+        self.assertEqual(state["paused"]["taskfile"], turn_state["taskfile"])
 
     def test_a_subagent_brief_states_its_budget_unless_the_budget_is_off(self):
         brief = {"session_id": "s-brief", "tool_input": {"prompt": "Fix the failing test in a.py", "subagent_type": "general-purpose"}}
@@ -681,13 +714,13 @@ class TestPauseQuestion(KiasiTestCase):
         self.assertEqual(resumes, [{"mode": "resume", "asked": True, "checklist": True, "steps": 3}])
         again = self.pause()
         self.assertIn("kiasi paused this turn", again["hookSpecificOutput"]["additionalContext"], "the fresh budget pauses in its turn")
-        self.assertNotEqual(self.current()["checkpoint"], str(checkpoint), "and its checklist is a new file")
+        self.assertEqual(self.current()["checkpoint"], str(checkpoint), "and its task file is the same one")
 
     def test_a_subagent_or_a_stop_leaves_the_turn_paused(self):
         self.pause()
         checkpoint = self.current()["checkpoint"]
         for reply, parts in (("Hand to a subagent", ("one Agent call with subagent_type general-purpose", checkpoint)),
-                             ("Stop here", ("Make no more tool calls", f"Paused by Kiasi at 3 steps; the rest is in {checkpoint}"))):
+                             ("Stop here", ("Make no more tool calls", f"Paused by Kiasi at 3 steps; the rest is in the task file {checkpoint}"))):
             answered = self.answer(reply)
             for part in parts:
                 self.assertIn(part, answered["hookSpecificOutput"]["additionalContext"])
@@ -899,9 +932,9 @@ class TestPauseChecklistAndSubagentTurns(KiasiTestCase):
         self.assertIsNone(turn.paused_call({**pre, "tool_name": "Edit", "tool_input": {"file_path": checkpoint, "old_string": "a", "new_string": "b"}}))
         other = turn.paused_call({**pre, "tool_name": "Edit", "tool_input": {"file_path": str(self.tmp / "other.md"), "old_string": "a", "new_string": "b"}})
         self.assertEqual(other["hookSpecificOutput"]["permissionDecision"], "deny")
-        self.assertIn(f"Bring the checklist at {checkpoint} up to date (Read it, then Edit it", other["hookSpecificOutput"]["permissionDecisionReason"])
+        self.assertIn(f"Bring the task file at {checkpoint} up to date (Read it, then Edit it", other["hookSpecificOutput"]["permissionDecisionReason"])
         self.assertEqual(events.load_session("s-check")["turns"]["s-check"].get("denied", 0), 1, "checklist calls are not refusals")
-        self.assertIn("the checklist's own Write, Read and Edit is refused", session.rules_text())
+        self.assertIn("the task file's own Write, Read and Edit is refused", session.rules_text())
 
     def test_subagent_turns_of_older_prompts_are_dropped(self):
         main = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": "s-old", "transcript_path": str(self.tmp / "s-old.jsonl")}
@@ -911,3 +944,16 @@ class TestPauseChecklistAndSubagentTurns(KiasiTestCase):
         self.assertIn("a1fd597a875bd1f14", events.load_session("s-old")["turns"], "a subagent of the previous prompt may still be running")
         prompt.handle_prompt({"prompt": "another task", "session_id": "s-old", "transcript_path": main["transcript_path"]})
         self.assertNotIn("a1fd597a875bd1f14", events.load_session("s-old")["turns"], "a subagent two prompts back is done")
+
+    def test_the_task_file_and_the_old_checkpoint_path_both_pass_at_a_pause(self):
+        old = str(self.tmp / "old-checkpoint.md")
+        state = {"checkpoint": old, "stopped": 3}
+        call = {"tool_name": "Edit", "session_id": "s-both", "tool_input": {"file_path": str(taskfile.path_for(None, "s-both"))}}
+        self.assertTrue(turn.checklist_call(call, state), "the task file is named at the warning")
+        self.assertTrue(turn.checklist_call({**call, "tool_input": {"file_path": old}}, state), "the old path is accepted for one release")
+        self.assertFalse(turn.checklist_call({**call, "tool_input": {"file_path": str(self.tmp / "other.md")}}, state))
+        post = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": "s-both", "transcript_path": str(self.tmp / "s-both.jsonl")}
+        warned = [r["hookSpecificOutput"]["additionalContext"] for r in (turn.turn_guard(post, 1000) for _ in range(constants.TURN_STOP_STEPS)) if r]
+        self.assertIn(str(taskfile.path_for(None, "s-both")), warned[0])
+        self.assertIn("task file", warned[0])
+        self.assertNotIn("as a checklist", warned[0])

@@ -1,3 +1,4 @@
+import getpass
 import os
 import tempfile
 from pathlib import Path
@@ -54,7 +55,16 @@ OUTPUT_DIR = LOG_DIR / "outputs"
 NOTES_DIR = LOG_DIR / "notes"
 CHECKPOINT_DIR = LOG_DIR / "checkpoints"
 # Where a checklist goes when there is no writable project folder: Claude Code accepts a Write under the system temp folder.
-TEMP_CHECKLIST_DIR = Path(tempfile.gettempdir()) / "kiasi" / "checkpoints"
+def _user_token():
+    try:
+        name = getpass.getuser()
+    except Exception:
+        name = str(os.getuid()) if hasattr(os, "getuid") else "user"
+    return "".join(c if c.isalnum() or c in "-_" else "_" for c in name) or "user"
+
+
+# Per user: the system temp folder is shared, so the folder is named for its owner and made private (0o700).
+TEMP_CHECKLIST_DIR = Path(tempfile.gettempdir()) / f"kiasi-{_user_token()}" / "checkpoints"
 # Turn checklists go in the project, in a folder git ignores: Claude Code refuses Claude's writes anywhere under
 # ~/.claude, this data folder included, as edits to a sensitive file. TEMP_CHECKLIST_DIR is for a session without one.
 PROJECT_CHECKLIST_DIR = Path(".kiasi") / "checkpoints"
@@ -231,6 +241,10 @@ PLUGIN_QUIET_FIELDS = ("session_id", "before", "after", "applied")
 PLUGIN_COMPACT_FIELDS = ("session_id", "trigger", "agent_id", "mode", "level", "messages", "tokens_before", "tokens_after", "archived")
 COMPACT_EDITED_FILES = 20
 NOTE_MAX_AGE_DAYS = 14
+# save_session retries the rename this often, this long apart: on Windows a reader holding the state file blocks it.
+SAVE_REPLACE_TRIES = 5
+SAVE_REPLACE_DELAY = 0.02
+SAVE_TMP_STALE_SECONDS = 60  # a temp file this old is a crashed write's, not a running hook's
 # Call ids a turn keeps, to tell a PostToolBatch of a cleared turn from one of the current turn.
 TURN_CALLS_KEPT = 200
 NOTE_MIN_INTERVAL_MINUTES = 10
@@ -364,6 +378,7 @@ CLEANUP_PATTERNS = {
     "pastes": r"[0-9a-f-]{36}-\d+\.txt",
     "sessions": r"[0-9a-f-]{36}\.(json|lock)",
     "notes": r"[A-Za-z0-9-]+\.jsonl",
+    "paused": r"[A-Za-z0-9-]+\.paused(\.[A-Za-z0-9_-]+)?\.json",
 }
 
 SYNC_REQUEST = LOG_DIR / "sync.request"
@@ -378,16 +393,16 @@ TURN_RULE_PREFIX = "- Every turn has a budget of"
 SUBAGENT_RULE_PREFIX = "- Each subagent has its own budget of"
 TURN_RULES = {
     "pause": ("- Every turn has a budget of {steps} steps (the tool calls of one response are one step, so parallel calls count once) or {tokens} re-read tokens. At the warning, about {margin} steps before the pause, "
-              "finish the item in progress, write the remaining work as a checklist to the path kiasi names, then ask the developer the question kiasi gives "
-              "(continue here, hand to a subagent, or stop) and do what they choose; never choose for them. At the pause every call except Agent, that question and the checklist's own Write, Read and Edit is refused: bring the checklist up to date and ask it. "
-              "When kiasi gives no question, end the turn or hand the checklist to one general-purpose subagent; at a pause, end with its notice, so the developer knows how to resume."),
+              "finish the item in progress, update the task file at the path kiasi names (goal, decisions, verified checklist, files, next step), then ask the developer the question kiasi gives "
+              "(continue here, hand to a subagent, or stop) and do what they choose; never choose for them. At the pause every call except Agent, that question and the task file's own Write, Read and Edit is refused: bring the task file up to date and ask it. "
+              "When kiasi gives no question, end the turn or hand the task file to one general-purpose subagent; at a pause, end with its notice, so the developer knows how to resume."),
     "warn": ("- Every turn has a budget of {steps} steps (the tool calls of one response are one step, so parallel calls count once) or {tokens} re-read tokens, which kiasi reports but does not enforce. At the warning, "
-             "about {margin} steps before the budget, finish the item in progress, write the remaining work as a checklist to the path kiasi names, "
-             "and end the turn or hand the checklist to one general-purpose subagent."),
+             "about {margin} steps before the budget, finish the item in progress, update the task file at the path kiasi names (goal, decisions, verified checklist, files, next step), "
+             "and end the turn or hand the task file to one general-purpose subagent."),
 }
 SUBAGENT_RULES = {
     "pause": ("- Each subagent has its own budget of {subagent_steps} steps, stated in its brief and enforced like the turn budget: at the pause "
-              "it writes its checklist and replies. Scope review subagents to the diff, never the whole repo."),
+              "it updates its task file and replies. Scope review subagents to the diff, never the whole repo."),
     "warn": ("- Each subagent has its own budget of {subagent_steps} steps, stated in its brief and reported like the turn budget. "
              "Scope review subagents to the diff, never the whole repo."),
     "off": "- Scope review subagents to the diff, never the whole repo.",
@@ -549,3 +564,30 @@ STATUSLINE_CHAIN_NAME = "statusline-chain.json"
 STATUSLINE_SCRIPT_NAME = "statusline.py"
 CLAUDE_SETTINGS_FILE = Path.home() / ".claude" / "settings.json"
 SETTINGS_BACKUP_SUFFIX = ".kiasi-bak"
+
+# Task file and context notices
+TASK_SWITCH_OVERLAP = 0.15
+TASK_SWITCH_MIN_CHARS = 40
+TASK_SWITCH_MIN_WORD = 4
+TASK_SWITCH_STOPWORDS = frozenset("""this that with from have then there their about would should could which what when where into over also just
+more some than them these those your will been were does done make made need like want please again still very only other""".split())
+TASKFILE_PREFIX = "task-"
+TASKFILE_START_CHARS = 2000
+TASKFILE_GOAL_CHARS = 300
+TASKFILE_MAX_FILES = 40
+TASKFILE_CONTINUE_LINE = "Continue from here. Re-verify before marking anything done."
+CONTEXT_HANDOFF_TOKENS = 150_000
+CONTEXT_FLOOR_DEFAULT = 46_000
+CONTEXT_IDLE_HANDOFF_TOKENS = 100_000
+CACHE_TTL_MINUTES = 60
+CACHE_TTL_ENV = "CLAUDE_CODE_PROMPT_CACHE_TTL"
+CACHE_TTL_VALUES = {"1h": 60, "5m": 5}
+# The SessionStart block: the full text is rules.md, loaded on demand by /kiasi:rules.
+SESSION_RULE_LINES = (
+    "- One task per session. `/kiasi:handoff` saves the task to its task file under `.kiasi/checkpoints/`, `/clear` starts fresh, and the next session restores it.",
+    "- Commands, web pages and big files you only scan go through the `mcp__kiasi__run`, `fetch` and `distill` tools when available; a raw scan-only Bash or WebFetch call is refused once with the call to make.",
+    "- A line starting with `[kiasi kept` or `[kiasi trimmed` names a saved file with the full text; read it by path if the cut part matters.",
+    "- At /compact keep verbatim the current task, every file path edited, new names and failed commands with their errors; reduce other outputs to one line; end with the next steps.",
+    "Load /kiasi:rules for the full rules.",
+)
+TASKFILE_START_SOURCES = ("startup", "clear", "resume")

@@ -22,6 +22,7 @@ function renderSince(d) {
     ['Steps per day', count(stepsPerDay(b)), count(stepsPerDay(a)), change(stepsPerDay(b), stepsPerDay(a)), false],
     ['Context re-sent per step', fmtK(b.reread_per_turn), fmtK(a.reread_per_turn), change(b.reread_per_turn, a.reread_per_turn), true],
     ['Mean context per main-session step', fmtK(b.mean_context), fmtK(a.mean_context), change(b.mean_context, a.mean_context), true],
+    ...(b.median_context != null && a.median_context != null ? [['Median context per main-session step (p90 in note)', fmtK(b.median_context), fmtK(a.median_context), change(b.median_context, a.median_context), true]] : []),
     [`Main-session steps over ${high}`, pct(b.high_share), pct(a.high_share), change(b.high_share, a.high_share), true],
     ['Steps counted', count(b.turns), count(a.turns), '', false],
   ].slice(inPanels ? 3 : 0);
@@ -276,6 +277,33 @@ function renderBill(d) {
 }
 
 
-registerView('overview', d => { renderStats(d); renderBill(d); renderStartupHint(d); renderSince(d); renderDid(d); renderStorage(d); });
+const KIND_ADVICE = {
+  'MCP tool schemas': (chars, p) => `MCP servers load ${Math.round(chars / 4000)} k of tool schemas; disable the ones this project does not use in /mcp`,
+  'CLAUDE.md files': chars => `CLAUDE.md is ${Math.round(chars / 4000)} k; sections that only matter sometimes belong in skills`,
+  'plugins and skills': chars => `plugins and skills list ${Math.round(chars / 4000)} k; disable plugins this project does not use`,
+  'agents list': chars => `the agents list is ${Math.round(chars / 4000)} k; remove agents this project does not use`,
+};
+
+function renderFloor(d) {
+  const t = d.totals, w = d.window || {}, lines = [];
+  if (t.context_median != null) lines.push(`<p>Context per main-session step: mean ${fmtK(t.context_mean)} · median ${fmtK(t.context_median)} · p90 ${fmtK(t.context_p90)}.</p>`);
+  lines.push(`<p>Auto-compact window in effect: ${w.tokens ? fmtK(w.tokens) : `not set (the model's own window; 200 k assumed)`}.${t.runaway_sessions ? ` <b class="warn">${t.runaway_sessions} session${t.runaway_sessions > 1 ? 's' : ''} past 200 k in the last ${d.days} days.</b>` : ''}</p>`);
+  if (w.recommend) lines.push(`<p class="hist-note">Recommended: set <code>${esc(w.env)}=200000</code> under <code>env</code> in team settings to cap runaway contexts.</p>`);
+  const projects = Object.entries(d.prefix || {}).sort((a, b) => b[1].floor_tokens - a[1].floor_tokens);
+  const table = projects.length ? `<table class="since-table"><thead><tr><th>project</th><th class="num">floor</th><th>largest pieces</th><th>suggestion</th></tr></thead><tbody>${projects.map(([name, p]) => {
+    const sums = {};
+    p.pieces.filter(x => x.kind !== 'other').forEach(x => { sums[x.kind] = (sums[x.kind] || 0) + x.chars; });
+    const other = p.floor_tokens * CHARS_PER_TOKEN - Object.values(sums).reduce((t, c) => t + c, 0);
+    const top = Object.entries(sums).sort((a, b) => b[1] - a[1]);
+    const shown = top.map(([k, c]) => [k === 'MCP tool schemas' ? 'MCP tool schemas (measured from the tool listing, not the schemas)' : k, c]);
+    if (other > 0) shown.push(['other (floor minus measured pieces)', other]);
+    shown.sort((a, b) => b[1] - a[1]);
+    const tip = top.filter(([k]) => KIND_ADVICE[k] && sums[k] >= 8000).map(([k, c]) => KIND_ADVICE[k](c))[0] || '';
+    return `<tr><td>${esc(name.slice(0, 40))}</td><td class="num">${fmtK(p.floor_tokens)}<br><span class="hist-note">${p.sessions} session${p.sessions > 1 ? 's' : ''}</span></td><td>${shown.slice(0, 4).map(([k, c]) => `${esc(k)} ${Math.round(c / CHARS_PER_TOKEN / 1000 * 10) / 10} k`).join('<br>') || '–'}</td><td>${esc(tip)}</td></tr>`;
+  }).join('')}</tbody></table><p class="hist-note">Piece sizes are the visible attachments of a project's latest session, in tokens at 4 chars per token; other is the floor minus the measured pieces.</p>` : '';
+  $('#floor').innerHTML = lines.join('') + table;
+}
+
+registerView('overview', d => { renderStats(d); renderBill(d); renderStartupHint(d); renderSince(d); renderDid(d); renderFloor(d); renderStorage(d); });
 window.renderTuning = d => { renderMisses(d); renderRecall(d); };
 })();
