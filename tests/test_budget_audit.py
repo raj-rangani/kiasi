@@ -16,6 +16,27 @@ def local(t):
 
 
 class TestAuditReports(ReportTestCase):
+    def test_write_atomic_retries_a_replace_a_reader_blocks(self):
+        target = self.tmp / "out.json"
+        real = os.replace
+        calls = []
+
+        def flaky(src, dst):
+            calls.append(src)
+            if len(calls) <= 2:
+                raise PermissionError("held open")
+            return real(src, dst)
+        with mock.patch.object(self.budget.os, "replace", flaky), mock.patch.object(self.budget.time, "sleep"):
+            self.budget.write_atomic(target, "hi")
+        self.assertEqual((target.read_text(), len(calls)), ("hi", 3))
+
+    def test_write_atomic_raises_after_the_last_retry(self):
+        target = self.tmp / "out.json"
+        with mock.patch.object(self.budget.os, "replace", side_effect=PermissionError("held")) as replace, mock.patch.object(self.budget.time, "sleep"):
+            with self.assertRaises(PermissionError):
+                self.budget.write_atomic(target, "hi")
+        self.assertEqual(replace.call_count, self.budget.REPLACE_TRIES)
+
     def test_history_is_replaced_atomically_so_a_concurrent_build_never_reads_half_of_it(self):
         self.write(self.project / "s1.jsonl", [self.prompt(2), self.step("r1", 3, 1000)])
         self.budget.build(7)

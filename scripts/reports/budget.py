@@ -12,6 +12,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core import constants
 from core.events import unlock, wait_lock
 
+REPLACE_TRIES = 5
+REPLACE_WAIT = 0.02  # seconds between tries: on Windows a reader holding the file open makes the replace fail briefly
+
 SYNTHETIC_MODEL = "<synthetic>"
 SKIPPED = Counter()  # what a build could not read: files that vanished, JSON lines that are no event, unreadable timestamps
 _SKIPPED_KEYS = set()  # a build reads a file more than once; each unreadable thing counts once
@@ -52,7 +55,14 @@ def write_atomic(path, text):
     """Write beside the file, then replace it: a reader sees the old file or the new one, never half of it."""
     tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
     tmp.write_text(text)
-    os.replace(tmp, path)
+    for attempt in range(REPLACE_TRIES):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if attempt == REPLACE_TRIES - 1:
+                raise
+            time.sleep(REPLACE_WAIT)
 
 
 @contextmanager

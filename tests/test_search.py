@@ -29,6 +29,19 @@ class TestSearch(KiasiTestCase):
         checklist.write_text("- [ ] migrate the invoice exporter\n")
         self.assertEqual(self.paths("invoice", "exporter"), ["abcdef12-1.md"])
 
+    def test_a_bare_double_dash_is_a_searchable_word(self):
+        (constants.OUTPUT_DIR / "toolu_d.txt").write_text("usage: tool -- args\n" + "noise " * 200)
+        self.assertEqual(self.paths("--"), ["toolu_d.txt"])
+
+    def test_double_dash_after_the_separator_reaches_main_as_a_word(self):
+        (constants.OUTPUT_DIR / "toolu_d.txt").write_text("usage: tool -- args\n" + "noise " * 200)
+        import io
+        from contextlib import redirect_stdout
+        out = io.StringIO()
+        with mock.patch("sys.argv", ["search.py", "-n", "8", "--", "--"]), redirect_stdout(out):
+            self.search.main()
+        self.assertIn("toolu_d.txt", out.getvalue())
+
     def test_all_words_must_appear_and_endings_match(self):
         self.assertEqual(self.paths("login", "timeout"), ["toolu_a.txt"])
         self.assertEqual(sorted(self.paths("test")), ["toolu_a.txt", "toolu_b.txt"], "'test' also finds 'tests'")

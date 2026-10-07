@@ -26,6 +26,15 @@ class TestSandbox(KiasiTestCase):
             sys.argv = before
         return caught.exception.code or 0, out.getvalue()
 
+    def test_a_failed_run_is_logged_without_saved_tokens(self):
+        from reports import lens
+        code, _ = self.run_cli("run", "--command", "seq 1 500; exit 3")
+        self.assertEqual(code, 1)
+        events = [json.loads(l) for l in constants.EVENT_LOG.read_text().splitlines()]
+        self.assertTrue(events[-1]["failed"])
+        self.assertEqual(events[-1]["chars"], events[-1]["shown_chars"])
+        self.assertEqual(lens.tokens(events[-1]["chars"] - events[-1]["shown_chars"]), 0)
+
     def test_run_saves_full_output_and_returns_a_digest(self):
         command = "seq 1 100 && echo 'Error: broke here' && seq 101 200"
         code, shown = self.run_cli("run", "--command", command)

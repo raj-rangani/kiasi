@@ -85,6 +85,20 @@ def recall_texts(message):
     return [text for text in texts if any(mark in text.replace("\\\\", "/") for mark in constants.LENS_READBACK_MARKS)]
 
 
+def search_ids(message):
+    content = message.get("content")
+    blocks = content if isinstance(content, list) else []
+    return {b.get("id") for b in blocks if isinstance(b, dict) and b.get("type") == "tool_use" and str(b.get("name", "")).endswith("search")}
+
+
+def search_results(message, ids):
+    """Texts of the results of earlier search calls that name a saved file."""
+    content = message.get("content")
+    blocks = content if isinstance(content, list) else []
+    texts = (json.dumps(b.get("content") or "", ensure_ascii=False) for b in blocks if isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id") in ids)
+    return [text for text in texts if any(mark in text.replace("\\\\", "/") for mark in constants.LENS_READBACK_MARKS)]
+
+
 def miss_cause(gap, compacted, switched):
     if compacted:
         return "compaction"
@@ -212,14 +226,21 @@ def scan_sessions(days):
     bill = Counter()
     main_bill, prompts = Counter(), Counter()
     for path in main:
-        info = {"session": Path(path).stem, "project": project_of(path), "steps": [], "contexts": [], "prompts": [], "reread": 0, "recalls": [], "new": None}
-        asked = set()
+        info = {"session": Path(path).stem, "project": project_of(path), "steps": [], "contexts": [], "prompts": [], "reread": 0, "recalls": [], "new": None, "partial": False, "first_day": None}
+        asked, searches = set(), set()
         for entry, usage in usage_entries(path):
             t = epoch_iso(entry["timestamp"])
             message = entry.get("message") or {}
             if entry.get("type") == "assistant":
                 info["recalls"].extend((t, text) for text in recall_texts(message))
+                searches |= search_ids(message)
+            elif entry.get("type") == "user" and searches:
+                info["recalls"].extend((t, text) for text in search_results(message, searches))
             day = local_day(t)
+            if day < first_day:
+                info["partial"] = True
+            elif info["first_day"] is None:
+                info["first_day"] = day
             if usage:
                 if info["new"] is None:
                     info["new"] = day >= first_day  # a session that began before the window was resumed, not started
@@ -238,7 +259,10 @@ def scan_sessions(days):
     for path in subs:
         stem = Path(path).stem
         agent = stem[len("agent-"):] if stem.startswith("agent-") else stem
+        owner = sessions.get(Path(path).parent.parent.name)
         for entry, usage in usage_entries(path):
+            if owner is not None and entry.get("type") == "assistant":
+                owner["recalls"].extend((epoch_iso(entry["timestamp"]), text) for text in recall_texts(entry.get("message") or {}))
             if usage:
                 t = epoch_iso(entry["timestamp"])
                 if local_day(t) < first_day:
@@ -597,7 +621,7 @@ def session_records(sessions, actions):
         steps_per_prompt = [count for count, _ in prompt_steps(info) if count]
         mean_context = int(sum(info["contexts"]) / len(info["contexts"]))
         records.append({
-            "session": session, "short": session[:8], "project": info["project"], "day": local_day(info["steps"][0]), "start": local_stamp(info["steps"][0]),
+            "session": session, "short": session[:8], "project": info["project"], "day": local_day(info["steps"][0]), "partial": info["partial"], "first_day": info["first_day"], "start": local_stamp(info["steps"][0]),
             "prompts": len(info["prompts"]), "steps": len(info["steps"]), "mean_steps": round(sum(steps_per_prompt) / max(1, len(steps_per_prompt)), 1),
             "long_turns": sum(1 for c in steps_per_prompt if c >= constants.TURN_STOP_STEPS),
             "startup": info["contexts"][0],
