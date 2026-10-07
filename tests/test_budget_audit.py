@@ -7,7 +7,7 @@ import time
 import unittest
 from unittest import mock
 
-from test_reports import ReportTestCase
+from test_reports import NOW, ReportTestCase
 from core import constants  # noqa: E402
 
 
@@ -60,7 +60,7 @@ class TestAuditReports(ReportTestCase):
         self.assertEqual([p.name for p in self.tmp.glob("*.tmp")], [])
 
     def test_a_session_resumed_today_counts_only_the_steps_inside_the_window(self):
-        old = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 10 * 86400))
+        old = local(NOW - 10 * 86400)
         self.write(self.project / "s1.jsonl", [{**self.prompt(1), "timestamp": f"{old}T06:00:01Z"}, self.step("old", 2, 9999, day=old), self.prompt(3), self.step("r1", 4, 1000)])
         sessions, bill, _, prompts = self.lens.scan_sessions(7)
         info = sessions["s1"]
@@ -74,15 +74,15 @@ class TestAuditReports(ReportTestCase):
         self.addCleanup(lambda: (os.environ.pop("TZ", None), time.tzset()))
         os.environ["TZ"] = "America/Los_Angeles"
         time.tzset()
-        yesterday = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 86400))
+        yesterday = local(NOW - 86400)
         self.write(self.project / "s1.jsonl", [{**self.prompt(1), "timestamp": f"{yesterday}T03:00:01Z"}, {**self.step("r1", 2, 1000), "timestamp": f"{yesterday}T03:00:02Z"}])
         expected = local(calendar.timegm(time.strptime(f"{yesterday}T03:00:02", "%Y-%m-%dT%H:%M:%S")))
         self.assertEqual([r["day"] for r in self.budget.build(7)["per_day"]], [expected])
         self.assertEqual([r["day"] for r in self.lens.build(7)["per_day"]], [expected])
 
     def test_an_old_history_is_rekeyed_once_and_days_without_transcripts_keep_their_row(self):
-        gone = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 40 * 86400))
-        ghost = time.strftime("%Y-%m-%d", time.gmtime(time.time()))
+        gone = local(NOW - 40 * 86400)
+        ghost = local(NOW)
         row = lambda day, turns: {"day": day, "turns": turns, "sub_turns": 0, "mean_context": 1, "high_share": 0.0, "main": {}, "sub": {}}  # noqa: E731
         constants.HISTORY_FILE.write_text(json.dumps({"counting": 2, "per_day": [row(gone, 77), row(ghost, 500)]}))
         self.write(self.project / "s1.jsonl", [self.prompt(2), self.step("r1", 3, 1000)])
@@ -179,9 +179,9 @@ class TestBudgetCacheAndEffort(ReportTestCase):
     def test_breaks_of_five_to_sixty_minutes_are_counted_with_the_rewrite_and_the_cold_cache(self):
         self.write(self.project / "s1.jsonl", [
             self.prompt(0), self.msg("r1", 1, 1000),
-            {**self.msg("r2", 2, 0, create=5000), "timestamp": f"{self.day}T06:10:00Z"},
-            {**self.msg("r3", 3, 5000), "timestamp": f"{self.day}T06:10:30Z"},
-            {**self.msg("r4", 4, 5000), "timestamp": f"{self.day}T08:10:30Z"}])
+            {**self.msg("r2", 2, 0, create=5000), "timestamp": self.at("12:10:00")},
+            {**self.msg("r3", 3, 5000), "timestamp": self.at("12:10:30")},
+            {**self.msg("r4", 4, 5000), "timestamp": self.at("14:10:30")}])
         report = self.budget.build(7)
         [day] = report["per_day"]
         self.assertEqual((day["cache_gaps_5_60"], day["cache_gap_rewrite_tokens"], day["cache_cold_after_gap"]), (1, 5010, 1))
@@ -220,6 +220,44 @@ class TestBudgetCacheAndEffort(ReportTestCase):
         self.assertIsNone(compare([]))
         ready = compare([level("high", 60, 300), level("medium", 50, 100), level("max", 5, 900)])
         self.assertEqual((ready["high"]["name"], ready["low"]["name"], ready["ratio"], ready["extra_tokens"]), ("high", "medium", 3.0, 12000))
+        self.assertEqual((ready["step_ratio"], ready["steps_ratio"], ready["recommendation"]), (3.0, 1.0, None))  # 12000 extra tokens is under the bar
+
+    def effort_run(self, high_steps, high_prompts=50, low_prompts=50, high_output=3000, low_output=1000):
+        """Transcripts: low_prompts prompts at medium and high_prompts at max; each prompt has the given steps."""
+        entries, t = [], 0
+        for effort, prompts, steps, output in (("medium", low_prompts, 2, low_output), ("max", high_prompts, high_steps, high_output)):
+            for p in range(prompts):
+                entries.append(self.prompt(0))
+                for s in range(steps):
+                    step = self.msg(f"{effort}{p}-{s}", 1, 1000, effort=effort)
+                    step["message"]["usage"]["output_tokens"] = output
+                    entries.append(step)
+                    t += 1
+                t += 1
+        for e in entries:
+            e["timestamp"] = f"{self.day}T06:00:00Z"
+        self.write(self.project / "s1.jsonl", entries)
+        return self.budget.build(7)["effort"]["comparison"]
+
+    def test_a_higher_output_per_step_at_equal_steps_recommends_the_lower_effort(self):
+        c = self.effort_run(2)
+        self.assertEqual((c["ready"], c["step_ratio"], c["steps_ratio"], c["extra_step_tokens"]), (True, 3.0, 1.0, 200_000))
+        self.assertIsNone(c["recommendation"])  # under EFFORT_RECOMMEND_MIN_TOKENS
+        with mock.patch.object(self.budget, "EFFORT_RECOMMEND_MIN_TOKENS", 100_000):
+            c = self.budget.effort_comparison(self.budget.build(7)["effort"]["levels"])
+        self.assertIn("Set effort to medium for routine work; max spent 200,000 tokens more than medium", c["recommendation"])
+        self.assertIn("Keep max for tasks that need it.", c["recommendation"])
+
+    def test_a_high_level_with_triple_the_steps_gets_the_harder_work_note_and_no_recommendation(self):
+        with mock.patch.object(self.budget, "EFFORT_RECOMMEND_MIN_TOKENS", 1):
+            c = self.effort_run(6)
+        self.assertIsNone(c["recommendation"])
+        self.assertEqual(c["steps_ratio"], 3.0)
+        self.assertIn("the max prompts ran 3.0x the steps, so part of the gap is harder work", c["note"])
+
+    def test_a_level_under_the_prompt_minimum_is_still_collecting(self):
+        c = self.effort_run(2, high_prompts=10)
+        self.assertEqual((c["ready"], c["level"], c["prompts"]), (False, "max", 10))
 
 
 def percentile_of(report):

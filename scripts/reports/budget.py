@@ -17,6 +17,9 @@ REPLACE_WAIT = 0.02  # seconds between tries: on Windows a reader holding the fi
 
 SYNTHETIC_MODEL = "<synthetic>"
 EFFORT_MIN_PROMPTS = 50  # prompts a level needs before two levels are compared
+EFFORT_RECOMMEND_RATIO = 1.5  # output per step of the high level over the low level before a recommendation
+EFFORT_RECOMMEND_MIN_TOKENS = 500_000  # extra output over the period before a recommendation
+EFFORT_HARDER_STEPS_RATIO = 2.0  # steps per prompt over this ratio: the high level's prompts were harder, not just wordier
 CACHE_GAP_MIN_SECONDS = 300  # the default prompt cache TTL on API keys
 CACHE_GAP_MAX_SECONDS = 3600  # the long TTL: a longer break loses the cache either way
 CACHE_COLD_SHARE = 0.5  # a step whose input is over this share cache writes after a break found a cold cache
@@ -168,7 +171,7 @@ def install_day():
     return None
 
 
-HISTORY_COUNTING = 4  # 2: the messages a pruned compaction writes back are not steps; 3: days are local days, not UTC days; 4: rows carry median/p90 context, cache gaps, switches, output per prompt, effort
+HISTORY_COUNTING = 5  # 5: effort buckets count tool calls; 2: the messages a pruned compaction writes back are not steps; 3: days are local days, not UTC days; 4: rows carry median/p90 context, cache gaps, switches, output per prompt, effort
 HISTORY_RECOUNT_DAYS = 45
 
 
@@ -287,6 +290,9 @@ def scan(days):
                 thinking = sum(len(b.get("thinking") or "") for b in message.get("content") or [] if isinstance(b, dict) and b.get("type") == "thinking")
                 if thinking and (day := day_of(entry)) >= min_day:  # a block of its own line: counted before the usage dedupe
                     per_day[day]["thinking_chars"] += thinking
+                tools = sum(1 for b in message.get("content") or [] if isinstance(b, dict) and b.get("type") == "tool_use")
+                if tools and entry.get("effort") and (day := day_of(entry)) >= min_day:  # per effort level, before the usage dedupe
+                    per_day[day]["by_effort"][entry["effort"]]["tools"] += tools
                 message_id = message.get("id")
                 if not usage or request in seen or (message_id and message_id in seen_ids):
                     continue
@@ -446,15 +452,28 @@ def kiasi_actions(days):
 
 
 def effort_comparison(levels):
-    """The inputs of the Budget tab's effort line: the highest and lowest output per prompt among levels with
-    EFFORT_MIN_PROMPTS prompts or more, the ratio, and the output the high level's prompts spent above the low rate;
-    else the level closest to the bar (the second most prompts when there are two, else the only one)."""
-    enough = [r for r in levels if r["prompts"] >= EFFORT_MIN_PROMPTS and r["per_prompt"] > 0]
+    """The inputs of the Budget tab's effort line. Among levels with EFFORT_MIN_PROMPTS prompts or more it compares
+    the highest and lowest output per step (a harder prompt has more steps, so per step controls for difficulty), and
+    reports output per prompt and steps per prompt too. `recommendation` is set only when the per-step ratio reaches
+    EFFORT_RECOMMEND_RATIO, the extra output reaches EFFORT_RECOMMEND_MIN_TOKENS and the step counts per prompt are
+    within EFFORT_HARDER_STEPS_RATIO; else a `note` says the gap is partly harder work. Not ready: the level closest to the bar."""
+    enough = [r for r in levels if r["prompts"] >= EFFORT_MIN_PROMPTS and r["per_prompt"] > 0 and r["steps"] > 0 and r["output"] > 0]
     if len(enough) >= 2:
-        high, low = max(enough, key=lambda r: r["per_prompt"]), min(enough, key=lambda r: r["per_prompt"])
-        pick = lambda r: {k: r[k] for k in ("name", "per_prompt", "prompts")}  # noqa: E731
-        return {"ready": True, "min_prompts": EFFORT_MIN_PROMPTS, "high": pick(high), "low": pick(low), "ratio": round(high["per_prompt"] / low["per_prompt"], 1),
-                "extra_tokens": (high["per_prompt"] - low["per_prompt"]) * high["prompts"]}
+        step_rate = lambda r: r["output"] / r["steps"]  # noqa: E731
+        spp = lambda r: r["steps"] / r["prompts"]  # noqa: E731
+        high, low = max(enough, key=step_rate), min(enough, key=step_rate)
+        pick = lambda r: {"name": r["name"], "per_prompt": r["per_prompt"], "prompts": r["prompts"], "steps": r["steps"], "per_step": round(step_rate(r)), "steps_per_prompt": round(spp(r), 1)}  # noqa: E731
+        step_ratio, steps_ratio = step_rate(high) / step_rate(low), spp(high) / spp(low)
+        extra = round((step_rate(high) - step_rate(low)) * high["steps"])
+        out = {"ready": True, "min_prompts": EFFORT_MIN_PROMPTS, "high": pick(high), "low": pick(low), "ratio": round(high["per_prompt"] / low["per_prompt"], 1),
+               "step_ratio": round(step_ratio, 1), "steps_ratio": round(steps_ratio, 1), "extra_tokens": (high["per_prompt"] - low["per_prompt"]) * high["prompts"],
+               "extra_step_tokens": extra, "recommendation": None, "note": None}
+        if steps_ratio > EFFORT_HARDER_STEPS_RATIO:
+            out["note"] = f"the {high['name']} prompts ran {round(steps_ratio, 1)}x the steps, so part of the gap is harder work"
+        elif step_ratio >= EFFORT_RECOMMEND_RATIO and extra >= EFFORT_RECOMMEND_MIN_TOKENS:
+            out["recommendation"] = (f"Set effort to {low['name']} for routine work; {high['name']} spent {extra:,} tokens more than {low['name']} would have on the same steps this week. "
+                                     f"Keep {high['name']} for tasks that need it.")
+        return out
     ranked = sorted(levels, key=lambda r: -r["prompts"])[:2]
     if not ranked:
         return None
@@ -481,7 +500,8 @@ def build(days):
         for b in per_day.values():
             for name, c in b[group].items():
                 merged[name].update(c)
-        groups[group] = [{"name": n, "output": c["output"], "prompts": c["prompts"], "steps": c["steps"], "per_prompt": per_prompt(c["output"], c["prompts"])} for n, c in sorted(merged.items(), key=lambda x: -x[1]["output"])]
+        groups[group] = [{"name": n, "output": c["output"], "prompts": c["prompts"], "steps": c["steps"], "tools": c["tools"], "per_prompt": per_prompt(c["output"], c["prompts"]),
+                          "per_step": per_prompt(c["output"], c["steps"]), "steps_per_prompt": round(c["steps"] / max(1, c["prompts"]), 1), "tools_per_prompt": round(c["tools"] / max(1, c["prompts"]), 1)} for n, c in sorted(merged.items(), key=lambda x: -x[1]["output"])]
     report = {
         "generated": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "days": days,

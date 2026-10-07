@@ -10,6 +10,8 @@ from helpers import KiasiTestCase
 from core import constants  # noqa: E402
 from core import prompt  # noqa: E402
 
+NOW = int(os.environ.get("KIASI_TEST_NOW", time.time()))
+
 
 class PromptRows(unittest.TestCase):
     def test_prompt_rows(self):
@@ -142,9 +144,9 @@ class TestPostmortem(KiasiTestCase):
 
 
 class ReportTestCase(KiasiTestCase):
-    """Synthetic transcripts under a temp TRANSCRIPT_ROOT; timestamps sit at 06:00 UTC
-    yesterday so the UTC day (budget.py) and the local day (lens.py) agree in any zone
-    from UTC-6 to UTC+14."""
+    """Synthetic transcripts under a temp TRANSCRIPT_ROOT; timestamps sit at local noon
+    yesterday, so the local day both reports count by is the same in any zone.
+    KIASI_TEST_NOW pins the clock (seconds since the epoch)."""
 
     def setUp(self):
         super().setUp()
@@ -154,10 +156,20 @@ class ReportTestCase(KiasiTestCase):
         constants.TRANSCRIPT_ROOT = self.tmp / "projects"
         self.project = constants.TRANSCRIPT_ROOT / "-home-user-app"
         self.project.mkdir(parents=True)
-        self.day = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 86400))
+        if "KIASI_TEST_NOW" in os.environ:
+            patcher = mock.patch("time.time", return_value=NOW)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.day = time.strftime("%Y-%m-%d", time.localtime(NOW - 86400))
 
     def stamp(self, second, day=None):
-        return f"{day or self.day}T06:00:{second:02d}Z"
+        noon = time.mktime(time.strptime(f"{day or self.day} 12:00:{second:02d}", "%Y-%m-%d %H:%M:%S"))  # local noon: the same local day in every zone
+        return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(noon))
+
+    def at(self, clock, day=None):
+        """The UTC stamp of a local clock time (HH:MM:SS) on a local day, default yesterday."""
+        local_time = time.mktime(time.strptime(f"{day or self.day} {clock}", "%Y-%m-%d %H:%M:%S"))
+        return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(local_time))
 
     def step(self, request, second, read, create=90, day=None):
         return {"type": "assistant", "requestId": request, "timestamp": self.stamp(second, day),
@@ -199,7 +211,7 @@ class TestBudgetReport(ReportTestCase):
         self.assertEqual((day["main"]["cache_read_input_tokens"], day["sub"]["cache_read_input_tokens"]), (1000, 1200))
 
     def test_steps_older_than_the_window_are_dropped_by_day_not_file_age(self):
-        old = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 10 * 86400))
+        old = time.strftime("%Y-%m-%d", time.localtime(NOW - 10 * 86400))
         self.write(self.project / "s1.jsonl", [self.step("old", 1, 9999, day=old), self.prompt(2), self.step("r1", 3, 1000)])
         days = [row["day"] for row in self.budget.build(7)["per_day"]]
         self.assertEqual(days, [self.day])
@@ -230,7 +242,7 @@ class TestBudgetReport(ReportTestCase):
 
 class TestHistory(ReportTestCase):
     def days_ago(self, n):
-        return time.strftime("%Y-%m-%d", time.gmtime(time.time() - n * 86400))
+        return time.strftime("%Y-%m-%d", time.localtime(NOW - n * 86400))
 
     def row(self, day, turns, read):
         return {"day": day, "turns": turns, "sub_turns": 0, "mean_context": read, "high_share": 0.0,
@@ -346,6 +358,18 @@ class TestLensReport(ReportTestCase):
         report = self.lens.build(7)
         self.assertEqual((report["sessions"][0]["synthetic_skipped"], report["totals"]["synthetic_skipped"]), (2, 2))
 
+    def test_synthetic_entries_are_classified_by_kind(self):
+        def synth(uuid, text, **extra):
+            return {**self.step(uuid, 1, 0), "message": {"model": "<synthetic>", "content": [{"type": "text", "text": text}], "usage": {}}, **extra}
+        entries = [self.prompt(0), synth("a", "an earlier answer"), synth("b", "[Request interrupted by user]"), synth("c", "API Error: The response stopped arriving."),
+                   synth("d", "No response requested."), synth("e", "boom", isApiErrorMessage=True), self.step("r1", 2, 1000)]
+        self.write(self.project / "s1.jsonl", entries)
+        report = self.lens.build(7)
+        want = {"replayed": 1, "interrupted": 1, "api_error": 2, "no_response": 1}
+        self.assertEqual(report["sessions"][0]["synthetic_kinds"], want)
+        self.assertEqual(report["totals"]["synthetic_kinds"], want)
+        self.assertEqual(report["totals"]["synthetic_skipped"], 5)
+
     def test_the_since_table_carries_median_only_when_every_day_has_it(self):
         rows = [{"day": "d1", "turns": 10, "mean_context": 100, "context": {"median": 80, "p90": 200}, "main": {}},
                 {"day": "d2", "turns": 30, "mean_context": 100, "context": {"median": 40, "p90": 100}, "main": {}}]
@@ -396,7 +420,7 @@ class TestLensReport(ReportTestCase):
         self.assertEqual(self.cap_rows([self.prompt(0), self.step("r1", 1, 1000), self.tool_result(5)]), [{"kind": "bulk", "cuts": 1, "recalled": 0}])
 
     def test_a_session_with_entries_before_the_window_is_partial(self):
-        old = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 10 * 86400))
+        old = time.strftime("%Y-%m-%d", time.localtime(NOW - 10 * 86400))
         self.write(self.project / "s1.jsonl", [self.step("old", 1, 9999, day=old), self.prompt(2), self.step("r1", 3, 1000)])
         self.write(self.project / "s2.jsonl", [self.prompt(2), self.step("r2", 3, 1000)])
         sessions = self.lens.scan_sessions(7)[0]

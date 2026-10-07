@@ -20,6 +20,9 @@
 - Prefix audit labels MCP schema sizes as measured from the tool listing, not the schemas themselves.
 - Sessions tab notes how many zero-usage replayed entries were skipped.
 - Pinned the one time-dependent report test to a fixed clock.
+- Synthetic transcript entries are classified: replayed history, interrupted, API error, no-response. The Sessions tab names the kinds. Across every transcript on this machine 99.8% are replayed history written in one-millisecond bursts after a user entry with no request id, so the replay cause is confirmed.
+- The effort comparison controls for difficulty: output per step and steps per prompt sit beside output per prompt, and a recommendation appears only when the per-step ratio is 1.5x or more, the extra output is 500k or more, and the steps per prompt differ by less than 2x.
+- Report tests use local days everywhere and accept `KIASI_TEST_NOW`; the suite passes in UTC, Kolkata, Kiritimati and Los Angeles at both midnights. The process-tree test uses a short injectable deadline.
 - The shared temp checklist folder is now per user (`kiasi-<user>`) and private (mode 700), so other users on a shared machine cannot read or guess it.
 - Cleanup now removes saved pause records once they are older than 14 days, the same age after which a resume ignores them. A record a resume can still use is kept.
 - Sandbox outputs from a session with no id are covered by the cleanup patterns and are tested.

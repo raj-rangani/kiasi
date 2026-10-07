@@ -35,6 +35,20 @@ REMINDER_HINTS = (("MEMORY.md", "memory"), ("CLAUDE.md", "CLAUDE.md files"), ("s
 MARK_KINDS = {"compaction": "compaction", "pruned": "pruned", "reread_check": "check", "delegated": "check", "turn_stop": "stop"}
 
 
+def synthetic_kind(entry, message):
+    """What a <synthetic> assistant entry is. Replays are the bulk: Claude Code re-writes the loaded history in one burst on resume. The rest are placeholders for a turn that never produced an answer."""
+    content = message.get("content")
+    text = content if isinstance(content, str) else " ".join(b.get("text", "") for b in content or [] if isinstance(b, dict))
+    text = text.strip()
+    if entry.get("isApiErrorMessage") or text.startswith("API Error"):
+        return "api_error"
+    if text.startswith("[Request interrupted"):
+        return "interrupted"
+    if text.startswith("No response requested"):
+        return "no_response"
+    return "replayed"
+
+
 def epoch_local(ts):
     return time.mktime(time.strptime(ts, "%Y-%m-%dT%H:%M:%S"))
 
@@ -298,7 +312,7 @@ def scan_sessions(days):
     bill = Counter()
     main_bill, prompts = Counter(), Counter()
     for path in main:
-        info = {"session": Path(path).stem, "project": project_of(path), "steps": [], "contexts": [], "prompts": [], "reread": 0, "recalls": [], "new": None, "pieces": [], "partial": False, "first_day": None, "synthetic": 0}
+        info = {"session": Path(path).stem, "project": project_of(path), "steps": [], "contexts": [], "prompts": [], "reread": 0, "recalls": [], "new": None, "pieces": [], "partial": False, "first_day": None, "synthetic": 0, "synthetic_kinds": Counter()}
         asked, searches = set(), set()
         for entry, usage in usage_entries(path):
             t = epoch_iso(entry["timestamp"])
@@ -317,6 +331,7 @@ def scan_sessions(days):
                 info["first_day"] = day
             if day >= first_day and message.get("model") == SYNTHETIC_MODEL:
                 info["synthetic"] += 1
+                info["synthetic_kinds"][synthetic_kind(entry, message)] += 1
             if usage:
                 if info["new"] is None:
                     info["new"] = day >= first_day  # a session that began before the window was resumed, not started
@@ -701,7 +716,7 @@ def session_records(sessions, actions):
             "prompts": len(info["prompts"]), "steps": len(info["steps"]), "mean_steps": round(sum(steps_per_prompt) / max(1, len(steps_per_prompt)), 1),
             "long_turns": sum(1 for c in steps_per_prompt if c >= constants.TURN_STOP_STEPS),
             "startup": info["contexts"][0],
-            "mean_context": mean_context, "median_context": int(percentile(info["contexts"], 0.5)), "p90_context": int(percentile(info["contexts"], 0.9)), "synthetic_skipped": info["synthetic"],
+            "mean_context": mean_context, "median_context": int(percentile(info["contexts"], 0.5)), "p90_context": int(percentile(info["contexts"], 0.9)), "synthetic_skipped": info["synthetic"], "synthetic_kinds": dict(info["synthetic_kinds"]),
             "peak": max(info["contexts"]), "runaway": max(info["contexts"]) > RUNAWAY_TOKENS, "bill": info["reread"],
             "findings": postmortem(info, per_session.get(session, []), steps_per_prompt, mean_context),
             "compactions": max(sum(1 for a in per_session.get(session, []) if a["kind"] == "compaction"),
@@ -975,6 +990,7 @@ def build(days):
                    "context_median": int(percentile(all_contexts, 0.5)) if all_contexts else None, "context_p90": int(percentile(all_contexts, 0.9)) if all_contexts else None,
                    "runaway_sessions": sum(1 for s in sessions.values() if max(s["contexts"]) > RUNAWAY_TOKENS),
                    "synthetic_skipped": sum(s["synthetic"] for s in sessions.values()),
+                   "synthetic_kinds": dict(sum((s["synthetic_kinds"] for s in sessions.values()), Counter())),
                    "startup_mean": int(sum(all_startups) / len(all_startups)) if all_startups else None,
                    "turn_choices": dict(Counter(a["record"].get("choice") for a in actions if a["kind"] == "turn_choice")),
                    "reads_skipped": by_kind["read_skipped"]["count"], "reads_retried": by_kind["read_retry"]["count"]},

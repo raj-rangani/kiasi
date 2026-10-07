@@ -234,9 +234,22 @@ Ordered by value for the effort.
 | 4 Lower the floor | prefix audit sheet, 7-line SessionStart block, leaner pruner done; MCP schema sizes are from the deferred-tool listing, not the schemas |
 | 5 Context meter | done in the status line |
 | 6 Cache-aware notices | idle-return notice, TTL check and model/effort switch counts done |
-| 7 Effort | measured per effort level on the Budget tab; the comparison line appears once two levels have 50 prompts each; no recommendation beyond that until a week of data |
+| 7 Effort | measured per effort level on the Budget tab; the comparison line appears once two levels have 50 prompts each; controlled for difficulty by output per step and steps per prompt; a recommendation appears when max-versus-low output per step is 1.5x or more, the extra output is 500k tokens or more, and steps per prompt are within 2x |
 
 Open items are tracked in the pull request that landed this.
+
+## Synthetic messages (2026-10-07)
+
+The Sessions tab used to say synthetic entries were "zero-usage history replay". Checked against every transcript under `~/.claude/projects/` on this machine: 18,726 assistant entries have `model: "<synthetic>"`. All have no usage, no `requestId` (except 5 API errors), no repeated uuid, and none is a sidechain.
+
+| Kind | Count | Example uuid |
+|---|---|---|
+| Replayed history (real assistant text or tool_use, written in a one-millisecond burst of 5+ entries, always right after a user entry) | 18,685 | `147f65ad-2978-4579-bb78-7cf58c8cf46c` (file `c0bd6b07`, 2026-10-07T05:36:46.111Z) |
+| API Error ("The response stopped arriving...", `isApiErrorMessage`) | 11 | `3a49278d-a072-4afb-a093-960188866644` |
+| "No response requested." | 2 | `41c3209a-80ed-411a-97ad-29165fe23a48` |
+| Interrupted ("[Request interrupted...]") | 0 by exact text (2 earlier matches were replayed text that mentioned stopping) | none |
+
+Verdict: the replay cause is confirmed. About 2,500 replayed entries repeat the text of a real entry in the same file, 59 also appear in another file (a resume); the rest repeat turns whose original is not in a scanned file (rotated or deleted). The replayed entries are the loaded history re-written on resume, so counting them as requests inflates turns and deflates mean context. The 11 API errors are the only placeholders that mark a failed request; they carry no usage (4 follow an assistant entry that did), so their cost cannot be read from the transcript. The lens report now returns `synthetic_kinds` per session and in the totals, and the tab names the kinds.
 
 ## Decisions needed
 
