@@ -43,7 +43,9 @@ def term_pattern(term):
     """A word matches itself and its common endings; `word*` matches any ending; a quoted phrase matches its words in order."""
     if term.endswith("*") and len(term) > 1:
         return re.compile(r"\b" + re.escape(term[:-1]), re.I)
-    words = re.findall(r"\w+", term) or [term]
+    words = re.findall(r"\w+", term)
+    if not words:
+        return re.compile(re.escape(term))
     body = r"\W+".join(re.escape(word) for word in words)
     return re.compile(r"\b" + body + constants.SEARCH_WORD_ENDINGS + r"\b", re.I)
 
@@ -140,8 +142,10 @@ def main():
     parser = argparse.ArgumentParser(description="Search Kiasi's saved outputs, pastes, notes and checkpoints.")
     parser.add_argument("words", nargs="*")
     parser.add_argument("-n", "--limit", type=int, default=constants.SEARCH_RESULTS)
-    args, extra = parser.parse_known_args()
-    args.words += extra  # a word like -bash: is a word, not an unknown flag
+    argv = sys.argv[1:]
+    split = argv.index("--") if "--" in argv else len(argv)
+    args, extra = parser.parse_known_args(argv[:split])
+    args.words += extra + argv[split + 1:]  # everything after the first "--" is a word, a bare "--" included  # a word like -bash: is a word, not an unknown flag
     if not args.words:
         print(f"{sum(1 for _ in iter_files())} files searchable in {', '.join(str(d) for d in search_dirs())}")
         return

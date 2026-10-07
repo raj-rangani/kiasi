@@ -2,7 +2,7 @@ import { test, expect } from 'claude-code/testing';
 import type { SessionCompactInput } from 'claude-code';
 import { pruneTranscript, charsOf } from './prune.js';
 import { searchArgv } from './search.js';
-import { RESULT_HEAD_CHARS, ERROR_KEEP_CHARS, SEARCH_MAX_LIMIT } from './constants.js';
+import { KIASI_MARKER_PREFIXES, RESULT_HEAD_CHARS, ERROR_KEEP_CHARS, SEARCH_MAX_LIMIT } from './constants.js';
 
 const big = (seed: string, size: number) => seed.repeat(Math.ceil(size / seed.length)).slice(0, size);
 
@@ -264,4 +264,50 @@ test('strings inside a MultiEdit edits array are shrunk too', () => {
 test('a quoted phrase stays one search term', () => {
   const argv = searchArgv('/r', { query: 'login "timeout waiting" -bash:' })!;
   expect(argv.slice(argv.indexOf('--') + 1)).toEqual(['login', '"timeout waiting"', '-bash:']);
+});
+
+test('a text whose last line only starts "[kiasi " is cut, and every real marker form is left whole', () => {
+  const cutOf = (last: string) => {
+    const text = `${big('row ', 3000)}\n${last}`;
+    const messages = [
+      { role: 'user', text: 'task', toolUses: [] },
+      { role: 'assistant', text: 'ok', toolUses: [{ tool_use_id: 't1', tool: 'Bash', input: { command: 'a' }, text }, { tool_use_id: 't2', tool: 'Bash', input: { command: 'b' }, text: big('pad ', 30000) }] },
+      ...Array.from({ length: 10 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', text: `m${i}`, toolUses: [] })),
+    ];
+    return { text, out: pruneTranscript(messages).messages![1].toolUses[0].text };
+  };
+  const notes = cutOf('[kiasi 0.4.0] notes');
+  expect(notes.out).not.toBe(notes.text);
+  expect(notes.out).toContain('[kiasi pruned');
+  const forms = [
+    '[kiasi pruned 9000 chars at compaction]',
+    '[kiasi kept the first 1200 of 9000 chars of this output; full text saved at /d/x.txt]',
+    '[kiasi kept 4 failure lines of 90; full output saved at /d/x.txt]',
+    '[kiasi trimmed 5 of 90 lines here; full output saved at /d/x.txt]',
+    '[kiasi collapsed 3 repeats of the line above]',
+    '[kiasi removed colour codes and repeated lines; original output saved at /d/x.txt]',
+  ];
+  expect(forms.length).toBe(KIASI_MARKER_PREFIXES.length + 1);
+  for (const form of forms) {
+    const { text, out } = cutOf(form);
+    expect(out).toBe(text);
+  }
+});
+
+test('a cut text keeps every saved-at pointer line of its dropped tail, in order and without repeats', () => {
+  const one = '[kiasi trimmed 5 of 90 lines here; full output saved at /d/outputs/a.txt]';
+  const two = '[kiasi kept 4 failure lines of 90; full output saved at /d/outputs/b.txt]';
+  const text = `${big('row ', 3000)}\n${one}\n${big('mid ', 100)}\n${two}\n${one}\n${big('tail ', 1000)}`;
+  const messages = [
+    { role: 'user', text: 'task', toolUses: [] },
+    { role: 'assistant', text: 'ok', toolUses: [{ tool_use_id: 't1', tool: 'Bash', input: { command: 'a' }, text }] },
+    ...Array.from({ length: 10 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', text: `m${i}`, toolUses: [] })),
+  ];
+  const out = pruneTranscript(messages).messages![1].toolUses[0].text as string;
+  expect(out.endsWith(`\n${one}\n${two}`)).toBe(true);
+});
+
+test('a bare -- in the query is passed as a word after the separator', () => {
+  const argv = searchArgv('/r', { query: '--' })!;
+  expect(argv.slice(argv.indexOf('--') + 1)).toEqual(['--']);
 });

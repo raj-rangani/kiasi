@@ -1,7 +1,6 @@
 import {
   LEVELS, ERROR_KEEP_CHARS, USER_TEXT_KEEP_CHARS, USER_TEXT_HEAD_CHARS, INJECTED_HEAD_CHARS, INJECTED_PATTERN, HANDBACK_PATTERNS, HANDBACK_SCAN_CHARS,
-  INPUT_FIELD_KEEP_CHARS, CONTENT_FIELDS, CHARS_PER_TOKEN, MAX_KEEP_TOKENS, MAX_KEEP_RATIO, MARKER_PREFIX, SIZE_MARKER_PATTERN, ARCHIVE_MIN_CHARS,
-  PRUNE_KEEP_EXCHANGES, PRUNE_OLD_PROMPT_CHARS, PRUNE_OUTCOME_CHARS, PRUNE_REDUCE_MIN_CHARS, EXCHANGE_MARKER_PREFIX,
+  INPUT_FIELD_KEEP_CHARS, CONTENT_FIELDS, CHARS_PER_TOKEN, MAX_KEEP_TOKENS, MAX_KEEP_RATIO, MARKER_PREFIX, SIZE_MARKER_PATTERN, ARCHIVE_MIN_CHARS, PRUNE_KEEP_EXCHANGES, PRUNE_OLD_PROMPT_CHARS, PRUNE_OUTCOME_CHARS, PRUNE_REDUCE_MIN_CHARS, EXCHANGE_MARKER_PREFIX, KIASI_MARKER_PREFIXES, POINTER_LINES_KEPT,
 } from './constants.js';
 
 const marker = (dropped, ref) => (ref
@@ -17,25 +16,24 @@ function archived(archive, text, dropped) {
   return { index: archive.items.length, path: archive.path };
 }
 
-// Every last-line marker Kiasi writes starts "[kiasi " ("pruned", "kept the first", "trimmed", "removed colour codes").
-const ANY_MARKER_PREFIX = '[kiasi ';
-const POINTER_PATTERN = /^\[kiasi .*saved at /;
+const isMarker = (line) => KIASI_MARKER_PREFIXES.some((prefix) => line.startsWith(prefix));
 
 function alreadyCut(text) {
   const end = text.trimEnd();
-  return end.slice(end.lastIndexOf('\n') + 1).startsWith(ANY_MARKER_PREFIX);
+  return isMarker(end.slice(end.lastIndexOf('\n') + 1));
 }
 
-// A saved-at line in the dropped tail is the only path to the full output, so it survives the cut.
-function pointerIn(tail) {
-  return tail.split('\n').find((line) => POINTER_PATTERN.test(line.trim())) || null;
+// Saved-at lines in the dropped tail are the only path to the full output, so they survive the cut.
+function pointersIn(tail) {
+  const lines = tail.split('\n').map((line) => line.trim()).filter((line) => isMarker(line) && line.includes('saved at '));
+  return [...new Set(lines)].slice(0, POINTER_LINES_KEPT);
 }
 
 function head(text, keep, archive) {
   if (text.length <= keep || alreadyCut(text)) return text;
   const dropped = text.length - keep;
-  const pointer = pointerIn(text.slice(keep));
-  return `${text.slice(0, keep)}\n${marker(dropped, archived(archive, text, dropped))}${pointer ? `\n${pointer.trim()}` : ''}`;
+  const pointers = pointersIn(text.slice(keep));
+  return `${text.slice(0, keep)}\n${marker(dropped, archived(archive, text, dropped))}${pointers.map((line) => `\n${line}`).join('')}`;
 }
 
 function charsOfMessage(message) {

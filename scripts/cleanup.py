@@ -219,6 +219,13 @@ def schedule(current):
         newest = newest_note(path)
         if newest:
             rows.append(("notes", path, stat.st_size, newest, max(newest, stat.st_mtime) + max(constants.CLEANUP_NOTE_DAYS * DAY, recent)))
+    for path, stat in own_files("paused", constants.NOTES_DIR):
+        try:
+            at = parse_ts(json.loads(path.read_text())["at"])
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            continue  # unreadable records are left alone
+        if at:
+            rows.append(("paused", path, stat.st_size, at, at + constants.NOTE_MAX_AGE_DAYS * DAY))
     return rows
 
 
@@ -228,7 +235,7 @@ def candidates(now, current):
     for name, path, size, last, due in schedule(current):
         if due < now:
             age = int((now - last) / DAY)
-            found.append((name, path, size, f"newest note {age}d old" if name == "notes" else f"unused {age}d"))
+            found.append((name, path, size, f"newest note {age}d old" if name == "notes" else f"pause record {age}d old" if name == "paused" else f"unused {age}d"))
     return found
 
 

@@ -1,3 +1,4 @@
+import getpass
 import os
 import tempfile
 from pathlib import Path
@@ -54,7 +55,16 @@ OUTPUT_DIR = LOG_DIR / "outputs"
 NOTES_DIR = LOG_DIR / "notes"
 CHECKPOINT_DIR = LOG_DIR / "checkpoints"
 # Where a checklist goes when there is no writable project folder: Claude Code accepts a Write under the system temp folder.
-TEMP_CHECKLIST_DIR = Path(tempfile.gettempdir()) / "kiasi" / "checkpoints"
+def _user_token():
+    try:
+        name = getpass.getuser()
+    except Exception:
+        name = str(os.getuid()) if hasattr(os, "getuid") else "user"
+    return "".join(c if c.isalnum() or c in "-_" else "_" for c in name) or "user"
+
+
+# Per user: the system temp folder is shared, so the folder is named for its owner and made private (0o700).
+TEMP_CHECKLIST_DIR = Path(tempfile.gettempdir()) / f"kiasi-{_user_token()}" / "checkpoints"
 # Turn checklists go in the project, in a folder git ignores: Claude Code refuses Claude's writes anywhere under
 # ~/.claude, this data folder included, as edits to a sensitive file. TEMP_CHECKLIST_DIR is for a session without one.
 PROJECT_CHECKLIST_DIR = Path(".kiasi") / "checkpoints"
@@ -231,6 +241,10 @@ PLUGIN_QUIET_FIELDS = ("session_id", "before", "after", "applied")
 PLUGIN_COMPACT_FIELDS = ("session_id", "trigger", "agent_id", "mode", "level", "messages", "tokens_before", "tokens_after", "archived")
 COMPACT_EDITED_FILES = 20
 NOTE_MAX_AGE_DAYS = 14
+# save_session retries the rename this often, this long apart: on Windows a reader holding the state file blocks it.
+SAVE_REPLACE_TRIES = 5
+SAVE_REPLACE_DELAY = 0.02
+SAVE_TMP_STALE_SECONDS = 60  # a temp file this old is a crashed write's, not a running hook's
 # Call ids a turn keeps, to tell a PostToolBatch of a cleared turn from one of the current turn.
 TURN_CALLS_KEPT = 200
 NOTE_MIN_INTERVAL_MINUTES = 10
@@ -364,6 +378,7 @@ CLEANUP_PATTERNS = {
     "pastes": r"[0-9a-f-]{36}-\d+\.txt",
     "sessions": r"[0-9a-f-]{36}\.(json|lock)",
     "notes": r"[A-Za-z0-9-]+\.jsonl",
+    "paused": r"[A-Za-z0-9-]+\.paused(\.[A-Za-z0-9_-]+)?\.json",
 }
 
 SYNC_REQUEST = LOG_DIR / "sync.request"

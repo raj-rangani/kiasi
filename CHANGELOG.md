@@ -11,6 +11,18 @@
 - Budget tab: a "Cache and output" section counts 5 to 60 minute breaks that found the cache cold and the tokens they rewrote, with the 1-hour TTL suggestion; counts model and effort switches and their rewrite cost; and shows output and thinking per prompt by effort level, which transcripts do record.
 - Report numbers dedupe assistant entries by message id and skip `<synthetic>` ones in both the lens and budget reports.
 - README recommends `CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000` and `CLAUDE_CODE_PROMPT_CACHE_TTL=1h`.
+- The shared temp checklist folder is now per user (`kiasi-<user>`) and private (mode 700), so other users on a shared machine cannot read or guess it.
+- Cleanup now removes saved pause records once they are older than 14 days, the same age after which a resume ignores them. A record a resume can still use is kept.
+- Sandbox outputs from a session with no id are covered by the cleanup patterns and are tested.
+- A failed `run` is now logged as failed and no longer counts as saved tokens in the report.
+- Saving session state now retries briefly when Windows has the file open, and removes a leftover temp file from a crashed write.
+- A saved file that a subagent read, or that a Kiasi search returned, now counts as read back, so its cut is no longer credited as saved.
+- The Sessions tab marks a session resumed from an earlier day with "resumed, earlier part not shown", since only its part inside the window is counted.
+- A report write no longer fails on Windows when another program holds the file open for a moment; it is retried a few times first.
+
+- At compaction, a long tool result is no longer left uncut just because its last line starts with `[kiasi `; only the markers Kiasi itself writes count.
+- When a long tool result is cut, every saved-file pointer line in the dropped part is kept (up to five), not just the first.
+- Searching for a bare `--` now finds lines containing it.
 ## 0.4.2 - 2026-10-07
 
 - After a pause, parallel refused calls now count as one refused response even before Claude Code has sent a tool batch, so a pause in the first response no longer ends the turn early.

@@ -46,6 +46,16 @@ The first compacts at 200k instead of the full window and is the biggest single 
 
 Restart Claude Code and work as usual. Run `/kiasi:limits setup` once so the dashboard can show your plan limits. The dashboard starts itself with every session.
 
+## Updating
+
+Claude Code does not update plugins on its own. A new Kiasi version becomes visible when the version in the repo changes, and you pick it up with:
+
+```
+/plugin marketplace update kiasi
+```
+
+or `claude plugin update kiasi@kiasi` from a shell, then restart Claude Code. To update automatically at session start, open `/plugin`, pick the Kiasi marketplace under Marketplaces and choose Enable auto-update. If you use the status line, run `/kiasi:limits setup` again after an update that changed it; the release notes say when. Releases and their notes are at https://github.com/raj-rangani/kiasi/releases.
+
 ## How it works
 
 Each rule is a Claude Code hook with a fixed threshold you can change. Nothing is decided by a model.

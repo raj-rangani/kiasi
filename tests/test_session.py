@@ -35,6 +35,47 @@ class TestLegacyMigration(KiasiTestCase):
         self.assertTrue(old.is_dir() and not old.is_symlink())
 
 
+class TestSaveSession(KiasiTestCase):
+    def test_replace_is_retried_after_permission_errors(self):
+        import os
+        from unittest import mock
+        real, calls = os.replace, []
+
+        def flaky(src, dst):
+            calls.append(1)
+            if len(calls) <= 2:
+                raise PermissionError("held open")
+            return real(src, dst)
+        with mock.patch.object(events.os, "replace", flaky), mock.patch.object(events.time, "sleep"):
+            events.save_session("sess-retry", {"prompts": 7})
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(events.load_session("sess-retry")["prompts"], 7)
+
+    def test_a_crashed_writes_old_temp_file_is_removed(self):
+        import os
+        path = events.session_path("sess-tmp")
+        old = path.with_name(path.name + ".999.tmp")
+        old.write_text("{")
+        os.utime(old, (1, 1))
+        events.save_session("sess-tmp", {"prompts": 1})
+        self.assertFalse(old.exists())
+
+
+class TestChecklistFolder(KiasiTestCase):
+    def test_temp_folder_is_per_user_and_private(self):
+        import stat
+        from unittest import mock
+        with mock.patch.object(constants.getpass, "getuser", return_value="dana"):
+            self.assertEqual(constants._user_token(), "dana")
+        with mock.patch.object(constants.getpass, "getuser", side_effect=KeyError):
+            self.assertTrue(constants._user_token())
+        constants.TEMP_CHECKLIST_DIR = self.tmp / "kiasi-u" / "checkpoints"
+        events.make_checklist_folder(constants.TEMP_CHECKLIST_DIR / "x.md")
+        if hasattr(__import__("os"), "getuid"):
+            self.assertEqual(stat.S_IMODE(constants.TEMP_CHECKLIST_DIR.stat().st_mode), 0o700)
+            self.assertEqual(stat.S_IMODE(constants.TEMP_CHECKLIST_DIR.parent.stat().st_mode), 0o700)
+
+
 class TestSessionStart(KiasiTestCase):
     def test_injects_rules(self):
         payload = {"session_id": "sess-start", "cwd": str(self.tmp), "source": "startup"}

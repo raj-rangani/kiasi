@@ -12,6 +12,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core import constants
 from core.events import unlock, wait_lock
 
+REPLACE_TRIES = 5
+REPLACE_WAIT = 0.02  # seconds between tries: on Windows a reader holding the file open makes the replace fail briefly
+
 SYNTHETIC_MODEL = "<synthetic>"
 CACHE_GAP_MIN_SECONDS = 300  # the default prompt cache TTL on API keys
 CACHE_GAP_MAX_SECONDS = 3600  # the long TTL: a longer break loses the cache either way
@@ -56,7 +59,14 @@ def write_atomic(path, text):
     """Write beside the file, then replace it: a reader sees the old file or the new one, never half of it."""
     tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
     tmp.write_text(text)
-    os.replace(tmp, path)
+    for attempt in range(REPLACE_TRIES):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if attempt == REPLACE_TRIES - 1:
+                raise
+            time.sleep(REPLACE_WAIT)
 
 
 @contextmanager

@@ -35,6 +35,9 @@ def make_checklist_folder(path):
     folder = Path(path).parent
     try:
         folder.mkdir(parents=True, exist_ok=True)
+        if folder == constants.TEMP_CHECKLIST_DIR:
+            for private in (folder.parent, folder):
+                private.chmod(0o700)
         ignore = folder.parent / ".gitignore"
         if folder.parts[-2:] == constants.PROJECT_CHECKLIST_DIR.parts and not ignore.exists():
             ignore.write_text("*\n")
@@ -100,8 +103,18 @@ def save_session(session_id, state):
     # Written aside and renamed in: a hook that reads while this writes sees the old state or the new, never half of it.
     tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
     try:
+        for stale in path.parent.glob(f"{path.name}.*.tmp"):
+            if stale != tmp and not stale.is_symlink() and time.time() - stale.stat().st_mtime > constants.SAVE_TMP_STALE_SECONDS:
+                stale.unlink(missing_ok=True)  # left by a crashed write
         tmp.write_text(json.dumps(state, ensure_ascii=False))
-        os.replace(tmp, path)
+        for attempt in range(constants.SAVE_REPLACE_TRIES):
+            try:
+                os.replace(tmp, path)
+                break
+            except PermissionError:
+                if attempt == constants.SAVE_REPLACE_TRIES - 1:
+                    raise
+                time.sleep(constants.SAVE_REPLACE_DELAY)
     except OSError:
         tmp.unlink(missing_ok=True)
         raise

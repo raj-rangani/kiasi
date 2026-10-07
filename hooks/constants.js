@@ -114,6 +114,8 @@ export const QUIET_RULES = [
 
 
 export const MARKER_PREFIX = '[kiasi pruned';
+export const KIASI_MARKER_PREFIXES = [MARKER_PREFIX, '[kiasi kept ', '[kiasi trimmed ', '[kiasi collapsed ', '[kiasi removed colour codes'];
+export const POINTER_LINES_KEPT = 5;
 export const SIZE_MARKER_PATTERN = /^\[\d+ chars\]$/;
 export const ARCHIVE_MIN_CHARS = 2000;
 export const ARCHIVE_PATH_EVENT_NAME = 'PluginArchivePath';

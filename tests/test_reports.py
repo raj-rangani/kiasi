@@ -351,6 +351,43 @@ class TestLensReport(ReportTestCase):
         self.assertEqual(self.lens.steps_until_next_prompt(info["steps"], info["prompts"], info["prompts"][0]), 2)
         self.assertEqual(self.lens.steps_until_next_prompt(info["steps"], info["prompts"], info["prompts"][1]), 1)
 
+    def cap_rows(self, entries, sub=None):
+        self.write(self.project / "s1.jsonl", entries)
+        if sub:
+            self.write(self.project / "s1" / "subagents" / "agent-a.jsonl", sub)
+        sessions = self.lens.scan_sessions(7)[0]
+        saved = "/d/outputs/run-1.txt"
+        events = [(self.lens.epoch_iso(self.stamp(1)), {"event": "cap", "session_id": "s1", "kind": "bulk", "saved_path": saved})]
+        return self.lens.recall_rows(events, sessions)
+
+    def use(self, second, name, tool_id, **inp):
+        entry = self.step(f"u{second}", second, 100)
+        entry["message"]["content"] = [{"type": "tool_use", "id": tool_id, "name": name, "input": inp}]
+        return entry
+
+    def test_a_subagent_read_of_the_saved_path_is_a_read_back(self):
+        base = [self.prompt(0), self.step("r1", 1, 1000)]
+        read = [self.use(5, "Read", "a1", file_path="/d/outputs/run-1.txt")]
+        self.assertEqual(self.cap_rows(base, read), [{"kind": "bulk", "cuts": 1, "recalled": 1}])
+
+    def test_a_search_result_naming_the_saved_path_is_a_read_back(self):
+        result = {"type": "user", "timestamp": self.stamp(6), "message": {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "q1", "content": [{"type": "text", "text": "hit in /d/outputs/run-1.txt"}]}]}}
+        entries = [self.prompt(0), self.step("r1", 1, 1000), self.use(5, "mcp__kiasi__search", "q1", query="x"), result]
+        self.assertEqual(self.cap_rows(entries), [{"kind": "bulk", "cuts": 1, "recalled": 1}])
+
+    def test_a_cap_nobody_read_back_keeps_its_credit(self):
+        self.assertEqual(self.cap_rows([self.prompt(0), self.step("r1", 1, 1000), self.tool_result(5)]), [{"kind": "bulk", "cuts": 1, "recalled": 0}])
+
+    def test_a_session_with_entries_before_the_window_is_partial(self):
+        old = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 10 * 86400))
+        self.write(self.project / "s1.jsonl", [self.step("old", 1, 9999, day=old), self.prompt(2), self.step("r1", 3, 1000)])
+        self.write(self.project / "s2.jsonl", [self.prompt(2), self.step("r2", 3, 1000)])
+        sessions = self.lens.scan_sessions(7)[0]
+        self.assertTrue(sessions["s1"]["partial"])
+        self.assertEqual(sessions["s1"]["first_day"], self.lens.local_day(self.lens.epoch_iso(self.stamp(3))))
+        self.assertFalse(sessions["s2"]["partial"])
+
     def test_messages_replayed_by_a_pruned_compaction_are_not_counted_again(self):
         """The kept prompt comes back under its promptId and the kept answer as a zero-usage synthetic entry."""
         asked = dict(self.prompt(0), promptId="p1")

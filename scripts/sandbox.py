@@ -24,13 +24,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from core import constants
 
 
-def log_saving(tool, raw_chars, shown_chars, saved_path, label, session=""):
-    if raw_chars <= shown_chars:
+def log_saving(tool, raw_chars, shown_chars, saved_path, label, session="", failed=False):
+    if failed:
+        raw_chars = shown_chars + 0  # a failed run keeps nothing out: no saved-token credit
+    elif raw_chars <= shown_chars:
         return
     constants.LOG_DIR.mkdir(parents=True, exist_ok=True)
     record = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "event": "cap", "session_id": session, "tool_name": tool,
               "kind": "sandbox", "chars": raw_chars, "shown_chars": shown_chars, "saved_path": str(saved_path or ""),
               "label": label[:120]}
+    if failed:
+        record["failed"] = True
     with open(constants.EVENT_LOG, "a") as fh:
         fh.write(json.dumps(record, ensure_ascii=False) + "\n")
 
@@ -78,7 +82,7 @@ def run(args):
     saved = save("run", f"$ {args.command}\n\n{text}")
     shown = (f"exit {code} in {time.time() - start:.1f}s; {len(text.splitlines())} lines, {len(text)} chars; "
              f"full output saved at {saved}, search it with mcp__kiasi__search\n" + "\n".join(digest(text, saved)))
-    log_saving("mcp__kiasi__run", len(text), len(shown), saved, args.command, args.session)
+    log_saving("mcp__kiasi__run", len(text), len(shown), saved, args.command, args.session, failed=bool(code))
     print(shown)
     return 1 if code else 0  # non-zero exit lets the hook flag the result as an error; the digest stays
 
