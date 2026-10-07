@@ -1,9 +1,7 @@
 import {
-  LEVELS, ERROR_KEEP_CHARS, USER_TEXT_KEEP_CHARS, USER_TEXT_HEAD_CHARS, INJECTED_HEAD_CHARS, INJECTED_PATTERN,
+  LEVELS, ERROR_KEEP_CHARS, USER_TEXT_KEEP_CHARS, USER_TEXT_HEAD_CHARS, INJECTED_HEAD_CHARS, INJECTED_PATTERN, HANDBACK_PATTERNS, HANDBACK_SCAN_CHARS,
   INPUT_FIELD_KEEP_CHARS, CONTENT_FIELDS, CHARS_PER_TOKEN, MAX_KEEP_TOKENS, MAX_KEEP_RATIO, MARKER_PREFIX, SIZE_MARKER_PATTERN, ARCHIVE_MIN_CHARS,
 } from './constants.js';
-
-const TASK_NOTIFICATION_PATTERN = /^\s*<task-notification/;
 
 const marker = (dropped, ref) => (ref
   ? `${MARKER_PREFIX} ${dropped} chars at compaction; full text is #${ref.index} in ${ref.path}]`
@@ -65,10 +63,24 @@ function pruneResult(text, isError, level) {
   return head(text || '', isError ? ERROR_KEEP_CHARS : level.resultChars, level.archive);
 }
 
+const isHandback = (text) => {
+  const start = text.trim().slice(0, HANDBACK_SCAN_CHARS);
+  return HANDBACK_PATTERNS.some((pattern) => pattern.test(start));
+};
+
+// A subagent's hand-back report is the only copy of its findings: kept whole, or archived, never reduced to a stub.
+function pruneHandback(text, keep, archive) {
+  if (text.length <= keep || alreadyCut(text)) return text;
+  const dropped = text.length - keep;
+  if (archived(archive, text, dropped)) return head(text, USER_TEXT_HEAD_CHARS, archive);
+  return `${text.slice(0, keep)}\n[kiasi trimmed ${dropped} chars of a subagent report; it was not archived]`;
+}
+
 function pruneUserText(text, level) {
-  // A subagent's hand-back report is the only copy of its findings: it is cut like any long message and archived, never reduced to a stub.
-  if (INJECTED_PATTERN.test(text) && !TASK_NOTIFICATION_PATTERN.test(text)) return head(text, INJECTED_HEAD_CHARS, level.archive);
-  if (text.length > (level.userKeepChars ?? USER_TEXT_KEEP_CHARS)) return head(text, USER_TEXT_HEAD_CHARS, level.archive);
+  const keep = level.userKeepChars ?? USER_TEXT_KEEP_CHARS;
+  if (isHandback(text)) return pruneHandback(text, keep, level.archive);
+  if (INJECTED_PATTERN.test(text)) return head(text, INJECTED_HEAD_CHARS, level.archive);
+  if (text.length > keep) return head(text, USER_TEXT_HEAD_CHARS, level.archive);
   return text;
 }
 

@@ -112,29 +112,51 @@ def prune_history(path, now):
     os.replace(tmp, path)
 
 
+def lock_backend():
+    """The file lock this platform has: fcntl on POSIX, msvcrt on Windows, else none."""
+    for name in ("fcntl", "msvcrt"):
+        try:
+            return __import__(name)
+        except ImportError:
+            continue
+    return None
+
+
 @contextmanager
 def limits_lock(target_dir):
     """One status line at a time reads the last limits, appends what changed and replaces the file, or two sessions log
     the same reading twice. Waits at most a second, and runs unlocked where the file system cannot lock."""
-    handle = None
+    backend = lock_backend()
+    handle, locked = None, False
     try:
-        import fcntl
-        handle = open(target_dir / ".limits.lock", "a")
-        deadline = time.monotonic() + 1
-        while True:
-            try:
-                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except BlockingIOError:
-                if time.monotonic() >= deadline:
+        if backend:
+            handle = open(target_dir / ".limits.lock", "a")
+            deadline = time.monotonic() + 1
+            while True:
+                try:
+                    if hasattr(backend, "flock"):
+                        backend.flock(handle, backend.LOCK_EX | backend.LOCK_NB)
+                    else:
+                        handle.seek(0)
+                        backend.locking(handle.fileno(), backend.LK_NBLCK, 1)
+                    locked = True
                     break
-                time.sleep(0.01)
-    except (ImportError, OSError):
+                except OSError:
+                    if time.monotonic() >= deadline:
+                        break
+                    time.sleep(0.01)
+    except OSError:
         pass
     try:
         yield
     finally:
         if handle:
+            if locked and not hasattr(backend, "flock"):
+                try:
+                    handle.seek(0)
+                    backend.locking(handle.fileno(), backend.LK_UNLCK, 1)
+                except OSError:
+                    pass
             handle.close()
 
 

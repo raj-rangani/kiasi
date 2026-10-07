@@ -4,7 +4,7 @@ import re
 from core import constants
 from core.caps import response_text
 from core.events import load_session, log_event, save_session
-from core.transcript import caller_key, caller_transcript, tail_entries
+from core.transcript import caller_key, response_id, tail_entries
 
 
 def handle_agent(payload):
@@ -74,15 +74,6 @@ def read_nudge(payload, tool_input, session_id, state):
     log_event({"event": "read_nudge", "session_id": session_id, "path": path, "chars": stamp[1], "agent_id": payload.get("agent_id")})
     return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                    "permissionDecisionReason": constants.READ_NUDGE_REASON.format(path=path, chars=stamp[1])}}
-
-
-def response_id(payload):
-    """The id of the response a call belongs to: the parallel calls of one response share it. None when the transcript has none."""
-    for entry in reversed(tail_entries(caller_transcript(payload))):
-        if entry.get("type") == "assistant":
-            message = entry.get("message")
-            return message.get("id") if isinstance(message, dict) else None
-    return None
 
 
 def handle_read_check(payload):

@@ -17,6 +17,14 @@ export const USER_TEXT_LAST_KEEP_CHARS = 1500;
 export const INJECTED_HEAD_CHARS = 200;
 export const INJECTED_PATTERN = /^\s*<(task-notification|system-reminder|local-command-|command-name|pasted_content|agent-message)/;
 
+export const HANDBACK_SCAN_CHARS = 300;
+export const HANDBACK_PATTERNS = [
+  /^<task-notification/,
+  /^<agent-message/,
+  /^Another Claude session sent a message:\s*<agent-message/,
+  /^<system-reminder>[\s\S]*?<task-notification/,
+];
+
 export const INPUT_FIELD_KEEP_CHARS = 500;
 export const CONTENT_FIELDS = ['content', 'new_string', 'old_string', 'new_source'];
 

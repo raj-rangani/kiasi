@@ -190,6 +190,16 @@ function renderDetail(d) {
   finishPanelContent();
 }
 
+function renderProblems(d) {
+  const rows = d.problems || [];
+  $('#problems-sheet').hidden = !rows.length;
+  $('#problems').innerHTML = rows.length ? `<table class="since-table"><thead><tr><th>problem</th><th class="num">count</th><th>last seen</th><th>last message</th></tr></thead><tbody>${rows.map(row => {
+    const at = new Date(row.ts);
+    const seen = isNaN(at) ? row.ts : at.toLocaleString([], WHEN_OPTS);
+    return `<tr><td>${esc(row.kind)}<br><span class="hist-note">${esc(row.explanation)}</span></td><td class="num">${row.count}</td><td>${esc(seen)}${row.session ? ` · ${esc(row.session)}` : ''}</td><td>${esc(row.message || row.path || '–')}</td></tr>`;
+  }).join('')}</tbody></table>` : '';
+}
+
 function select(key, keep) {
   openRule = openRule === key && !keep ? '' : key;
   openRow = null;
@@ -206,5 +216,6 @@ registerView('rules', d => {
   renderDetail(d);
   renderSteps(d);
   renderTuning(d);
+  renderProblems(d);
 });
 })();

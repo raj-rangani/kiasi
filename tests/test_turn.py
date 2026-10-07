@@ -43,7 +43,10 @@ class TestTurnGuard(KiasiTestCase):
         turn.turn_guard(post, 1000)
         for tool in ("Write", "Agent", "TodoWrite"):
             self.assertIsNone(turn.paused_call({**pre, "tool_name": tool}), f"{tool} stays allowed for the checklist and the hand-off")
-        refused = [turn.handle_pre_tool_use(pre) for _ in range(constants.TURN_DENY_BACKSTOP)]
+        refused = []
+        for response in range(constants.TURN_DENY_BACKSTOP):
+            with mock.patch("core.turn.time.time", return_value=1000.0 + response * 10):
+                refused.append(turn.handle_pre_tool_use(pre))
         self.assertEqual({r["hookSpecificOutput"]["permissionDecision"] for r in refused}, {"deny"})
         reason = refused[0]["hookSpecificOutput"]["permissionDecisionReason"]
         self.assertIn("so this call was not run", reason)
@@ -55,6 +58,45 @@ class TestTurnGuard(KiasiTestCase):
         self.assertNotIn("systemMessage", refused[0], "a refusal before the backstop says nothing more to the developer")
         prompt.handle_prompt({"prompt": "continue", "session_id": "s-pause", "transcript_path": post["transcript_path"]})
         self.assertIsNone(turn.handle_pre_tool_use(pre), "the next prompt starts a fresh budget")
+
+    def pause(self, session, transcript_entries=None):
+        post = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": session, "transcript_path": str(self.tmp / f"{session}.jsonl")}
+        if transcript_entries is not None:
+            Path(post["transcript_path"]).write_text("".join(json.dumps(e) + "\n" for e in transcript_entries))
+        for _ in range(constants.TURN_STOP_STEPS):
+            turn.turn_guard(post, 1000)
+        return {**post, "hook_event_name": "PreToolUse", "tool_name": "Edit"}
+
+    def response(self, message_id, *call_ids):
+        return {"type": "assistant", "message": {"id": message_id, "content": [{"type": "tool_use", "id": c, "name": "Edit", "input": {}} for c in call_ids]}}
+
+    def test_parallel_refusals_of_one_response_count_once(self):
+        pre = self.pause("s-par", [self.response("msg_1", "t1", "t2", "t3")])
+        refused = [turn.paused_call({**pre, "tool_use_id": f"t{n}"}) for n in (1, 2, 3)]
+        self.assertFalse([r for r in refused if "continue" in r], "three calls of one response are one refusal")
+        self.assertEqual(events.load_session("s-par")["turns"]["s-par"]["denied"], 1)
+        Path(pre["transcript_path"]).write_text(json.dumps(self.response("msg_2", "t4")) + "\n")
+        turn.paused_call({**pre, "tool_use_id": "t4"})
+        self.assertEqual(events.load_session("s-par")["turns"]["s-par"]["denied"], 2, "a later response counts separately")
+
+    def test_refusals_without_a_transcript_count_by_time(self):
+        pre = self.pause("s-time")
+        with mock.patch("core.turn.time.time", return_value=1000.0):
+            refused = [turn.paused_call({**pre, "tool_use_id": f"t{n}"}) for n in (1, 2, 3)]
+        self.assertFalse([r for r in refused if "continue" in r])
+        self.assertEqual(events.load_session("s-time")["turns"]["s-time"]["denied"], 1)
+        with mock.patch("core.turn.time.time", return_value=1000.0 + constants.REFUSAL_RESPONSE_SECONDS + 1):
+            turn.paused_call({**pre, "tool_use_id": "t4"})
+        self.assertEqual(events.load_session("s-time")["turns"]["s-time"]["denied"], 2)
+
+    def test_a_fully_refused_batch_does_not_count_again(self):
+        pre = self.pause("s-batch", [self.response("msg_1", "t1", "t2")])
+        for n in (1, 2):
+            turn.paused_call({**pre, "tool_use_id": f"t{n}"})
+        batch = {"hook_event_name": "PostToolBatch", "session_id": "s-batch", "transcript_path": pre["transcript_path"],
+                 "tool_calls": [{"tool_use_id": "t1", "tool_name": "Edit"}, {"tool_use_id": "t2", "tool_name": "Edit"}]}
+        self.assertIsNone(turn.handle_tool_batch(batch))
+        self.assertEqual(events.load_session("s-batch")["turns"]["s-batch"]["denied"], 1)
 
     def test_a_paused_subagent_is_refused_but_never_ends_the_developers_turn(self):
         post = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": "s-subpause",
@@ -108,8 +150,9 @@ class TestTurnGuard(KiasiTestCase):
         self.assertIsNone(session.handle_stop({**told, "last_assistant_message": f"Paused by Kiasi; the rest is in {checkpoint('s-told')}."}))
         self.assertIsNone(session.handle_stop({**paused("s-active"), "stop_hook_active": True}), "another Stop hook already made Claude reply")
         ended = paused("s-ended")
-        for _ in range(constants.TURN_DENY_BACKSTOP):
-            turn.paused_call({**ended, "hook_event_name": "PreToolUse"})
+        for response in range(constants.TURN_DENY_BACKSTOP):
+            with mock.patch("core.turn.time.time", return_value=1000.0 + response * 10):
+                turn.paused_call({**ended, "hook_event_name": "PreToolUse"})
         self.assertIsNone(session.handle_stop(ended), "the refused calls already ended the turn with the notice")
 
     def _pause(self, sid, cwd, transcript=None):
@@ -761,16 +804,18 @@ class TestAuditFixes(KiasiTestCase):
         state["batch_hook"] = ["turn"]
         events.save_session("s-par", state)
         pre = self.post("s-par", hook_event_name="PreToolUse", tool_name="Edit")
-        ended = None
         for response in range(constants.TURN_DENY_BACKSTOP):
             ids = [f"toolu_{response}_{n}" for n in range(3)]
-            refused = [turn.handle_pre_tool_use({**pre, "tool_use_id": call_id}) for call_id in ids]
-            self.assertFalse([r for r in refused if "continue" in r], "three calls of one response do not end the turn")
-            ended = turn.handle_tool_batch({**pre, "hook_event_name": "PostToolBatch",
-                                            "tool_calls": [{"tool_name": "Edit", "tool_use_id": call_id, "tool_response": "denied"} for call_id in ids]})
+            with mock.patch("core.turn.time.time", return_value=1000.0 + response * 10):
+                refused = [turn.handle_pre_tool_use({**pre, "tool_use_id": call_id}) for call_id in ids]
+            ended = [r for r in refused if "continue" in r]
             if response < constants.TURN_DENY_BACKSTOP - 1:
-                self.assertIsNone(ended)
-        self.assertIs(ended["continue"], False, "the third refused response ends the turn")
+                self.assertFalse(ended, "three calls of one response do not end the turn")
+                batch = turn.handle_tool_batch({**pre, "hook_event_name": "PostToolBatch",
+                                                "tool_calls": [{"tool_name": "Edit", "tool_use_id": c, "tool_response": "denied"} for c in ids]})
+                self.assertIsNone(batch)
+        self.assertEqual(len(ended), 3, "the third refused response ends the turn, counted by its calls without waiting for a batch")
+        self.assertIs(ended[0]["continue"], False)
 
     def test_the_warned_checklist_stays_the_turns_checklist(self):
         warned = None

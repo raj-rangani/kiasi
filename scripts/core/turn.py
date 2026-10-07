@@ -9,7 +9,7 @@ from core.caps import failure_label, handle_tool_output, leading_command
 from core.events import checklist_folder, ensure_dirs, load_session, log_error, log_event, make_checklist_folder, now_iso, project_slug, save_session
 from core.notify import notify_desktop
 from core.reads import handle_pre_tool, track_reads
-from core.transcript import caller_key, caller_transcript, current_context_tokens, edited_files, fmt_k, fmt_m, is_short_reply, is_system_prompt, is_task_prompt, last_task_prompt, prompt_text, tail_entries
+from core.transcript import caller_key, caller_transcript, current_context_tokens, edited_files, fmt_k, fmt_m, is_short_reply, is_system_prompt, is_task_prompt, last_task_prompt, prompt_text, response_id, tail_entries
 
 
 def steps_per_prompt(entries):
@@ -292,7 +292,7 @@ def renew_turn(payload, state, turn):
         log_event({"event": "turn_resume", "session_id": session_id, "mode": "resume", "asked": True, "checklist": checklist,
                    "paused_session": session_id, "steps": turn["stopped"]})
     # The question's own step is counted right after this, by this hook or by its batch: the fresh budget starts after it.
-    turn.update(steps=-1, reread=0, warned=False, stopped=False, denied=0)
+    turn.update(steps=-1, reread=0, warned=False, stopped=False, denied=0, denied_response=None, denied_at=0)
     for name in ("reminded", "context", "checkpoint", "loose"):
         turn.pop(name, None)
 
@@ -360,6 +360,19 @@ def checklist_call(payload, turn):
     return os.path.abspath(os.path.expanduser(path)) == os.path.abspath(os.path.expanduser(turn["checkpoint"]))
 
 
+def count_refusal(payload, turn):
+    """Three parallel refused calls are one refused response, so a count comes once per response: by the id of the
+    response the transcript names, else by time, as calls of one response arrive together."""
+    here, now = response_id(payload), time.time()
+    if here:
+        same = turn.get("denied_response") == here
+    else:
+        same = now - turn.get("denied_at", 0) <= constants.REFUSAL_RESPONSE_SECONDS
+    turn["denied_response"], turn["denied_at"] = here, now
+    if not same:
+        turn["denied"] = turn.get("denied", 0) + 1
+
+
 def paused_call(payload):
     """PreToolUse: once a turn or subagent is paused, refuse every call but the checklist Write and the hand-off."""
     # Only pause mode refuses, so a turn paused before the mode was changed is let go.
@@ -372,10 +385,7 @@ def paused_call(payload):
     if not turn or not turn.get("stopped") or checklist_call(payload, turn):
         return None
     subagent = bool(payload.get("agent_id"))
-    # Once Claude Code sends batches, a refusal counts per response in handle_tool_batch: three parallel refused calls are one.
-    batched = batch_scope(payload) in state.get("batch_hook", [])
-    if not batched:
-        turn["denied"] = turn.get("denied", 0) + 1
+    count_refusal(payload, turn)
     if payload.get("tool_use_id"):
         # Marked here, so the batch knows a refused call by its id and not by what a tool's output says.
         turn["refused"] = [*turn.get("refused", []), payload["tool_use_id"]][-constants.TURN_CALLS_KEPT:]
@@ -390,7 +400,7 @@ def paused_call(payload):
         # continue: false would end the developer's turn along with it. VS Code shows no stop reason, so the turn
         # would end there without a word; it does show a system message.
         output.update({"continue": False, "stopReason": pause_notice(turn), "systemMessage": backstop_notice(turn)})
-        if turn.get("denied", 0) == constants.TURN_DENY_BACKSTOP and not batched:
+        if turn.get("denied", 0) == constants.TURN_DENY_BACKSTOP:
             desktop_notice(payload, f"Kiasi ended this turn, paused at {turn['stopped']} steps")
     return output
 
@@ -554,20 +564,6 @@ def batch_counted(payload):
     return batch_scope(payload) in load_session(payload.get("session_id", "")).get("batch_hook", [])
 
 
-def refused_batch(payload, state, turn, batched):
-    """A batch of calls all refused at the pause: one refused response. The third ends the turn, as three refused calls did before."""
-    if not batched:
-        return None  # paused_call counted these call by call
-    session_id = payload.get("session_id", "")
-    turn["denied"] = turn.get("denied", 0) + 1
-    save_session(session_id, state)
-    if payload.get("agent_id") or turn["denied"] < constants.TURN_DENY_BACKSTOP:
-        return None
-    if turn["denied"] == constants.TURN_DENY_BACKSTOP:
-        desktop_notice(payload, f"Kiasi ended this turn, paused at {turn['stopped']} steps")
-    return {"continue": False, "stopReason": pause_notice(turn), "systemMessage": backstop_notice(turn)}
-
-
 def handle_tool_batch(payload):
     """One step for the tool calls of one response: the next request re-reads the context once for all of them.
     PostToolBatch comes after the calls' own PostToolUse hooks, so until the first one arrives the calls are counted one
@@ -587,7 +583,10 @@ def handle_tool_batch(payload):
     if dirty:
         turn["refused"] = [call_id for call_id in refused if call_id not in ids]
     if calls and not ran:
-        return refused_batch(payload, state, turn, batch_scope(payload) in seen)
+        # paused_call counted these refusals, once per response, whether or not Claude Code sends a batch for them.
+        if dirty:
+            save_session(session_id, state)
+        return None
     loose = turn.pop("loose", None)
     if batch_scope(payload) in seen and not loose:
         names = [call.get("tool_name", "") for call in ran]

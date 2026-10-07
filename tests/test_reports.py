@@ -359,6 +359,19 @@ class TestLensReport(ReportTestCase):
         self.assertEqual((report["budget_rows"][0]["note"], report["budget_rows"][0]["reread"]), ("checklist written", None))
         self.assertEqual(report["settings"]["turn_budget_mode"], constants.TURN_BUDGET_MODE)
 
+    def test_error_events_become_problems_by_kind(self):
+        from core import events
+        self.assertEqual(self.lens.build(7)["problems"], [])
+        events.log_error("pause_record", session_id="abcdef123456", error="disk full")
+        events.log_error("pause_record", session_id="abcdef123456", error="read-only")
+        events.log_error("bad_setting", project="/p", settings=["turn_stop_steps"])
+        events.log_event({"event": "error"})
+        problems = {row["kind"]: row for row in self.lens.build(7)["problems"]}
+        self.assertEqual((problems["pause_record"]["count"], problems["bad_setting"]["count"], problems["unknown"]["count"]), (2, 1, 1))
+        self.assertEqual((problems["pause_record"]["message"], problems["pause_record"]["session"]), ("read-only", "abcdef12"))
+        self.assertIn("nothing to resume", problems["pause_record"]["explanation"])
+        self.assertIn("turn_stop_steps", problems["bad_setting"]["message"])
+
     def test_lens_and_budget_agree_on_steps_and_reread(self):
         self.write(self.project / "s1.jsonl", [self.prompt(0), self.step("r1", 1, 1000), self.step("r1", 2, 1000), self.step("r2", 3, 2500)])
         self.write(self.project / "s1" / "subagents" / "agent-a.jsonl", [self.step("a1", 4, 600)])

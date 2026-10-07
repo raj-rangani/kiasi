@@ -181,6 +181,52 @@ test('a subagent hand-back report is archived, not cut to a stub', () => {
   expect(result.archive!.items).toContain(injected);
 });
 
+const handbacks: Record<string, (body: string) => string> = {
+  'another session': (body) => `Another Claude session sent a message:\n<agent-message from="worker">\n${body.replace(/^/gm, '  ')}\n</agent-message>`,
+  'bare agent-message': (body) => `<agent-message from="worker">\n${body}\n</agent-message>`,
+  'system-reminder wrapped': (body) => `<system-reminder>\n[SYSTEM NOTIFICATION - NOT USER INPUT]\n<task-notification>\n${body}\n</task-notification>\n</system-reminder>`,
+};
+
+for (const [name, wrap] of Object.entries(handbacks)) {
+  test(`a ${name} hand-back is archived, or trimmed with a note when there is no archive`, () => {
+    const report = wrap(big('finding ', 9000));
+    const messages = [
+      { role: 'user', text: 'task', toolUses: [] },
+      { role: 'user', text: report, toolUses: [] },
+      ...Array.from({ length: 10 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', text: `m${i}`, toolUses: [] })),
+    ];
+    const withArchive = pruneTranscript(messages, '/d/outputs/compact-c.txt');
+    expect(withArchive.messages![1].text).toContain('full text is #');
+    expect(withArchive.archive!.items).toContain(report);
+    const without = pruneTranscript(messages, null).messages![1].text;
+    expect(without.startsWith(report.slice(0, 4000))).toBe(true);
+    expect(without.split('\n').pop()).toBe(`[kiasi trimmed ${report.length - 4000} chars of a subagent report; it was not archived]`);
+  });
+
+  test(`a short ${name} hand-back is untouched`, () => {
+    const report = wrap(big('finding ', 1000));
+    const messages = [
+      { role: 'user', text: 'task', toolUses: [] },
+      { role: 'user', text: report, toolUses: [] },
+      { role: 'assistant', text: 'ok', toolUses: [{ tool_use_id: 't1', tool: 'Bash', input: { command: 'ls' }, text: big('row ', 40000) }] },
+      ...Array.from({ length: 10 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', text: `m${i}`, toolUses: [] })),
+    ];
+    expect(pruneTranscript(messages, '/d/outputs/compact-c.txt').messages![1].text).toBe(report);
+  });
+}
+
+test('a long plain user message that is not a hand-back is still cut to its head', () => {
+  const plain = big('word ', 9000);
+  const messages = [
+    { role: 'user', text: 'task', toolUses: [] },
+    { role: 'user', text: plain, toolUses: [] },
+    ...Array.from({ length: 10 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', text: `m${i}`, toolUses: [] })),
+  ];
+  const text = pruneTranscript(messages, null).messages![1].text;
+  expect(text.length).toBeLessThan(700);
+  expect(text).not.toContain('subagent report');
+});
+
 test('every Kiasi last-line marker is left whole, and a cut text keeps its saved-at pointer', () => {
   const digest = `${big('row ', 300)}\n[kiasi kept the first 1200 of 9000 chars of this output; full text saved at /d/outputs/x.txt, read it with offset if you need more]`;
   const colour = `${big('row ', 300)}\n[kiasi removed colour codes from this output]`;
