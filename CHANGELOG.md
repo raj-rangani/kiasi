@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+## 0.4.1 - 2026-10-07
+
 - The status line script changed (a lock around its limits files). It is a copy under the data folder, so run `/kiasi:limits setup` again after updating to get it.
 - Parallel refused calls in one response count as one refused response, so a pause no longer ends the turn early. The third refused response still ends it.
 - The checklist written at the budget warning is the one a later stop, subagent brief or "continue" points at. It used to name the next free file, which did not exist.
