@@ -6,6 +6,7 @@ import time
 
 from core import constants
 from core.caps import failure_label
+from core.holdout import holdout_off
 from core.events import checklist_folder, ensure_dirs, load_session, log_event, now_iso, project_slug, save_session
 from core.launch import ensure_dashboard, launch_cleanup
 from core import taskfile
@@ -274,7 +275,13 @@ def handle_session_start(payload):
     paused = pause_elsewhere(payload)
     lines = [rules_text(), env_warning(), budget_line(), dashboard_line, state_block(payload) if payload.get("source") == "compact" else ""]
     restored = taskfile.start_block(payload.get("cwd") or "") if payload.get("source") in constants.TASKFILE_START_SOURCES else ""
-    log_event({"event": "session_start", "session_id": payload.get("session_id", ""), "source": payload.get("source"), "note": bool(note), "taskfile": bool(restored)})
+    start = {"event": "session_start", "session_id": payload.get("session_id", ""), "source": payload.get("source"), "note": bool(note), "taskfile": bool(restored)}
+    if constants.HOLDOUT:
+        start["holdout"] = {"rule": constants.HOLDOUT, "off": holdout_off(start["session_id"], constants.HOLDOUT)}
+        state = load_session(start["session_id"])
+        state["holdout"] = start["holdout"]
+        save_session(start["session_id"], state)
+    log_event(start)
     if restored:
         lines.append(restored)
     elif note and note.get("session_id") != payload.get("session_id"):

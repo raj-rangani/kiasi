@@ -5,6 +5,7 @@ import uuid
 from pathlib import Path
 
 from core import constants
+from core.holdout import held_off
 from core.events import ensure_dirs, load_session, log_event, save_session
 
 
@@ -122,6 +123,8 @@ def failure_label(tool_name, tool_input):
 
 
 def handle_tool_output(payload):
+    if constants.HOLDOUT and held_off(load_session(payload.get("session_id", "")), "output_cap"):
+        return None
     tool_name = payload.get("tool_name", "")
     tool_input = payload.get("tool_input") or {}
     command = tool_input.get("command") or ""

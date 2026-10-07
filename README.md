@@ -106,8 +106,11 @@ Set these with `/config` or as env vars. Every other threshold is a named consta
 | `turn_call_budget` | `CLAUDE_PLUGIN_OPTION_TURN_CALL_BUDGET` | 60 |
 | `turn_token_budget` | `CLAUDE_PLUGIN_OPTION_TURN_TOKEN_BUDGET` | 8000000 |
 | `subagent_call_budget` | `CLAUDE_PLUGIN_OPTION_SUBAGENT_CALL_BUDGET` | 40 |
+| `holdout` | `CLAUDE_PLUGIN_OPTION_HOLDOUT` | empty (or reread_check, turn_budget, context_notices, output_cap, sandbox) |
 | `paste_refusal_chars` | `CLAUDE_PLUGIN_OPTION_PASTE_REFUSAL_CHARS` | 40000 |
 | `compaction_window_text` | `CLAUDE_PLUGIN_OPTION_COMPACTION_WINDOW_TEXT` | "200000" |
+
+Set `holdout` to a rule name to switch it off in half of your sessions; the Rules tab then compares the two halves.
 
 A `.kiasi.json` in the project root can set any of these except `compaction_window_text` for that project, plus `turn_warn_steps` and `turn_warn_tokens` (by default the warning comes 10 calls, or a fifth of the tokens, before the budget).
 

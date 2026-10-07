@@ -543,3 +543,103 @@ class TestLensReport(ReportTestCase):
 
     def test_since_install_without_a_log_or_report(self):
         self.assertEqual(self.lens.since_install(), {"install_day": None, "before": None, "after": None})
+
+
+class TestRuleOutcomes(ReportTestCase):
+    def session(self, name, prompts, steps, agents=(), read=100_000):
+        """A transcript with typed prompts at the given seconds, steps (one request each) and Agent calls."""
+        entries = [self.prompt(s) for s in prompts] + [self.step(f"{name}-{s}", s, read) for s in steps]
+        for s in agents:
+            entry = self.step(f"{name}-agent-{s}", s, read)
+            entry["message"]["content"] = [{"type": "tool_use", "id": f"call-{s}", "name": "Agent", "input": {}}]
+            entries.append(entry)
+        self.write(self.project / f"{name}.jsonl", entries)
+
+    def outcomes(self, events, sessions=True):
+        found = self.lens.scan_sessions(7)[0] if sessions else {}
+        timed = [(self.lens.epoch_iso(self.stamp(second)), {"session_id": "", **record}) for second, record in events]
+        return self.lens.rule_outcomes(timed, found)
+
+    def prompts(self, sid, seconds):
+        return [(s, {"event": "prompt", "session_id": sid}) for s in seconds]
+
+    def test_delegation_followed_and_paid_against_the_prediction_split_by_brief(self):
+        self.session("a", [1], [2, 3], agents=[4])
+        self.session("b", [20], [21, 22])
+        check = lambda brief, here: {"mode": "delegate", "steps": 3, "here": here, "delegated": 100_000, "brief": brief}  # noqa: E731
+        events = [(1, {"event": "prompt", "session_id": "a", "reread_check": check(True, 900_000)}), (10, {"event": "prompt", "session_id": "a"}),
+                  (20, {"event": "prompt", "session_id": "b", "reread_check": check(False, 600_000)})]
+        out = self.outcomes(events)["reread"]
+        self.assertEqual((out["fired"], out["followed"], out["rate"]), (2, 1, 0.5))
+        self.assertEqual(out["effect"], "delegated turns paid 300k vs 900k predicted here (1); the others paid 200k vs 600k (1)")
+        self.assertEqual((out["split"]["brief"]["followed"], out["split"]["no_brief"]["followed"], out["split"]["no_brief"]["fired"]), (1, 0, 1))
+
+    def test_a_warning_is_followed_when_the_turn_ends_within_the_comply_steps(self):
+        self.session("w1", [1, 30], [2, 4, 5])
+        self.session("w2", [1], range(2, 15))
+        events = [(3, {"event": "turn_warn", "session_id": "w1", "steps": 40}), (3, {"event": "turn_warn", "session_id": "w2", "steps": 40}),
+                  (3, {"event": "turn_warn", "session_id": "w2", "subagent": True})]
+        out = self.outcomes(events)["turn"]
+        self.assertEqual((out["fired"], out["followed"], out["effect"]), (2, 1, "mean 6.5 steps after the warning"))
+
+    def test_a_handoff_notice_is_followed_by_a_restored_session_in_the_project(self):
+        self.session("h1", [1], [2, 11], read=160_000)
+        self.session("h2", [20], [21], read=49_900)
+        self.session("h3", [40], [41], read=150_000)
+        events = [(10, {"event": "prompt", "session_id": "h1", "handoff_notice": "x", "context_tokens": 160_000}),
+                  (19, {"event": "session_start", "session_id": "h2", "taskfile": True}),
+                  (40, {"event": "prompt", "session_id": "h3", "handoff_notice": "x", "context_tokens": 150_000}),
+                  (45, {"event": "session_start", "session_id": "h3", "taskfile": False})]
+        out = self.outcomes(events)["handoff"]
+        self.assertEqual((out["fired"], out["followed"]), (2, 1))
+        self.assertEqual(out["effect"], "restored sessions started at a median 50k against 160k at the notice")
+
+    def test_a_nudge_is_followed_by_a_compaction_within_three_prompts(self):
+        self.session("n1", [1], [1, 2])
+        self.session("n2", [40], [41, 42])
+        events = [(1, {"event": "prompt", "session_id": "n1", "nudge": "x", "context_tokens": 160_000}), *self.prompts("n1", [2, 3, 4]), (3, {"event": "compact", "session_id": "n1"}),
+                  (40, {"event": "prompt", "session_id": "n2", "nudge": "x", "context_tokens": 120_000}), *self.prompts("n2", [41, 42, 43, 44])]
+        out = self.outcomes(events)["nudge"]
+        self.assertEqual((out["fired"], out["followed"], out["effect"]), (2, 1, "followed at a median 160k context, ignored at 120k"))
+
+    def test_a_task_switch_notice_is_followed_by_a_new_session_in_the_project(self):
+        self.session("t1", [1], [1, 2])
+        self.session("t2", [3], [3, 4])
+        self.session("t3", [40], [41, 42])
+        events = [(1, {"event": "prompt", "session_id": "t1", "task_switch": True, "context_tokens": 90_000}), *self.prompts("t1", [2, 3, 4]),
+                  (40, {"event": "prompt", "session_id": "t3", "task_switch": True, "context_tokens": 80_000}), *self.prompts("t3", [41, 42, 43])]
+        out = self.outcomes(events)["task_switch"]
+        self.assertEqual((out["fired"], out["followed"]), (2, 1))
+
+    def test_skips_nudges_and_routing_report_what_held(self):
+        at = lambda second, event, **rest: (second, {"event": event, "session_id": "r", **rest})  # noqa: E731
+        events = [at(1, "read_skipped", path="a", chars=8000), at(2, "read_skipped", path="b", chars=8000), at(3, "read_retry", path="a"),
+                  at(1, "read_nudge", path="a"), at(5, "read_nudge", path="b"),
+                  at(1, "routed", tool_name="Bash"), at(2, "routed", tool_name="Bash"), at(4, "route_retry", tool_name="Bash")]
+        out = self.outcomes(events, sessions=False)
+        self.assertEqual((out["reads"]["fired"], out["reads"]["followed"]), (2, 1))
+        self.assertEqual(out["reads"]["effect"], "2k tokens not re-sent; 1 repeated and let through")
+        self.assertEqual((out["read_nudge"]["fired"], out["read_nudge"]["followed"]), (2, 1))
+        self.assertEqual((out["route"]["fired"], out["route"]["followed"]), (2, 1))
+        self.assertNotIn("reread", out)
+
+    def test_the_holdout_compares_sessions_with_the_rule_on_and_off(self):
+        def start(name, off):
+            return (0, {"event": "session_start", "session_id": name, "holdout": {"rule": "reread_check", "off": off}})
+        events = []
+        for i in range(10):
+            self.session(f"on{i}", [1], [2, 3], read=1000)
+            events.append(start(f"on{i}", False))
+        for i in range(9):
+            self.session(f"off{i}", [1], [2, 3, 4], read=1000)
+            events.append(start(f"off{i}", True))
+        found = self.lens.scan_sessions(7)[0]
+        timed = [(self.lens.epoch_iso(self.stamp(s)), r) for s, r in events]
+        report = self.lens.experiment_report(timed, found)
+        self.assertEqual((report["rule"], report["enough"]), ("reread_check", False))
+        self.assertEqual(report["on"], {"sessions": 10, "prompts": 10, "median_context": 1100, "reread_per_prompt": 2000, "steps_per_prompt": 2.0})
+        self.assertEqual((report["off"]["reread_per_prompt"], report["off"]["steps_per_prompt"]), (3000, 3.0))
+        self.session("off9", [1], [2, 3, 4], read=1000)
+        timed.append((self.lens.epoch_iso(self.stamp(0)), start("off9", True)[1]))
+        self.assertTrue(self.lens.experiment_report(timed, self.lens.scan_sessions(7)[0])["enough"])
+        self.assertIsNone(self.lens.experiment_report([], found))

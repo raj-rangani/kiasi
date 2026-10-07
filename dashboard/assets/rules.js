@@ -51,6 +51,28 @@ function facts(d, rule) {
   return rule.kinds.filter(kind => n(kind)).map(kind => `${n(kind)} ${label(kind)}`).join(' · ') || 'nothing yet';
 }
 
+const OUTCOME_KEYS = { notes: ['handoff', 'nudge', 'task_switch', 'read_nudge'], reads: ['reads'], route: ['route'], reread: ['reread'], turn: ['turn'] };
+const OUTCOME_NAMES = { handoff: 'handoff notice', nudge: 'compact or clear nudge', task_switch: 'task-switch notice', read_nudge: 'read nudge' };
+function outcomeLines(d, rule) {
+  const lines = (OUTCOME_KEYS[rule.key] || []).filter(k => (d.outcomes || {})[k]).map(k => {
+    const o = d.outcomes[k];
+    const name = OUTCOME_NAMES[k] ? `${OUTCOME_NAMES[k]}: ` : '';
+    return `<span title="${esc(o.note)}">${esc(name)}followed ${o.followed} of ${o.fired}${o.rate == null ? '' : ` (${Math.round(o.rate * 100)}%)`} · ${esc(o.effect)}</span>`;
+  });
+  return lines.length ? `<p class="outcome">${lines.join('<br>')}</p>` : '';
+}
+
+function renderExperiment(d) {
+  const e = d.experiment;
+  $('#experiment-sheet').hidden = !e;
+  if (!e) return;
+  const v = (side, key, f) => side[key] == null ? '–' : f(side[key]);
+  const rows = [['sessions', 'sessions', String], ['prompts', 'prompts', String], ['median context', 'median_context', fmtK], ['re-read per prompt', 'reread_per_prompt', fmtM], ['steps per prompt', 'steps_per_prompt', String]]
+    .map(([name, key, f]) => [name, num(v(e.on, key, f)), num(v(e.off, key, f))]);
+  const short = e.enough ? '' : `<p class="hist-note">too few sessions yet: ${e.on.sessions} on, ${e.off.sessions} off of ${e.min_sessions} each</p>`;
+  $('#experiment').innerHTML = `<h3 class="sub">${esc(e.rule)}</h3>${table(['', '#rule on', '#rule off'], rows)}${short}`;
+}
+
 function ruleDays(d) {
   const days = d.per_day.map(p => p.day).slice(-RULE_STRIP_DAYS);
   const perRule = {};
@@ -78,7 +100,7 @@ function renderRules(d) {
       <b class="rl-num fired" data-label="fired">${n.toLocaleString()}</b>
       <b class="rl-num cut${cut ? '' : ' none'}" data-label="tokens cut">${cut ? fmtM(cut) : '–'}</b>
       <div class="rl-days">${days.length ? dayLine(counts, days, install) : ''}</div>
-      <p class="facts">${esc(facts(d, rule))}</p><span class="chev">›</span></div>`;
+      <div class="rl-facts"><p class="facts">${esc(facts(d, rule))}</p>${outcomeLines(d, rule)}</div><span class="chev">›</span></div>`;
   };
   $('#rules').innerHTML = `<div class="rl-head"><span>rule</span><span class="num">fired · ${d.days || d.per_day.length} days</span><span class="num">tokens cut</span><span class="rl-dayhead"><em>fired per day${span}</em>${dayCellLabels(days)}</span><span>breakdown</span><span></span></div>${RULES.map(row).join('')}`;
   $('#rules').querySelectorAll('.rl-row').forEach(el => {
@@ -214,6 +236,7 @@ registerView('rules', d => {
   if (wanted && wanted !== openRule && RULES.some(r => r.key === wanted)) { openRule = wanted; openRow = null; }
   renderRules(d);
   renderDetail(d);
+  renderExperiment(d);
   renderSteps(d);
   renderTuning(d);
   renderProblems(d);

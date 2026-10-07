@@ -25,6 +25,7 @@ PROBLEM_KINDS = {
     "checklist_folder": "The checklist folder could not be created.",
 }
 RUNAWAY_TOKENS = 200_000
+AGENT_TOOLS = ("Agent", "Task")
 WINDOW_ENV = "CLAUDE_CODE_AUTO_COMPACT_WINDOW"
 PREFIX_PIECES = 12
 PREFIX_KINDS = ("CLAUDE.md files", "plugins and skills", "MCP tool schemas", "agents list", "memory", "other")
@@ -312,7 +313,7 @@ def scan_sessions(days):
     bill = Counter()
     main_bill, prompts = Counter(), Counter()
     for path in main:
-        info = {"session": Path(path).stem, "project": project_of(path), "steps": [], "contexts": [], "prompts": [], "reread": 0, "recalls": [], "new": None, "pieces": [], "partial": False, "first_day": None, "synthetic": 0, "synthetic_kinds": Counter()}
+        info = {"session": Path(path).stem, "project": project_of(path), "steps": [], "contexts": [], "prompts": [], "reread": 0, "recalls": [], "new": None, "pieces": [], "partial": False, "first_day": None, "agents": [], "synthetic": 0, "synthetic_kinds": Counter()}
         asked, searches = set(), set()
         for entry, usage in usage_entries(path):
             t = epoch_iso(entry["timestamp"])
@@ -320,6 +321,9 @@ def scan_sessions(days):
             if entry.get("type") == "assistant":
                 info["recalls"].extend((t, text) for text in recall_texts(message))
                 searches |= search_ids(message)
+                blocks = message.get("content")
+                if isinstance(blocks, list) and any(isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") in AGENT_TOOLS for b in blocks):
+                    info["agents"].append(t)
             elif entry.get("type") == "user" and searches:
                 info["recalls"].extend((t, text) for text in search_results(message, searches))
             day = local_day(t)
@@ -920,6 +924,153 @@ def storage(recalls=()):
             "note_days": constants.CLEANUP_NOTE_DAYS, "report_days": constants.CLEANUP_REPORT_DAYS, "trash_days": constants.CLEANUP_TRASH_DAYS}
 
 
+def figure(n):
+    return f"{n / 1e6:.1f}M" if n >= 1e6 else f"{round(n / 1000)}k"
+
+
+def mean_of(values):
+    return sum(values) / len(values) if values else 0
+
+
+def outcome(fired, followed, effect, note, **extra):
+    return {"fired": fired, "followed": followed, "rate": round(followed / fired, 3) if fired else None, "effect": effect, "note": note, **extra}
+
+
+def turn_paid(info, t, end):
+    """Context summed over the main session's steps after t and up to end: what the turn paid to re-read."""
+    lo, hi = bisect_right(info["steps"], t), bisect_right(info["steps"], end)
+    return sum(info["contexts"][lo:hi])
+
+
+def reread_outcome(rows):
+    """rows: (followed, brief, paid or None, here) per delegate instruction."""
+    def side(picked):
+        paid = [p for _, _, p, _ in picked if p is not None]
+        return {"turns": len(paid), "paid": int(mean_of(paid)), "predicted": int(mean_of([h for _, _, p, h in picked if p is not None]))}
+    done, other = [r for r in rows if r[0]], [r for r in rows if not r[0]]
+    a, b = side(done), side(other)
+    effect = f"delegated turns paid {figure(a['paid'])} vs {figure(a['predicted'])} predicted here ({a['turns']}); the others paid {figure(b['paid'])} vs {figure(b['predicted'])} ({b['turns']})"
+    split = {}
+    for key, flag in (("brief", True), ("no_brief", False)):
+        part = [r for r in rows if bool(r[1]) is flag]
+        d = side([r for r in part if r[0]])
+        split[key] = {"fired": len(part), "followed": sum(1 for r in part if r[0]), "paid": d["paid"], "predicted": d["predicted"], "turns": d["turns"]}
+    return outcome(len(rows), len(done), effect, "an Agent call in the main transcript before the next prompt; paid is the context summed over that turn's steps, per turn", delegated=a, kept=b, split=split)
+
+
+def rule_outcomes(events, sessions, logged=None):
+    """Per instruction the hooks gave Claude, whether it was followed and what followed, judged from the log and the transcripts."""
+    logged = logged if logged is not None else follow_ups(events)
+    by = defaultdict(lambda: defaultdict(list))
+    for t, record in events:
+        by[record.get("session_id", "")][record.get("event")].append((t, record))
+    window = constants.LENS_HANDOFF_WINDOW_MINUTES * 60
+    out = {}
+    reread = []
+    warns, handoffs, nudges, switches = [], [], [], []
+    for t, record in events:
+        if record.get("event") != "prompt":
+            continue
+        sid = record.get("session_id", "")
+        info = sessions.get(sid)
+        check = record.get("reread_check") or {}
+        if check.get("mode") == "delegate":
+            nexts = [w for w, _ in by[sid]["prompt"] if w > t]
+            end = min(nexts, default=float("inf"))
+            agents = (info or {}).get("agents", [])
+            done = info is not None and any(t <= a < end for a in agents)
+            reread.append((done, check.get("brief"), turn_paid(info, t, end) if info else None, check.get("here", 0)))
+        if record.get("handoff_notice"):
+            handoffs.append((t, sid, record))
+        if record.get("nudge"):
+            nudges.append((t, sid, record))
+        if record.get("task_switch"):
+            switches.append((t, sid, record))
+    if reread:
+        out["reread"] = reread_outcome(reread)
+    for t, record in events:
+        if record.get("event") == "turn_warn" and not record.get("subagent") and sessions.get(record.get("session_id", "")):
+            info = sessions[record["session_id"]]
+            warns.append(steps_until_next_prompt(info["steps"], info["prompts"], t))
+    if warns:
+        ok = sum(1 for a in warns if a < constants.LENS_COMPLY_STEPS)
+        out["turn"] = outcome(len(warns), ok, f"mean {mean_of(warns):.1f} steps after the warning", f"the turn ended within {constants.LENS_COMPLY_STEPS} steps after the warning, the rule used for pauses")
+    restores = [(t, record.get("session_id", "")) for t, record in events if record.get("event") == "session_start" and record.get("taskfile")]
+    if handoffs:
+        done, first, notice = 0, [], []
+        for t, sid, record in handoffs:
+            project = (sessions.get(sid) or {}).get("project")
+            for w, other in restores:
+                info = sessions.get(other)
+                if t < w <= t + window and other != sid and info and project and info["project"] == project:
+                    done += 1
+                    first.append(info["contexts"][0])
+                    notice.append(record.get("context_tokens", 0))
+                    break
+        effect = f"restored sessions started at a median {figure(percentile(first, 0.5))} against {figure(percentile(notice, 0.5))} at the notice" if first else "no restored session yet"
+        out["handoff"] = outcome(len(handoffs), done, effect, f"a session_start that restored the task file in the same project within {constants.LENS_HANDOFF_WINDOW_MINUTES} minutes")
+
+    def moved_on(t, sid):
+        later = [w for w, _ in by[sid]["prompt"] if w > t]
+        cutoff = later[constants.LENS_NUDGE_PROMPTS - 1] if len(later) >= constants.LENS_NUDGE_PROMPTS else float("inf")
+        if any(t < w <= cutoff for w, _ in by[sid]["compact"]):
+            return True
+        project = (sessions.get(sid) or {}).get("project")
+        return any(other != sid and info["new"] and info["project"] == project and t < info["steps"][0] <= cutoff for other, info in sessions.items())
+
+    for key, group, what in (("nudge", nudges, "compact or clear nudge"), ("task_switch", switches, "task-switch notice")):
+        if not group:
+            continue
+        flags = [(moved_on(t, sid), record.get("context_tokens", 0)) for t, sid, record in group]
+        yes = [c for f, c in flags if f]
+        no = [c for f, c in flags if not f]
+        out[key] = outcome(len(flags), len(yes), (f"followed at a median {figure(percentile(yes, 0.5))} context, ignored at {figure(percentile(no, 0.5)) if no else 'none ignored'}" if yes else f"none followed, ignored at a median {figure(percentile(no, 0.5))} context"),
+                           f"a compaction or a new session in the project within {constants.LENS_NUDGE_PROMPTS} prompts of the {what}")
+    skips = [(t, r) for t, r in events if r.get("event") == "read_skipped"]
+    if skips:
+        held = [r for t, r in skips if not skip_repeated(t, r, logged)]
+        cut = sum(tokens(r.get("chars", 0)) for r in held)
+        out["reads"] = outcome(len(skips), len(held), f"{figure(cut)} tokens not re-sent; {len(skips) - len(held)} repeated and let through", "a skipped read counts as followed unless the same path was read again")
+    nudged = [(t, r) for t, r in events if r.get("event") == "read_nudge"]
+    if nudged:
+        yes = sum(1 for t, r in nudged if any(w > t for w, _ in by[r.get("session_id", "")]["read_retry"]))
+        out["read_nudge"] = outcome(len(nudged), yes, f"{yes} followed by a repeated read of a skipped file", "a read_retry later in the same session")
+    routed = [(t, r) for t, r in events if r.get("event") == "route_retry"]
+    sent = [(t, r) for t, r in events if r.get("event") == "routed"]
+    if sent:
+        used = set()
+        for t, r in routed:
+            for i, (w, o) in enumerate(sent):
+                if i not in used and w < t and o.get("session_id") == r.get("session_id") and o.get("tool_name") == r.get("tool_name"):
+                    used.add(i)
+                    break
+        out["route"] = outcome(len(sent), len(sent) - len(used), f"{len(used)} let through on a repeat", "a routed call counts as followed unless the same tool was repeated and let through")
+    return out
+
+
+def experiment_report(events, sessions):
+    """The holdout comparison: sessions with the rule on against off, for the rule with the most sessions in the window."""
+    side = defaultdict(dict)
+    for t, record in events:
+        hold = record.get("holdout")
+        if record.get("event") == "session_start" and isinstance(hold, dict) and hold.get("rule") and record.get("session_id") in sessions:
+            side[hold["rule"]][record["session_id"]] = bool(hold.get("off"))
+    if not side:
+        return None
+    rule = max(side, key=lambda r: len(side[r]))
+
+    def figures(ids):
+        infos = [sessions[i] for i in ids]
+        prompts = sum(len(i["prompts"]) for i in infos)
+        steps = sum(len(i["steps"]) for i in infos)
+        contexts = [c for i in infos for c in i["contexts"]]
+        return {"sessions": len(infos), "prompts": prompts, "median_context": int(percentile(contexts, 0.5)) if contexts else None,
+                "reread_per_prompt": int(sum(i["reread"] for i in infos) / prompts) if prompts else None, "steps_per_prompt": round(steps / prompts, 1) if prompts else None}
+    on, off = figures([i for i, o in side[rule].items() if not o]), figures([i for i, o in side[rule].items() if o])
+    need = constants.LENS_EXPERIMENT_MIN_SESSIONS
+    return {"rule": rule, "on": on, "off": off, "enough": on["sessions"] >= need and off["sessions"] >= need, "min_sessions": need}
+
+
 def build(days):
     reset_skips()
     sessions, bill, main_bill, prompts = scan_sessions(days)
@@ -959,6 +1110,8 @@ def build(days):
                                 "after": item["later_steps"] if item["kind"] in ("turn_stop", "turn_over") else None,
                                 "note": ("checklist written" if record.get("checklist") else "no checklist written") if follow_up else ""})
     first_day = local_day(time.time() - days * 86400)
+    outcomes = rule_outcomes(events, sessions, logged)
+    experiment = experiment_report(events, sessions)
     days_seen = sorted(day for day in set(bill) | set(per_day) if day >= first_day)
     stops = [a for a in actions if a["kind"] == "turn_stop"]
     complied = sum(1 for a in stops if a["later_steps"] < constants.LENS_COMPLY_STEPS)
@@ -995,6 +1148,8 @@ def build(days):
                    "turn_choices": dict(Counter(a["record"].get("choice") for a in actions if a["kind"] == "turn_choice")),
                    "reads_skipped": by_kind["read_skipped"]["count"], "reads_retried": by_kind["read_retry"]["count"]},
         "by_kind": dict(by_kind),
+        "outcomes": outcomes,
+        **({"experiment": experiment} if experiment else {}),
         "since": since_install(),
         "all_time": all_time,
         "per_day": [{"day": day, "paid": bill.get(day, 0), "prompts": prompts.get(day, 0), "reread_per_prompt": int(main_bill.get(day, 0) / prompts[day]) if prompts.get(day) else None,
