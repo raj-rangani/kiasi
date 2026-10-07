@@ -2,7 +2,7 @@
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "kiasi",
   "displayName": "Kiasi",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Kiasi keeps Claude Code's context small and its weekly limit long: output caps, turn budgets, refused mega-pastes, deterministic pruning at compaction, sandbox tools that run commands and file analyses out of context, a searchable store of everything it cut, and a local dashboard of what it saved.",
   "author": { "name": "Raj Rangani", "email": "iamrajrangani@gmail.com" },
   "homepage": "https://github.com/raj-rangani/kiasi",

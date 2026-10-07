@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 - 2026-10-07
 
 - Rules tab shows an outcome per rule: how often it fired, how often Claude followed it, and the measured effect (re-read paid against the estimate for delegated turns, steps after a warning, the restored session's first context after a handoff notice). Each figure carries a note on how it was measured.
 - Holdout experiment: set `holdout` (or `CLAUDE_PLUGIN_OPTION_HOLDOUT`) to a rule name and sessions whose id hashes odd run with that rule off. The Rules tab compares the two halves on context, re-read and steps per prompt once each side has 10 sessions.
