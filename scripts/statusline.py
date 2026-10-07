@@ -308,8 +308,10 @@ def turn_part(payload, session):
         return None
     tone = tone_for(steps, int(budget.get("warn") or stop), stop)
     reread = int(turn.get("reread") or 0)
-    tail = paint(f" {fmt_tokens(reread)}", "dim") if reread else ""
-    return f"{paint('turn', 'label')} {paint(f'{steps}/{stop}', 'turn' if tone == 'ok' else tone)}{tail}"
+    count = f"{paint('steps', 'label')} {paint(f'{steps}/{stop}', 'turn' if tone == 'ok' else tone)}"
+    if not reread:
+        return count
+    return paint(SEPARATOR, "dim").join([count, f"{paint('turn', 'label')} {paint(fmt_tokens(reread), 'dim')}"])
 
 
 def weekly_run_out(target_dir, window):

@@ -229,12 +229,12 @@ Ordered by value for the effort.
 | Proposal | State |
 |---|---|
 | 1 Parallel-batch pruning | done 2026-10-06; report numbers (synthetic skip, message-id dedupe, median and p90) done |
-| 2 Clear-and-resume | task file, four writers, `/kiasi:handoff`, restore on start, 150k notice done; task-switch detection open |
+| 2 Clear-and-resume | task file, four writers, `/kiasi:handoff`, restore on start, 150k notice, task-switch notice, pause wording done |
 | 3 Cap at 200k | README recommendation, window in effect and runaway flag on the dashboard done |
 | 4 Lower the floor | prefix audit sheet, 7-line SessionStart block, leaner pruner done; MCP schema sizes are from the deferred-tool listing, not the schemas |
 | 5 Context meter | done in the status line |
 | 6 Cache-aware notices | idle-return notice, TTL check and model/effort switch counts done |
-| 7 Effort | measured per effort level on the Budget tab; no recommendation yet |
+| 7 Effort | measured per effort level on the Budget tab; the comparison line appears once two levels have 50 prompts each; no recommendation beyond that until a week of data |
 
 Open items are tracked in the pull request that landed this.
 

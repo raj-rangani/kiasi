@@ -36,7 +36,8 @@ class TestContextMeter(KiasiTestCase):
         line = self.line(118000, session)
         self.assertIn("ctx", line)
         self.assertIn("118k (floor 46k)", line)
-        self.assertIn("1.4M", line)
+        self.assertIn("steps 12/60", line)
+        self.assertIn("turn 1.4M", line)
         self.assertIn("cache warm 57m", line)
         self.assertIn("idle 3m", line)
 

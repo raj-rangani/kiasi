@@ -174,7 +174,7 @@ function outcomeOf(exchange) {
   return last ? last.text.trim().split('\n')[0].slice(0, PRUNE_OUTCOME_CHARS) : '';
 }
 
-// Prompt, a one-line outcome and a pointer; hand-backs stay whole or archived with their own pointer, the rest is in the archive.
+// Prompt, a one-line outcome, the saved-file pointers of its tool results and the archive pointer; hand-backs stay whole or archived with their own pointer, the rest is in the archive.
 function reduceExchange(exchange, number, level) {
   const [prompt, ...rest] = exchange;
   level.archive.items.push(`--- exchange ${number} ---\n${flatten([prompt, ...rest.filter((message) => !isHandbackMessage(message))])}`);
@@ -182,10 +182,11 @@ function reduceExchange(exchange, number, level) {
   const handbacks = rest.filter(isHandbackMessage)
     .map((message) => ({ role: 'user', text: pruneHandback(message.text, level.userKeepChars ?? USER_TEXT_KEEP_CHARS, level.archive), toolUses: [] }));
   const text = prompt.text || '';
+  const saved = pointersIn(flatten([prompt, ...rest.filter((message) => !isHandbackMessage(message))]));
   return [
     { role: 'user', text: text.length > PRUNE_OLD_PROMPT_CHARS ? `${text.slice(0, PRUNE_OLD_PROMPT_CHARS)} ...` : text, toolUses: [] },
     ...handbacks,
-    { role: 'assistant', text: [outcomeOf(exchange), pointer].filter(Boolean).join('\n'), toolUses: [] },
+    { role: 'assistant', text: [outcomeOf(exchange), ...saved, pointer].filter(Boolean).join('\n'), toolUses: [] },
   ];
 }
 

@@ -16,6 +16,7 @@ REPLACE_TRIES = 5
 REPLACE_WAIT = 0.02  # seconds between tries: on Windows a reader holding the file open makes the replace fail briefly
 
 SYNTHETIC_MODEL = "<synthetic>"
+EFFORT_MIN_PROMPTS = 50  # prompts a level needs before two levels are compared
 CACHE_GAP_MIN_SECONDS = 300  # the default prompt cache TTL on API keys
 CACHE_GAP_MAX_SECONDS = 3600  # the long TTL: a longer break loses the cache either way
 CACHE_COLD_SHARE = 0.5  # a step whose input is over this share cache writes after a break found a cold cache
@@ -167,7 +168,7 @@ def install_day():
     return None
 
 
-HISTORY_COUNTING = 3  # 2: the messages a pruned compaction writes back are not steps; 3: days are local days, not UTC days
+HISTORY_COUNTING = 4  # 2: the messages a pruned compaction writes back are not steps; 3: days are local days, not UTC days; 4: rows carry median/p90 context, cache gaps, switches, output per prompt, effort
 HISTORY_RECOUNT_DAYS = 45
 
 
@@ -444,6 +445,23 @@ def kiasi_actions(days):
     return {"counts": dict(actions), "chars_kept_out": saved_chars}
 
 
+def effort_comparison(levels):
+    """The inputs of the Budget tab's effort line: the highest and lowest output per prompt among levels with
+    EFFORT_MIN_PROMPTS prompts or more, the ratio, and the output the high level's prompts spent above the low rate;
+    else the level closest to the bar (the second most prompts when there are two, else the only one)."""
+    enough = [r for r in levels if r["prompts"] >= EFFORT_MIN_PROMPTS and r["per_prompt"] > 0]
+    if len(enough) >= 2:
+        high, low = max(enough, key=lambda r: r["per_prompt"]), min(enough, key=lambda r: r["per_prompt"])
+        pick = lambda r: {k: r[k] for k in ("name", "per_prompt", "prompts")}  # noqa: E731
+        return {"ready": True, "min_prompts": EFFORT_MIN_PROMPTS, "high": pick(high), "low": pick(low), "ratio": round(high["per_prompt"] / low["per_prompt"], 1),
+                "extra_tokens": (high["per_prompt"] - low["per_prompt"]) * high["prompts"]}
+    ranked = sorted(levels, key=lambda r: -r["prompts"])[:2]
+    if not ranked:
+        return None
+    near = ranked[-1]
+    return {"ready": False, "min_prompts": EFFORT_MIN_PROMPTS, "level": near["name"], "prompts": near["prompts"]}
+
+
 def build(days):
     reset_skips()
     per_day, sessions, projects, big_outputs, pastes, paste_chars, compactions, steps = scan(days)
@@ -474,7 +492,7 @@ def build(days):
                    "prompts": steps["prompts"], "mean_steps": round(turns / max(1, steps["prompts"]), 1), "long_turns": steps["long_turns"], "long_turn_reread": steps["long_turn_reread"],
                    **{k: sums[k] for k in DAY_COUNTERS if k not in ("prompts", "thinking_chars")}, "output_tokens": output, "output_per_prompt": per_prompt(output, sums["prompts"]),
                    "answered_prompts": sums["prompts"], "thinking_chars": sums["thinking_chars"], "thinking_per_prompt": per_prompt(sums["thinking_chars"], sums["prompts"])},
-        "effort": {"known": bool(groups["by_effort"]), "levels": groups["by_effort"], "models": groups["by_model"]},
+        "effort": {"known": bool(groups["by_effort"]), "levels": groups["by_effort"], "models": groups["by_model"], "comparison": effort_comparison(groups["by_effort"])},
         "per_day": days_out,
         "sessions": sorted(sessions, key=lambda s: -s["turns"] * s["mean"])[: constants.BUDGET_TOP_SESSIONS],
         "projects": [{"project": p, **dict(c)} for p, c in sorted(projects.items(), key=lambda x: -x[1]["cache_read_input_tokens"])],

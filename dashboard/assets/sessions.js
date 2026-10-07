@@ -86,6 +86,7 @@ function renderDetail(d) {
   });
   host.innerHTML = `<dl class="kv wide"><dt>session</dt><dd>${esc(s.session)}</dd><dt>project</dt><dd>${esc(s.project)}</dd><dt>started</dt><dd>${esc(stamp(s.start))}</dd></dl>
     <div class="rule-nums"><b>${fmtM(s.bill)}<small>re-read bill</small></b><b>${fmtM(s.kept_out || 0)}<small>tokens cut</small></b><b>${s.prompts}<small>prompts</small></b><b>${s.steps}<small>steps</small></b><b>${fmtK(s.startup || 0)}<small>startup</small></b><b>${fmtK(s.mean_context)}<small>mean context</small></b><b>${fmtK(s.median_context)}<small>median</small></b><b>${fmtK(s.p90_context)}<small>p90</small></b><b>${fmtK(s.peak)}<small>peak</small></b><b>${s.compactions}<small>compactions</small></b></div>
+    ${s.synthetic_skipped ? `<p class="hist-note">${s.synthetic_skipped.toLocaleString()} replayed entries skipped (zero-usage history replay, not requests).</p>` : ''}
     <h3 class="sub" data-jump="Context">Context at every step</h3>
     <div class="chart">${sessionSvg(s, d.settings, panelWidth(), DETAIL_HEIGHT, true)}</div>
     <div class="legend"><span><i class="tick"></i>prompt</span><span><i class="ring"></i>compaction</span><span><i class="ring pruned"></i>pruned compaction</span><span><i class="amber"></i>re-read check</span><span><i class="red"></i>turn stopped</span><span><i class="line"></i>warning</span><span><i class="line warn"></i>hard limit</span></div>
@@ -106,7 +107,9 @@ function renderTable(d) {
   const rows = showAll ? d.sessions : all.slice(0, SESSION_ROWS);
   const hit = d.sessions.find(s => s.session === selected);
   if (hit && !rows.includes(hit)) rows.push(hit);
-  $('#sessions-more').innerHTML = d.sessions.length > rows.length || showAll ? `<a href="#sessions" id="toggle-all">${showAll ? `show the first ${SESSION_ROWS}` : `show all ${d.sessions.length} sessions`}</a>` : '';
+  const skipped = (d.totals || {}).synthetic_skipped;
+  $('#sessions-more').innerHTML = (d.sessions.length > rows.length || showAll ? `<a href="#sessions" id="toggle-all">${showAll ? `show the first ${SESSION_ROWS}` : `show all ${d.sessions.length} sessions`}</a>` : '')
+    + (skipped ? `<span class="hist-note"> ${skipped.toLocaleString()} replayed entries skipped (zero-usage history replay, not requests).</span>` : '');
   const toggle = $('#toggle-all');
   if (toggle) toggle.addEventListener('click', e => { e.preventDefault(); showAll = !showAll; renderTable(d); });
   const maxBill = Math.max(...rows.map(s => s.bill)) || 1;

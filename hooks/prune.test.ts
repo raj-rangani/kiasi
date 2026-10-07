@@ -79,3 +79,15 @@ test('without an archive no exchange is reduced, so no pointer names a missing f
   const result = pruneTranscript(conversation(6), null as any);
   expect(result.messages!.some((m: any) => (m.text || '').includes('[kiasi reduced exchange'))).toBe(false);
 });
+
+test('saved-file pointers from an old exchange survive in the reduced one, deduplicated and capped', () => {
+  const pointer = (n: number) => `[kiasi kept the first 1200 of 9000 chars of this output; full text saved at /d/outputs/o${n}.txt]`;
+  const results = Array.from({ length: 8 }, (_, i) => ({ role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: `r${i}`, text: `row\n${pointer(i % 7)}`, isError: false }] }));
+  const out = pruneTranscript(conversation(6, { 1: results }), ARCHIVE).messages!;
+  const lines = out[1].text.split('\n');
+  expect(lines[0]).toBe('Outcome 1: done.');
+  const kept = lines.filter((line: string) => line.startsWith('[kiasi kept'));
+  expect(kept).toEqual([0, 1, 2, 3, 4].map(pointer));
+  expect(lines[lines.length - 1]).toContain('[kiasi reduced exchange 1');
+  expect(out[3].text).not.toContain('[kiasi kept');
+});

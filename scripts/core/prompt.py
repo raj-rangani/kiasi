@@ -71,6 +71,30 @@ def handoff_notice(state, tokens):
     return None
 
 
+def words(text):
+    return {w for w in re.findall(r"[a-z]{%d,}" % constants.TASK_SWITCH_MIN_WORD, text.lower()) if w not in constants.TASK_SWITCH_STOPWORDS}
+
+
+def task_switch_notice(state, cwd, session_id, prompt, tokens, gap_min):
+    """Once per session: a long gap and a prompt that shares little with the task file's goal and checklist."""
+    text = prompt.strip()
+    if gap_min < constants.NEW_TASK_GAP_MINUTES or state.get("switch_noticed") or len(text) <= constants.TASK_SWITCH_MIN_CHARS or text.startswith("/") or len(text.split()) < 2:
+        return None
+    path = taskfile.path_for(cwd, session_id)
+    try:
+        saved = taskfile.parse(path.read_text())
+    except OSError:
+        return None
+    goal = saved.get("Goal", "")
+    task_words = words(f"{goal} {saved.get('Checklist', '')}")
+    mine = words(text)
+    if not goal or not task_words or not mine or len(mine & task_words) / len(mine) >= constants.TASK_SWITCH_OVERLAP:
+        return None
+    state["switch_noticed"] = True
+    return (f"This looks like a different task from the one in {path} ({goal.splitlines()[0][:80]}). "
+            f"If so, /kiasi:handoff then /clear keeps them apart; context is {fmt_k(tokens)}.")
+
+
 def handle_prompt(payload):
     prompt = payload.get("prompt") or ""
     session_id = payload.get("session_id", "")
@@ -126,6 +150,11 @@ def handle_prompt(payload):
     if handoff:
         messages.append(handoff)
         record["handoff_notice"] = handoff
+    elif not nudge:
+        switch = task_switch_notice(state, payload.get("cwd"), session_id, prompt, tokens, last_call_gap_minutes(state))
+        if switch:
+            messages.append(switch)
+            record["task_switch"] = True
     check = reread_check(prompt, tokens, entries, state)
     if check:
         context_lines.append(check["context"])

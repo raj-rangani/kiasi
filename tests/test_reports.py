@@ -73,14 +73,16 @@ class TestLensSignals(KiasiTestCase):
 
     def test_cache_report_ranks_by_cost_and_compares_windows(self):
         from reports import lens
-        now = time.time()
+        # A fixed clock: the report and the day keys below must agree on the day, which they cannot across midnight.
+        now = time.mktime((2026, 10, 7, 12, 0, 0, 0, 0, -1))
         day = lambda t: lens.local_day(t)
         per_day = {day(now): {"read": 900, "input": 1000}, day(now - 9 * 86400): {"read": 1, "input": 10}}
         misses = [{"t": now - 60, "prev": now - 90, "tokens": 30000, "cause": "other", "session": "s", "project": "p"},
                   {"t": now - 120, "prev": now - 150, "tokens": 90000, "cause": "idle over 1h", "session": "s", "project": "p"},
                   {"t": now - 180, "prev": now - 200, "tokens": 500000, "cause": "compaction", "session": "s", "project": "p"},
                   {"t": now - 9 * 86400, "prev": now - 9 * 86400 - 5, "tokens": 30000, "cause": "other", "session": "s", "project": "p"}]
-        report = lens.cache_report(7, per_day, misses, 10_000_000)
+        with mock.patch.object(lens.time, "time", return_value=now):
+            report = lens.cache_report(7, per_day, misses, 10_000_000)
         self.assertEqual(report["hit_rate"], 0.9)
         self.assertEqual((report["misses"], report["avoidable"], report["idle"], report["prior_avoidable"]), (3, 1, 1, 1),
                          "a cache that expired while idle is a miss, but not an avoidable one")
@@ -337,6 +339,20 @@ class TestLensReport(ReportTestCase):
         self.assertGreater(kinds["MCP tool schemas"], 200)
         self.assertGreater(kinds["plugins and skills"], 300)
         self.assertIn("other", kinds)
+
+    def test_synthetic_entries_are_counted_per_session_and_in_the_totals(self):
+        synthetic = {**self.step("x", 1, 0), "message": {"model": "<synthetic>", "content": [{"type": "text", "text": "old"}], "usage": {}}}
+        self.write(self.project / "s1.jsonl", [self.prompt(0), synthetic, {**synthetic, "requestId": "y"}, self.step("r1", 2, 1000)])
+        report = self.lens.build(7)
+        self.assertEqual((report["sessions"][0]["synthetic_skipped"], report["totals"]["synthetic_skipped"]), (2, 2))
+
+    def test_the_since_table_carries_median_only_when_every_day_has_it(self):
+        rows = [{"day": "d1", "turns": 10, "mean_context": 100, "context": {"median": 80, "p90": 200}, "main": {}},
+                {"day": "d2", "turns": 30, "mean_context": 100, "context": {"median": 40, "p90": 100}, "main": {}}]
+        metrics = self.lens.period_metrics(rows)
+        self.assertEqual((metrics["median_context"], metrics["p90_context"]), (50, 125))
+        del rows[1]["context"]
+        self.assertIsNone(self.lens.period_metrics(rows)["median_context"])
 
     def test_sessions_count_steps_once_and_only_typed_prompts(self):
         self.write(self.project / "s1.jsonl", [

@@ -71,3 +71,38 @@ class TestHandoffNotices(KiasiTestCase):
             self.assertEqual(prompt_handlers.cache_ttl_minutes(), 60)
         finally:
             del os.environ[constants.CACHE_TTL_ENV]
+
+
+class TestTaskSwitch(KiasiTestCase):
+    OLD = staticmethod(lambda: time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(time.time() - 90 * 60)))
+
+    def run_prompt(self, session_id, prompt, tokens=60_000, state=None, goal="Build the CSV parser for the import screen"):
+        from core import events, taskfile
+        import json
+        if goal:
+            taskfile.write(str(self.tmp), session_id, goal=goal, checklist="- [ ] tests for the parser")
+        path = self.tmp / f"{session_id}.jsonl"
+        path.write_text(json.dumps({"type": "assistant", "message": {"usage": {"input_tokens": tokens}}}) + "\n")
+        events.save_session(session_id, {**events.load_session(session_id), "last_call_at": self.OLD(), **(state or {})})
+        result = prompt_handlers.handle_prompt({"prompt": prompt, "session_id": session_id, "transcript_path": str(path), "cwd": str(self.tmp)})
+        return (result or {}).get("systemMessage", "")
+
+    def test_a_different_task_after_a_gap_is_noticed_once(self):
+        message = self.run_prompt("s-switch", "Redesign the invoice email template with the new branding colours")
+        self.assertIn("This looks like a different task from the one in", message)
+        self.assertIn("(Build the CSV parser for the import screen)", message)
+        self.assertIn("/kiasi:handoff then /clear keeps them apart; context is 60k.", message)
+        self.assertNotIn("different task", self.run_prompt("s-switch", "Redesign the invoice email template with the new branding colours", goal=None))
+
+    def test_the_same_task_is_not_noticed(self):
+        self.assertNotIn("different task", self.run_prompt("s-same", "Add the missing parser tests for the import screen and the CSV edge cases"))
+
+    def test_a_short_reply_a_slash_command_or_no_gap_is_not_noticed(self):
+        for sid, text in (("s-short", "yes go ahead"), ("s-slash", "/kiasi:handoff and then write the invoice email template"), ("s-word", "continue")):
+            self.assertNotIn("different task", self.run_prompt(sid, text))
+        self.assertNotIn("different task", self.run_prompt("s-fresh", "Redesign the invoice email template with the new branding colours", state={"last_call_at": time.strftime("%Y-%m-%dT%H:%M:%S")}))
+
+    def test_the_150k_notice_wins_over_a_switch(self):
+        message = self.run_prompt("s-big", "Redesign the invoice email template with the new branding colours", tokens=160_000)
+        self.assertIn("Run /kiasi:handoff, then /clear", message)
+        self.assertNotIn("different task", message)

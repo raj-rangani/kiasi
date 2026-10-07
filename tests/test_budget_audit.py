@@ -203,6 +203,24 @@ class TestBudgetCacheAndEffort(ReportTestCase):
         self.assertEqual((t["output_tokens"], t["output_per_prompt"], t["thinking_chars"], t["thinking_per_prompt"]), (10, 5, 4, 2))
         self.assertEqual([r["name"] for r in report["effort"]["models"]], ["m1", "m2"])
 
+    def test_a_stored_row_without_the_new_fields_gets_them_when_its_transcripts_exist(self):
+        old = {"day": self.day, "turns": 9, "sub_turns": 0, "mean_context": 1, "high_share": 0.0, "main": {}, "sub": {}}
+        constants.HISTORY_FILE.write_text(json.dumps({"counting": self.budget.HISTORY_COUNTING - 1, "per_day": [old]}))
+        self.write(self.project / "s1.jsonl", [self.prompt(0), self.msg("r1", 1, 1000, effort="high")])
+        self.budget.build(7)
+        [row] = json.loads(constants.HISTORY_FILE.read_text())["per_day"]
+        self.assertEqual((row["turns"], row["context"]["median"], row["output_per_prompt"], "high" in row["by_effort"]), (1, 1100, 5, True))
+        self.assertIn("cache_gaps_5_60", row)
+
+    def test_the_effort_comparison_needs_fifty_prompts_at_two_levels(self):
+        level = lambda name, prompts, per: {"name": name, "prompts": prompts, "per_prompt": per, "output": prompts * per, "steps": prompts}  # noqa: E731
+        compare = self.budget.effort_comparison
+        self.assertEqual(compare([level("high", 60, 300), level("medium", 49, 100)]), {"ready": False, "min_prompts": 50, "level": "medium", "prompts": 49})
+        self.assertEqual(compare([level("high", 60, 300)])["level"], "high")
+        self.assertIsNone(compare([]))
+        ready = compare([level("high", 60, 300), level("medium", 50, 100), level("max", 5, 900)])
+        self.assertEqual((ready["high"]["name"], ready["low"]["name"], ready["ratio"], ready["extra_tokens"]), ("high", "medium", 3.0, 12000))
+
 
 def percentile_of(report):
     return report["totals"]["context"]["median"]

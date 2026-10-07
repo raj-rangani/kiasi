@@ -197,3 +197,7 @@ td.mono { font-family: var(--mono); font-size: 13px; white-space: nowrap; }
 .iconbtn.sync:disabled { cursor: progress; color: var(--muted); }
 .iconbtn.sync.busy svg { animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+[data-view="budget"] .mx-med, [data-view="budget"] .mx-p90 { fill: none; stroke-width: 1.5; }
+[data-view="budget"] .mx-med { stroke: var(--ink); }
+[data-view="budget"] .mx-p90 { stroke: var(--sub); }
+[data-view="budget"] .mx-hit-dot { fill: transparent; }

@@ -393,16 +393,16 @@ TURN_RULE_PREFIX = "- Every turn has a budget of"
 SUBAGENT_RULE_PREFIX = "- Each subagent has its own budget of"
 TURN_RULES = {
     "pause": ("- Every turn has a budget of {steps} steps (the tool calls of one response are one step, so parallel calls count once) or {tokens} re-read tokens. At the warning, about {margin} steps before the pause, "
-              "finish the item in progress, write the remaining work as a checklist to the path kiasi names, then ask the developer the question kiasi gives "
-              "(continue here, hand to a subagent, or stop) and do what they choose; never choose for them. At the pause every call except Agent, that question and the checklist's own Write, Read and Edit is refused: bring the checklist up to date and ask it. "
-              "When kiasi gives no question, end the turn or hand the checklist to one general-purpose subagent; at a pause, end with its notice, so the developer knows how to resume."),
+              "finish the item in progress, update the task file at the path kiasi names (goal, decisions, verified checklist, files, next step), then ask the developer the question kiasi gives "
+              "(continue here, hand to a subagent, or stop) and do what they choose; never choose for them. At the pause every call except Agent, that question and the task file's own Write, Read and Edit is refused: bring the task file up to date and ask it. "
+              "When kiasi gives no question, end the turn or hand the task file to one general-purpose subagent; at a pause, end with its notice, so the developer knows how to resume."),
     "warn": ("- Every turn has a budget of {steps} steps (the tool calls of one response are one step, so parallel calls count once) or {tokens} re-read tokens, which kiasi reports but does not enforce. At the warning, "
-             "about {margin} steps before the budget, finish the item in progress, write the remaining work as a checklist to the path kiasi names, "
-             "and end the turn or hand the checklist to one general-purpose subagent."),
+             "about {margin} steps before the budget, finish the item in progress, update the task file at the path kiasi names (goal, decisions, verified checklist, files, next step), "
+             "and end the turn or hand the task file to one general-purpose subagent."),
 }
 SUBAGENT_RULES = {
     "pause": ("- Each subagent has its own budget of {subagent_steps} steps, stated in its brief and enforced like the turn budget: at the pause "
-              "it writes its checklist and replies. Scope review subagents to the diff, never the whole repo."),
+              "it updates its task file and replies. Scope review subagents to the diff, never the whole repo."),
     "warn": ("- Each subagent has its own budget of {subagent_steps} steps, stated in its brief and reported like the turn budget. "
              "Scope review subagents to the diff, never the whole repo."),
     "off": "- Scope review subagents to the diff, never the whole repo.",
@@ -566,6 +566,11 @@ CLAUDE_SETTINGS_FILE = Path.home() / ".claude" / "settings.json"
 SETTINGS_BACKUP_SUFFIX = ".kiasi-bak"
 
 # Task file and context notices
+TASK_SWITCH_OVERLAP = 0.15
+TASK_SWITCH_MIN_CHARS = 40
+TASK_SWITCH_MIN_WORD = 4
+TASK_SWITCH_STOPWORDS = frozenset("""this that with from have then there their about would should could which what when where into over also just
+more some than them these those your will been were does done make made need like want please again still very only other""".split())
 TASKFILE_PREFIX = "task-"
 TASKFILE_START_CHARS = 2000
 TASKFILE_GOAL_CHARS = 300

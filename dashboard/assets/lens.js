@@ -22,6 +22,7 @@ function renderSince(d) {
     ['Steps per day', count(stepsPerDay(b)), count(stepsPerDay(a)), change(stepsPerDay(b), stepsPerDay(a)), false],
     ['Context re-sent per step', fmtK(b.reread_per_turn), fmtK(a.reread_per_turn), change(b.reread_per_turn, a.reread_per_turn), true],
     ['Mean context per main-session step', fmtK(b.mean_context), fmtK(a.mean_context), change(b.mean_context, a.mean_context), true],
+    ...(b.median_context != null && a.median_context != null ? [['Median context per main-session step (p90 in note)', fmtK(b.median_context), fmtK(a.median_context), change(b.median_context, a.median_context), true]] : []),
     [`Main-session steps over ${high}`, pct(b.high_share), pct(a.high_share), change(b.high_share, a.high_share), true],
     ['Steps counted', count(b.turns), count(a.turns), '', false],
   ].slice(inPanels ? 3 : 0);
@@ -291,11 +292,15 @@ function renderFloor(d) {
   const projects = Object.entries(d.prefix || {}).sort((a, b) => b[1].floor_tokens - a[1].floor_tokens);
   const table = projects.length ? `<table class="since-table"><thead><tr><th>project</th><th class="num">floor</th><th>largest pieces</th><th>suggestion</th></tr></thead><tbody>${projects.map(([name, p]) => {
     const sums = {};
-    p.pieces.forEach(x => { sums[x.kind] = (sums[x.kind] || 0) + x.chars; });
+    p.pieces.filter(x => x.kind !== 'other').forEach(x => { sums[x.kind] = (sums[x.kind] || 0) + x.chars; });
+    const other = p.floor_tokens * CHARS_PER_TOKEN - Object.values(sums).reduce((t, c) => t + c, 0);
     const top = Object.entries(sums).sort((a, b) => b[1] - a[1]);
+    const shown = top.map(([k, c]) => [k === 'MCP tool schemas' ? 'MCP tool schemas (measured from the tool listing, not the schemas)' : k, c]);
+    if (other > 0) shown.push(['other (floor minus measured pieces)', other]);
+    shown.sort((a, b) => b[1] - a[1]);
     const tip = top.filter(([k]) => KIND_ADVICE[k] && sums[k] >= 8000).map(([k, c]) => KIND_ADVICE[k](c))[0] || '';
-    return `<tr><td>${esc(name.slice(0, 40))}</td><td class="num">${fmtK(p.floor_tokens)}<br><span class="hist-note">${p.sessions} session${p.sessions > 1 ? 's' : ''}</span></td><td>${top.slice(0, 3).map(([k, c]) => `${esc(k)} ${Math.round(c / 4000 * 10) / 10} k`).join('<br>') || '–'}</td><td>${esc(tip)}</td></tr>`;
-  }).join('')}</tbody></table><p class="hist-note">Piece sizes are the visible attachments of a project's latest session, in chars over 4 per token; anything not attributed is counted as other.</p>` : '';
+    return `<tr><td>${esc(name.slice(0, 40))}</td><td class="num">${fmtK(p.floor_tokens)}<br><span class="hist-note">${p.sessions} session${p.sessions > 1 ? 's' : ''}</span></td><td>${shown.slice(0, 4).map(([k, c]) => `${esc(k)} ${Math.round(c / CHARS_PER_TOKEN / 1000 * 10) / 10} k`).join('<br>') || '–'}</td><td>${esc(tip)}</td></tr>`;
+  }).join('')}</tbody></table><p class="hist-note">Piece sizes are the visible attachments of a project's latest session, in tokens at 4 chars per token; other is the floor minus the measured pieces.</p>` : '';
   $('#floor').innerHTML = lines.join('') + table;
 }
 

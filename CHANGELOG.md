@@ -11,6 +11,15 @@
 - Budget tab: a "Cache and output" section counts 5 to 60 minute breaks that found the cache cold and the tokens they rewrote, with the 1-hour TTL suggestion; counts model and effort switches and their rewrite cost; and shows output and thinking per prompt by effort level, which transcripts do record.
 - Report numbers dedupe assistant entries by message id and skip `<synthetic>` ones in both the lens and budget reports.
 - README recommends `CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000` and `CLAUDE_CODE_PROMPT_CACHE_TTL=1h`.
+- The turn-budget warning, pause, stop reminder and resume all name the task file instead of Claude's own checklist, and a Write or Edit there is allowed at the pause.
+- A task-switch notice fires once per session when a prompt after a break shares few words with the task file's goal: save or clear before continuing.
+- The compaction pruner copies the saved-at pointer of a reduced exchange into the transcript, so the archive is findable without opening it.
+- The status line shows the turn re-read as its own `turn 1.4M` segment.
+- Overview before/after table gains median and p90 context; the stored history is recounted for them and for the cache and effort fields.
+- Budget tab: a per-day median and p90 context chart, effort levels in order, and an honest line when thinking text is absent from transcripts.
+- Prefix audit labels MCP schema sizes as measured from the tool listing, not the schemas themselves.
+- Sessions tab notes how many zero-usage replayed entries were skipped.
+- Pinned the one time-dependent report test to a fixed clock.
 - The shared temp checklist folder is now per user (`kiasi-<user>`) and private (mode 700), so other users on a shared machine cannot read or guess it.
 - Cleanup now removes saved pause records once they are older than 14 days, the same age after which a resume ignores them. A record a resume can still use is kept.
 - Sandbox outputs from a session with no id are covered by the cleanup patterns and are tested.
