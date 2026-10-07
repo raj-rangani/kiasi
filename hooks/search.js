@@ -9,9 +9,10 @@ function limitOf(input) {
 }
 
 export function searchArgv(root, input) {
-  const words = String(input.query || '').split(/\s+/).filter(Boolean);
+  // A quoted phrase stays one term, quotes included; search.py reads it as an in-order phrase.
+  const words = String(input.query || '').match(/"[^"]*"|\S+/g) || [];
   if (!words.length) return null;
-  return ['python3', `${root}/scripts/${SEARCH_SCRIPT}`, ...words, '-n', limitOf(input)];
+  return ['python3', `${root}/scripts/${SEARCH_SCRIPT}`, '-n', limitOf(input), '--', ...words];
 }
 
 async function runSearch($, input) {

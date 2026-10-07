@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core import constants
-from reports.budget import SYNTHETIC_MODEL, first_ask, install_day, project_of, transcript_files
+from reports.budget import SKIPPED, SYNTHETIC_MODEL, file_lock, first_ask, install_day, project_of, read_lines, reset_skips, skip, transcript_files, window_start, write_atomic
 
 SAVING_KINDS = ("cap", "paste_refused", "delegated", "pruned", "read_skipped")
 CONTEXT_KEYS = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
@@ -36,13 +36,16 @@ def local_stamp(t):
 
 
 def iter_entries(path):
-    for line in open(path, errors="replace"):
-        try:
-            entry = json.loads(line)
-        except ValueError:
+    """The entries of a transcript that carry a readable timestamp; the rest is skipped, the unreadable ones counted."""
+    for entry in read_lines(path):
+        if not entry.get("timestamp"):
             continue
-        if entry.get("timestamp"):
-            yield entry
+        try:
+            epoch_iso(entry["timestamp"])
+        except (ValueError, TypeError, AttributeError):
+            skip("timestamps", entry["timestamp"])
+            continue
+        yield entry
 
 
 def is_prompt(message):
@@ -89,7 +92,7 @@ def miss_cause(gap, compacted, switched):
 def cache_scan(days):
     """Cache reads against all input per day, and every main-session miss, over this window and the one before it."""
     main, subs = transcript_files(days * 2)
-    cutoff = time.time() - days * 2 * 86400
+    cutoff = window_start(days * 2)
     per_day = defaultdict(lambda: {"read": 0, "input": 0})
     misses = []
     for path in main + subs:
@@ -142,7 +145,7 @@ def avoidable_miss(miss):
 
 def cache_report(days, per_day, misses, paid):
     """Overview 03: hit rate against the target, avoidable misses against the window before, causes by cost."""
-    start = time.time() - days * 86400
+    start = window_start(days)  # whole local days, as every other figure of the window
     current = [m for m in misses if m["t"] >= start]
     prior = [m for m in misses if m["t"] < start]
     window = {day: v for day, v in per_day.items() if day >= local_day(start)}
@@ -165,48 +168,78 @@ def cache_report(days, per_day, misses, paid):
             "write_price": constants.CACHE_WRITE_PRICE, "read_price": constants.CACHE_READ_PRICE, "causes": rows}
 
 
+def read_back(record, t, sessions):
+    """True when the session's later tool calls name the file a cap saved: its text came back into the context."""
+    name = Path(record.get("saved_path") or "").name
+    recalls = sessions.get(record.get("session_id", ""), {}).get("recalls", [])
+    return bool(name) and any(when > t and name in text for when, text in recalls)
+
+
 def recall_rows(events, sessions):
     rows = defaultdict(lambda: {"cuts": 0, "recalled": 0})
     for t, record in events:
         if record.get("event") != "cap" or not record.get("saved_path"):
             continue
-        name = Path(record["saved_path"]).name
         row = rows[record.get("kind") or "other"]
         row["cuts"] += 1
-        recalls = sessions.get(record.get("session_id", ""), {}).get("recalls", [])
-        if any(when > t and name in text for when, text in recalls):
+        if read_back(record, t, sessions):
             row["recalled"] += 1
     return sorted(({"kind": kind, **row} for kind, row in rows.items()), key=lambda row: -row["cuts"])
 
 
+class Sessions(dict):
+    """Session id to its main-session figures, plus when each subagent's own steps ran and when each session's subagents started."""
+
+    def __init__(self):
+        super().__init__()
+        self.agent_steps = {}
+        self.agent_starts = defaultdict(list)
+
+
 def scan_sessions(days):
+    """Steps, prompts and the re-read bill of the window's whole local days: a session resumed today counts only today's."""
     main, subs = transcript_files(days)
-    sessions = {}
+    first_day = local_day(window_start(days))
+    sessions = Sessions()
     bill = Counter()
     main_bill, prompts = Counter(), Counter()
     for path in main:
-        info = {"session": Path(path).stem, "project": project_of(path), "steps": [], "contexts": [], "prompts": [], "reread": 0, "recalls": []}
+        info = {"session": Path(path).stem, "project": project_of(path), "steps": [], "contexts": [], "prompts": [], "reread": 0, "recalls": [], "new": None}
         asked = set()
         for entry, usage in usage_entries(path):
             t = epoch_iso(entry["timestamp"])
             message = entry.get("message") or {}
             if entry.get("type") == "assistant":
                 info["recalls"].extend((t, text) for text in recall_texts(message))
+            day = local_day(t)
             if usage:
+                if info["new"] is None:
+                    info["new"] = day >= first_day  # a session that began before the window was resumed, not started
+                if day < first_day:
+                    continue
                 info["steps"].append(t)
                 info["contexts"].append(sum(usage.get(k, 0) for k in CONTEXT_KEYS))
                 info["reread"] += usage.get("cache_read_input_tokens", 0)
-                bill[local_day(t)] += usage.get("cache_read_input_tokens", 0)
-                main_bill[local_day(t)] += usage.get("cache_read_input_tokens", 0)
-            elif entry.get("type") == "user" and is_prompt(entry.get("message") or {}) and first_ask(entry, asked):
+                bill[day] += usage.get("cache_read_input_tokens", 0)
+                main_bill[day] += usage.get("cache_read_input_tokens", 0)
+            elif entry.get("type") == "user" and is_prompt(entry.get("message") or {}) and first_ask(entry, asked) and day >= first_day:
                 info["prompts"].append(t)
-                prompts[local_day(t)] += 1
+                prompts[day] += 1
         if info["steps"]:
             sessions[info["session"]] = info
     for path in subs:
+        stem = Path(path).stem
+        agent = stem[len("agent-"):] if stem.startswith("agent-") else stem
         for entry, usage in usage_entries(path):
             if usage:
-                bill[local_day(epoch_iso(entry["timestamp"]))] += usage.get("cache_read_input_tokens", 0)
+                t = epoch_iso(entry["timestamp"])
+                if local_day(t) < first_day:
+                    continue
+                bill[local_day(t)] += usage.get("cache_read_input_tokens", 0)
+                sessions.agent_steps.setdefault(agent, []).append(t)
+        if agent in sessions.agent_steps:
+            sessions.agent_steps[agent].sort()
+            sessions.agent_starts[Path(path).parent.parent.name].append(sessions.agent_steps[agent][0])
     return sessions, bill, main_bill, prompts
 
 
@@ -221,14 +254,14 @@ def steps_until_next_prompt(steps, prompts, t):
 
 
 def read_events(days):
-    cutoff = time.time() - days * 86400
+    cutoff = window_start(days)
     events = []
     try:
         for line in open(constants.EVENT_LOG):
             try:
                 record = json.loads(line)
                 t = epoch_local(record["ts"])
-            except (ValueError, KeyError):
+            except (ValueError, KeyError, TypeError):
                 continue
             if t >= cutoff:
                 events.append((t, record))
@@ -246,21 +279,42 @@ def action(record, kind, label, kept_out=0, later=0, saved=0, formula=""):
             "kept_out": int(kept_out), "later_steps": int(later), "saved": int(saved), "formula": formula, "record": record}
 
 
-def follow_ups(events):
-    """Per session, when its prompts, its Agent calls and its continues at the pause question were logged."""
-    out = defaultdict(lambda: {"prompts": [], "agents": [], "renewals": []})
+def follow_ups(events, agent_starts=None):
+    """Per session, when its prompts, Agent calls (and the ones logged as allowed), continues at the pause question,
+    and subagent transcripts (agent_starts, from the transcripts) were logged, and which skipped reads were repeated."""
+    out = defaultdict(lambda: {"prompts": [], "agents": [], "allowed": [], "renewals": [], "starts": [], "skips": [], "retries": []})
     for t, record in events:
+        session = record.get("session_id", "")
         if record.get("event") in ("prompt", "agent"):
-            out[record.get("session_id", "")][f"{record['event']}s"].append(t)
+            out[session][f"{record['event']}s"].append(t)
+            if record.get("event") == "agent" and record.get("decision") == "allow":
+                out[session]["allowed"].append(t)
         elif record.get("event") == "turn_resume" and record.get("asked"):
-            out[record.get("session_id", "")]["renewals"].append(t)
+            out[session]["renewals"].append(t)
+        elif record.get("event") == "read_skipped":
+            out[session]["skips"].append((t, record.get("path")))
+        elif record.get("event") == "read_retry":
+            out[session]["retries"].append((t, record.get("path")))
+    for session, times in (agent_starts or {}).items():
+        out[session]["starts"] = times
     return out
 
 
 def delegation_followed(t, logged):
-    """True when the session made an Agent call after this prompt and before its next one."""
-    next_prompt = min((when for when in logged["prompts"] if when > t), default=float("inf"))
-    return any(t <= when < next_prompt for when in logged["agents"])
+    """True when an Agent call is known to have run after this prompt and before its next one. The Agent event is logged
+    before the outcome (and an "ask" may be refused), so it counts only when logged as allowed or when a subagent
+    transcript started in between."""
+    next_prompt = min((when for when in logged.get("prompts", []) if when > t), default=float("inf"))
+    inside = lambda times: any(t <= when < next_prompt for when in times)  # noqa: E731
+    return inside(logged.get("allowed", [])) or (inside(logged.get("agents", [])) and inside(logged.get("starts", [])))
+
+
+def skip_repeated(t, record, logged):
+    """True when the session repeated this skipped read (before skipping it again) and it went through: nothing was saved."""
+    mine = (logged or {}).get(record.get("session_id", "")) or {}
+    path = record.get("path")
+    next_skip = min((when for when, other in mine.get("skips", []) if other == path and when > t), default=float("inf"))
+    return any(other == path and t < when < next_skip for when, other in mine.get("retries", []))
 
 
 def classify(t, record, sessions, logged=None):
@@ -270,12 +324,17 @@ def classify(t, record, sessions, logged=None):
     later = count_after(info["steps"], t)
     if event == "cap":
         kept = tokens(record.get("chars", 0) - record.get("shown_chars", 0))
-        return action(record, "cap", f"{record.get('tool_name')} {record.get('kind')}: {record.get('label', '')}", kept, later, kept * later,
-                      f"{kept:,} tokens kept out × {later} later steps in the session")
+        back = read_back(record, t, sessions)
+        return action(record, "cap", f"{record.get('tool_name')} {record.get('kind')}: {record.get('label', '')}", kept, later, 0 if back else kept * later,
+                      "read back later in the session: nothing saved" if back else f"{kept:,} tokens kept out × {later} later steps in the session")
     if event == "read_skipped":
         kept = tokens(record.get("chars", 0))
-        return action(record, "read_skipped", f"unchanged re-read of {record.get('path', '')} skipped", kept, later, kept * later,
-                      f"{kept:,} tokens not re-sent × {later} later steps in the session")
+        agent = record.get("agent_id")
+        # A subagent's skip saves its own later steps; the parent's steps say nothing about it, and an unknown agent is not credited.
+        later = count_after(getattr(sessions, "agent_steps", {}).get(agent, []), t) if agent else later
+        repeated = skip_repeated(t, record, logged)
+        return action(record, "read_skipped", f"unchanged re-read of {record.get('path', '')} skipped" + (", then repeated and let through" if repeated else ""), kept, later, 0 if repeated else kept * later,
+                      "repeated and let through: nothing saved" if repeated else f"{kept:,} tokens not re-sent × {later} later steps in the {'subagent' if agent else 'session'}")
     if event == "read_retry":
         return action(record, "read_retry", f"skipped read of {record.get('path', '')} repeated and let through")
     if event == "routed":
@@ -335,10 +394,22 @@ def classify(t, record, sessions, logged=None):
         return action(record, "loop", f"{record.get('label', '')} failed {record.get('count')} times in one turn, Claude told to stop retrying")
     if event == "state" and (record.get("task") or record.get("files") or record.get("failures") or record.get("outputs") or record.get("checklists")):
         return action(record, "state", f"state re-injected after compaction: {record.get('files', 0)} files, {record.get('failures', 0)} failing, {record.get('outputs', 0)} saved outputs, {record.get('checklists', 0)} checklists")
+    if event == "agent" and record.get("decision") == "ask":  # before model_set: an asked call carries both
+        return action(record, "review_asked", f"repeat review by {record.get('agent_type')} turned into a question")
     if event == "agent" and record.get("model_set"):
         return action(record, "agent_model", f"{record.get('agent_type')} set to {record.get('model_set')}")
-    if event == "agent" and record.get("decision") == "ask":
-        return action(record, "review_asked", f"repeat review by {record.get('agent_type')} turned into a question")
+    if event == "agent" and record.get("brief_suffix"):
+        return action(record, "brief_suffix", f"{record.get('agent_type')} brief extended with the budget and the answer format")
+    if event == "agent" and record.get("long_prompt"):
+        return action(record, "long_prompt", f"{record.get('agent_type')} prompt of {record.get('prompt_chars', 0):,} chars flagged")
+    if event == "turn_choice":
+        return action(record, "turn_choice", f"{record.get('choice')} chosen at the pause question after {record.get('steps')} steps")
+    if event == "quiet":
+        return action(record, "quiet", "plugin output quieted")
+    if event == "desktop_notify":
+        return action(record, "desktop_notify", f"desktop notification: {record.get('title', '')}")
+    if event == "read_nudge":
+        return action(record, "read_nudge", f"nudge to read {record.get('path', '')} by section")
     if event == "stop" and record.get("note_written"):
         return action(record, "note", "session note written")
     if event == "session_start" and record.get("note"):
@@ -367,12 +438,20 @@ def prompt_steps(info):
     return rows
 
 
+def step_buckets():
+    """LENS_STEP_BUCKETS cut at the configured turn budget: the last band starts at TURN_STOP_STEPS, not at a fixed 60."""
+    stop = constants.TURN_STOP_STEPS
+    buckets = [(low, min(high or stop - 1, stop - 1)) for low, high in constants.LENS_STEP_BUCKETS if low < stop]
+    return buckets + [(stop, None)]
+
+
 def step_histogram(sessions):
-    hist = [{"label": bucket_label(low, high), "low": low, "prompts": 0, "bill": 0} for low, high in constants.LENS_STEP_BUCKETS]
+    buckets = step_buckets()
+    hist = [{"label": bucket_label(low, high), "low": low, "prompts": 0, "bill": 0} for low, high in buckets]
     for info in sessions.values():
         for count, bill in prompt_steps(info):
             if count:
-                row = hist[bucket_index(constants.LENS_STEP_BUCKETS, count)]
+                row = hist[bucket_index(buckets, count)]
                 row["prompts"] += 1
                 row["bill"] += bill
     return hist
@@ -512,18 +591,17 @@ def session_records(sessions, actions):
 
 
 def period_metrics(rows):
-    turns = sum(r.get("turns", 0) + r.get("sub_turns", 0) for r in rows)
-    reread = sum((r.get("main") or {}).get("cache_read_input_tokens", 0) + (r.get("sub") or {}).get("cache_read_input_tokens", 0) for r in rows)
-    main_turns = sum(r.get("turns", 0) for r in rows)
+    turns = main_turns = sum(r.get("turns", 0) for r in rows)  # main-session steps and their re-read only, as the headline and the bands
+    reread = sum((r.get("main") or {}).get("cache_read_input_tokens", 0) for r in rows)
     return {
         "days": len(rows),
         "turns": turns,
         "reread": reread,
-        "reread_per_turn": int(reread / turns) if turns else 0,
+        "reread_per_turn": int(reread / turns) if turns else None,
         "reread_per_day": int(reread / len(rows)) if rows else None,
         "steps_per_day": int(turns / len(rows)) if rows else None,
-        "mean_context": int(sum(r.get("mean_context", 0) * r.get("turns", 0) for r in rows) / main_turns) if main_turns else 0,
-        "high_share": round(sum(r.get("high_share", 0) * r.get("turns", 0) for r in rows) / main_turns, 3) if main_turns else 0,
+        "mean_context": int(sum(r.get("mean_context", 0) * r.get("turns", 0) for r in rows) / main_turns) if main_turns else None,
+        "high_share": round(sum(r.get("high_share", 0) * r.get("turns", 0) for r in rows) / main_turns, 3) if main_turns else None,
     }
 
 
@@ -542,6 +620,11 @@ def merge_savings(actions, days):
 
     Days the window covers in full replace the stored row; the partly covered first day and
     days outside the window keep the stored row unless the new one counts more actions."""
+    with file_lock(constants.SAVINGS_FILE):
+        return _merge_savings(actions, days)
+
+
+def _merge_savings(actions, days):
     try:
         stored = {r["day"]: r for r in json.loads(constants.SAVINGS_FILE.read_text())["per_day"]}
     except (OSError, ValueError, KeyError, TypeError):
@@ -558,7 +641,7 @@ def merge_savings(actions, days):
         if day >= first_full_day or day not in stored or row["actions"] >= stored[day].get("actions", 0):
             stored[day] = row
     kept = [stored[day] for day in sorted(stored)]
-    constants.SAVINGS_FILE.write_text(json.dumps({"updated": time.strftime("%Y-%m-%dT%H:%M:%S"), "per_day": kept}, indent=1))
+    write_atomic(constants.SAVINGS_FILE, json.dumps({"updated": time.strftime("%Y-%m-%dT%H:%M:%S"), "per_day": kept}, indent=1))
     return {"first_day": kept[0]["day"] if kept else None, "days": len(kept),
             **{key: sum(r.get(key, 0) for r in kept) for key in ("saved", "kept_out", "actions", "caps")}}
 
@@ -689,17 +772,19 @@ def storage(recalls=()):
 
 
 def build(days):
+    reset_skips()
     sessions, bill, main_bill, prompts = scan_sessions(days)
     events = read_events(days * 2)
     cache_days, misses_all = cache_scan(days)
     attribute_misses(misses_all, events)
-    window_start = epoch_local(local_day(time.time() - days * 86400) + "T00:00:00")
-    events = [(t, record) for t, record in events if t >= window_start]
+    window = window_start(days)
+    events = [(t, record) for t, record in events if t >= window]
     actions = []
     per_day = defaultdict(Counter)
+    kind_counts = defaultdict(Counter)  # per day and kind, untruncated (the actions list is cut at LENS_MAX_ACTIONS)
     by_kind = defaultdict(lambda: {"count": 0, "saved": 0, "kept_out": 0})
     checks, pastes, budget_rows = [], [], []
-    logged = follow_ups(events)
+    logged = follow_ups(events, sessions.agent_starts)
     for t, record in events:
         item = classify(t, record, sessions, logged)
         if not item:
@@ -709,6 +794,7 @@ def build(days):
         by_kind[item["kind"]]["saved"] += item["saved"]
         by_kind[item["kind"]]["kept_out"] += item["kept_out"]
         per_day[item["ts"][:10]][item["kind"]] += item["saved"]
+        kind_counts[item["ts"][:10]][item["kind"]] += 1
         if item["kind"] in ("reread_check", "delegated"):
             check = record.get("reread_check") or {}
             checks.append({"ts": item["ts"], "session": item["session"][:8], "context": record.get("context_tokens", 0), "steps": check.get("steps"),
@@ -732,7 +818,8 @@ def build(days):
     total_steps = sum(len(s["steps"]) for s in sessions.values())
     startups = defaultdict(list)
     for info in sessions.values():
-        startups[local_day(info["steps"][0])].append(info["contexts"][0])
+        if info["new"]:  # a resumed session's first request in the window is no startup
+            startups[local_day(info["steps"][0])].append(info["contexts"][0])
     all_startups = [value for values in startups.values() for value in values]
     misses, miss_tokens = defaultdict(Counter), Counter()
     for miss in misses_all:
@@ -748,13 +835,16 @@ def build(days):
                    "stops": len(stops), "stops_complied": complied, "resumed": by_kind["turn_resume"]["count"], "skipped": by_kind["turn_moved_on"]["count"],
                    "over_budget": by_kind["turn_over"]["count"], "mean_steps_after_stop": round(sum(a["later_steps"] for a in stops) / max(1, len(stops)), 1),
                    "sessions": len(sessions), "prompts": total_prompts, "steps": total_steps, "mean_steps": round(total_steps / max(1, total_prompts), 1),
-                   "reread_per_prompt": int(sum(main_bill.values()) / max(1, total_prompts)), "startup_mean": int(sum(all_startups) / max(1, len(all_startups))),
+                   "reread_per_prompt": int(sum(main_bill.values()) / total_prompts) if total_prompts else None,
+                   "startup_mean": int(sum(all_startups) / len(all_startups)) if all_startups else None,
+                   "turn_choices": dict(Counter(a["record"].get("choice") for a in actions if a["kind"] == "turn_choice")),
                    "reads_skipped": by_kind["read_skipped"]["count"], "reads_retried": by_kind["read_retry"]["count"]},
         "by_kind": dict(by_kind),
         "since": since_install(),
         "all_time": all_time,
-        "per_day": [{"day": day, "paid": bill.get(day, 0), "prompts": prompts.get(day, 0), "reread_per_prompt": int(main_bill.get(day, 0) / max(1, prompts.get(day, 0))),
-                     "sessions": len(startups.get(day, [])), "startup": int(sum(startups.get(day, [])) / max(1, len(startups.get(day, [])))),
+        "per_day": [{"day": day, "paid": bill.get(day, 0), "prompts": prompts.get(day, 0), "reread_per_prompt": int(main_bill.get(day, 0) / prompts[day]) if prompts.get(day) else None,
+                     "sessions": len(startups.get(day, [])), "startup": int(sum(startups[day]) / len(startups[day])) if startups.get(day) else None,
+                     "kinds": dict(kind_counts.get(day, {})),
                      "cache_misses": dict(misses.get(day, {})), "cache_miss_tokens": miss_tokens.get(day, 0),
                      "hit_rate": round(cache_days[day]["read"] / cache_days[day]["input"], 4) if cache_days.get(day, {}).get("input") else None,
                      **{k: v for k, v in per_day[day].items() if v}} for day in days_seen],
@@ -770,8 +860,10 @@ def build(days):
         "budget_rows": list(reversed(budget_rows)),
         "actions": list(reversed(actions))[: constants.LENS_MAX_ACTIONS],
         "settings": {"warn_tokens": constants.CONTEXT_WARN_TOKENS, "hard_tokens": constants.CONTEXT_HARD_TOKENS, "turn_warn_steps": constants.turn_warn_steps(),
-                     "turn_stop_steps": constants.TURN_STOP_STEPS, "turn_budget_mode": constants.TURN_BUDGET_MODE, "comply_steps": constants.LENS_COMPLY_STEPS, "saving_kinds": SAVING_KINDS},
+                     "turn_stop_steps": constants.TURN_STOP_STEPS, "turn_budget_mode": constants.TURN_BUDGET_MODE, "comply_steps": constants.LENS_COMPLY_STEPS, "saving_kinds": SAVING_KINDS,
+                     "delegation_credit": "only when an Agent call is logged as allowed or a subagent transcript starts after it: the log records no outcome"},
     }
+    report["skipped"] = dict(SKIPPED)
     constants.LOG_DIR.mkdir(parents=True, exist_ok=True)
     constants.LENS_FILE.parent.mkdir(parents=True, exist_ok=True)
     tmp = constants.LENS_FILE.with_suffix(".tmp")

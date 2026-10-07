@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import sys
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -26,7 +27,7 @@ def checklist_folder(cwd):
     """Where a turn's checklist goes: the project's .kiasi/checkpoints when the project folder is writable, else the data folder."""
     if cwd and os.path.isdir(cwd) and os.access(cwd, os.W_OK):
         return Path(cwd) / constants.PROJECT_CHECKLIST_DIR
-    return constants.CHECKPOINT_DIR
+    return constants.TEMP_CHECKLIST_DIR
 
 
 def make_checklist_folder(path):
@@ -37,8 +38,8 @@ def make_checklist_folder(path):
         ignore = folder.parent / ".gitignore"
         if folder.parts[-2:] == constants.PROJECT_CHECKLIST_DIR.parts and not ignore.exists():
             ignore.write_text("*\n")
-    except OSError:
-        pass
+    except OSError as exc:
+        log_error("checklist_folder", path=str(folder), error=str(exc))
 
 
 def ensure_dirs():
@@ -50,6 +51,15 @@ def log_event(record):
     ensure_dirs()
     with open(constants.EVENT_LOG, "a") as fh:
         fh.write(json.dumps({"ts": now_iso(), **record}, ensure_ascii=False) + "\n")
+
+
+def log_error(kind, **fields):
+    """Record a failure that Kiasi works around, in the event log and on stderr. Never raises: it runs where a hook is already failing."""
+    sys.stderr.write(f"kiasi {kind}: {fields.get('error') or fields}\n")
+    try:
+        log_event({"event": "error", "kind": kind, **fields})
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def session_path(session_id):
@@ -66,7 +76,15 @@ def load_session(session_id):
 
 def save_session(session_id, state):
     ensure_dirs()
-    session_path(session_id).write_text(json.dumps(state, ensure_ascii=False))
+    path = session_path(session_id)
+    # Written aside and renamed in: a hook that reads while this writes sees the old state or the new, never half of it.
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(json.dumps(state, ensure_ascii=False))
+        os.replace(tmp, path)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def try_lock(handle):

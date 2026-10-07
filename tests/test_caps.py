@@ -82,6 +82,11 @@ class TestArchive(KiasiTestCase):
         caps.handle_archive({"path": path, "items": ["first", "second"]})
         text = open(path).read()
         self.assertIn("=== #2 ===\nsecond", text)
+        self.assertEqual(caps.handle_archive({"path": path, "items": ["again"]}), {"written": False})
+        self.assertIn("first", open(path).read())
+        other = caps.handle_archive_path({"session_id": "abcdef123456", "agent_id": "agent-9"})["path"]
+        self.assertNotEqual(other, path)
+        self.assertIn("agent9", other)
         outside = constants.DATA_DIR / "elsewhere.txt"
         caps.handle_archive({"path": str(outside), "items": ["x"]})
         self.assertFalse(outside.exists())

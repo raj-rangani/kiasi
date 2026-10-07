@@ -103,15 +103,15 @@ function todayVersus(d, key) {
   const today = days[days.length - 1] || {};
   const earlier = days.slice(0, -1).filter(day => day[key]);
   const mean = earlier.length ? earlier.reduce((sum, day) => sum + day[key], 0) / earlier.length : 0;
-  return { today: today[key] || 0, day: today.day || '', mean };
+  return { today: today[key] ?? null, day: today.day || '', mean };
 }
 
 function renderStats(d) {
   const t = d.totals;
   const c = d.cache;
   const span = `${d.days || d.per_day.length} days`;
-  const series = key => d.per_day.map(day => day[key] || 0);
-  const versus = row => row.mean ? `${esc(row.day.slice(5))}: ${fmtK(row.today)}, <em class="${row.today > row.mean ? 'bad' : 'good'}">${change(row.mean, row.today)}</em> against the ${fmtK(row.mean)} mean of earlier days` : 'no earlier day to compare with';
+  const series = key => d.per_day.filter(day => day[key] !== null).map(day => day[key] || 0);
+  const versus = row => row.mean && row.today == null ? `${esc(row.day.slice(5))}: no new session to compare` : row.mean ? `${esc(row.day.slice(5))}: ${fmtK(row.today)}, <em class="${row.today > row.mean ? 'bad' : 'good'}">${change(row.mean, row.today)}</em> against the ${fmtK(row.mean)} mean of earlier days` : 'no earlier day to compare with';
   const rates = c ? c.hit_days.map(day => day.rate) : [];
   const share = v => `${(v * 100).toFixed(1)}%`;
   const range = rates.length > 1 ? `${share(Math.min(...rates))} to ${share(Math.max(...rates))} per day · ` : '';

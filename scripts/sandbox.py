@@ -80,7 +80,7 @@ def run(args):
              f"full output saved at {saved}, search it with mcp__kiasi__search\n" + "\n".join(digest(text, saved)))
     log_saving("mcp__kiasi__run", len(text), len(shown), saved, args.command, args.session)
     print(shown)
-    return 0
+    return 1 if code else 0  # non-zero exit lets the hook flag the result as an error; the digest stays
 
 
 def distill(args):

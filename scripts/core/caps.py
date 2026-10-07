@@ -1,6 +1,7 @@
 import json
 import re
 import time
+import uuid
 from pathlib import Path
 
 from core import constants
@@ -172,14 +173,20 @@ def handle_tool_output(payload):
 
 def handle_archive_path(payload):
     ensure_dirs()
-    name = f"compact-{(payload.get('session_id') or 'unknown')[:8]}-{time.strftime('%Y%m%d-%H%M%S')}.txt"
+    agent = re.sub(r"[^A-Za-z0-9]", "", payload.get("agent_id") or "")[:8]
+    tag = f"-{agent}" if agent else ""
+    name = f"compact-{(payload.get('session_id') or 'unknown')[:8]}{tag}-{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}.txt"
     return {"path": str(constants.OUTPUT_DIR / name)}
 
 
 def handle_archive(payload):
     path = Path(payload.get("path") or "")
     if path.parent.resolve() != constants.OUTPUT_DIR.resolve():
-        return None
+        return {"written": False}
     ensure_dirs()
-    path.write_text("\n\n".join(f"=== #{index} ===\n{text}" for index, text in enumerate(payload.get("items") or [], 1)))
-    return None
+    try:
+        with open(path, "x") as handle:  # never replaces an earlier archive
+            handle.write("\n\n".join(f"=== #{index} ===\n{text}" for index, text in enumerate(payload.get("items") or [], 1)))
+    except OSError:
+        return {"written": False}
+    return {"written": True}

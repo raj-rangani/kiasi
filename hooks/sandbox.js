@@ -12,7 +12,7 @@ export function timeoutOf(input) {
 export function runArgv(root, input) {
   const command = String(input.command || '').trim();
   if (!command) return null;
-  return ['python3', `${root}/scripts/${SANDBOX_SCRIPT}`, 'run', '--command', command, '--timeout', String(timeoutOf(input))];
+  return ['python3', `${root}/scripts/${SANDBOX_SCRIPT}`, 'run', `--command=${command}`, '--timeout', String(timeoutOf(input))];
 }
 
 export function distillArgv(root, input) {
@@ -22,7 +22,7 @@ export function distillArgv(root, input) {
   const files = Array.isArray(input.files) ? input.files.map(String).filter(Boolean) : [];
   return [
     'python3', `${root}/scripts/${SANDBOX_SCRIPT}`, 'distill',
-    '--language', language, '--code', code, '--timeout', String(timeoutOf(input)),
+    '--language', language, `--code=${code}`, '--timeout', String(timeoutOf(input)),
     ...files.flatMap((file) => ['--file', file]),
   ];
 }
@@ -33,8 +33,8 @@ export function fetchArgv(root, input) {
   const find = Array.isArray(input.find) ? input.find.map(String).filter(Boolean) : [];
   return [
     'python3', `${root}/scripts/${SANDBOX_SCRIPT}`, 'fetch',
-    '--url', url, '--timeout', String(timeoutOf(input)),
-    ...find.flatMap((word) => ['--find', word]),
+    `--url=${url}`, '--timeout', String(timeoutOf(input)),
+    ...find.flatMap((word) => [`--find=${word}`]),
   ];
 }
 

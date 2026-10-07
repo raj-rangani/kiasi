@@ -2,6 +2,26 @@
 
 ### Unreleased
 
+- The status line script changed (a lock around its limits files). It is a copy under the data folder, so run `/kiasi:limits setup` again after updating to get it.
+- Parallel refused calls in one response count as one refused response, so a pause no longer ends the turn early. The third refused response still ends it.
+- The checklist written at the budget warning is the one a later stop, subagent brief or "continue" points at. It used to name the next free file, which did not exist.
+- Several sessions in one project can be paused at the same time; each keeps its own resume record (one file per session, old single records still read). A pause can be resumed only once.
+- Cleanup no longer removes the state or checklist of a session whose pause record is still live, so "continue" after a week still resumes.
+- A pause that cannot be written to disk is logged as an error and the budget still trips; the session state is saved before the record.
+- Identical reads in one response are all skipped, not just the first. A running subagent keeps its step count when the next prompt arrives, and a late batch for a cleared turn adds no step.
+- Session state, the daily history, the savings file and sync status are written to a temp file and renamed, so an overlapping dashboard build can no longer read a half-written file and shrink the history to the current window.
+- A bad value in `.kiasi.json` (such as `1e999`) falls back to that setting's default and is logged once, instead of silently switching off every hook in the project. A lock wait that gives up is logged too.
+- Checklists fall back to the system temp folder when the project is not writable; the old fallback under `~/.claude` is a path Claude Code refuses to write.
+- Compaction keeps a background subagent's hand-back report recoverable (whole up to the normal size, archived beyond it) instead of cutting it to 200 chars with no archive. Other injected messages are archived too.
+- Compaction recognises every Kiasi digest marker, so a tool output Kiasi already capped is not cut again; when a cut is unavoidable the pointer to the saved file is kept. Large strings inside nested tool inputs such as MultiEdit edits are shrunk like top-level ones.
+- Compaction archives are named per agent with a random suffix, never overwrite an earlier file, and a marker is only written when the archive write succeeded.
+- `mcp__kiasi__search` matches quoted phrases as phrases, and words starting with "-" work. `mcp__kiasi__run` flags a failing command as an error. The quiet npm/pip flag rewrite leaves quoted text alone.
+- Dashboard: a session resumed today no longer adds its old steps and bill to today; Budget and Overview bucket by the same local day (the stored history is recounted once from the oldest surviving transcript day); report windows are whole local days and per-day rule bars use untruncated counts.
+- Dashboard: delegation is credited only when the Agent call was allowed or a subagent transcript started after it; "repeat reviews questioned" is counted again; a skipped read that was retried, or a capped output that was read back, saves nothing; a subagent's skipped read is credited by its own steps.
+- Dashboard: days with no new session or no prompts show a dash instead of "0 k" and "−100%"; the steps-per-day and 300-step figures are main-session only; the top steps band follows the configured budget; the Turn budget rule shows what was chosen at the pause question; the other logged events appear in the counts.
+- Dashboard: a deleted transcript or a bad line no longer fails the whole build (skips are counted and shown); data older than two rebuild intervals is marked stale; a rebuild stuck in "running" is treated as failed and the banner names its start time.
+- Fixed: the outside-read cap and the Storage log on Windows paths; a notification title with `&` or `<`; cleanup of leftover compact and unknown-session output files.
+
 ## 0.4.0 - 2026-10-07
 
 - The dashboard counts what the rules did over whole days. Rule events were counted over the last 168 hours while the token bill was counted by calendar day, so the first day of a period showed its bill but none, or only part, of what the rules did that day.

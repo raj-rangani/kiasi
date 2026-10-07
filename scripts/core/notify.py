@@ -1,3 +1,4 @@
+import html
 import os
 import shutil
 import subprocess
@@ -37,7 +38,8 @@ def desktop_command(title, body):
         osascript = shutil.which("osascript")
         return [osascript, *(part for line in MACOS_SCRIPT for part in ("-e", line)), title, body] if osascript else None
     notify_send = shutil.which("notify-send")
-    return [notify_send, "-a", "Kiasi", "--", title, body] if notify_send else None
+    # notify-send reads Pango markup in the body, so a project name with & or < is escaped.
+    return [notify_send, "-a", "Kiasi", "--", title, html.escape(body, quote=False)] if notify_send else None
 
 
 def wanted():

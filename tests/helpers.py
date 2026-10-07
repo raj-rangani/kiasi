@@ -33,6 +33,7 @@ class KiasiTestCase(unittest.TestCase):
         constants.OUTPUT_DIR = data_dir / "outputs"
         constants.NOTES_DIR = data_dir / "notes"
         constants.CHECKPOINT_DIR = data_dir / "checkpoints"
+        constants.TEMP_CHECKLIST_DIR = data_dir / "tmp-checkpoints"
         constants.BUDGET_FILE = data_dir / "budget.json"
         constants.HISTORY_FILE = data_dir / "history.json"
         constants.SAVINGS_FILE = data_dir / "savings.json"

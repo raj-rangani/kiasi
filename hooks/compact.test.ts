@@ -108,8 +108,8 @@ test('the hook defers to the engine when the event carries no message list', asy
 });
 
 test('the search tool builds the script call from the flat tool arguments', () => {
-  expect(searchArgv('/root/plugin', { query: 'toolu_01 login  error', limit: 99 })).toEqual(['python3', '/root/plugin/scripts/search.py', 'toolu_01', 'login', 'error', '-n', String(SEARCH_MAX_LIMIT)]);
-  expect(searchArgv('/root/plugin', { query: 'x' })).toEqual(['python3', '/root/plugin/scripts/search.py', 'x', '-n', '8']);
+  expect(searchArgv('/root/plugin', { query: 'toolu_01 login  error', limit: 99 })).toEqual(['python3', '/root/plugin/scripts/search.py', '-n', String(SEARCH_MAX_LIMIT), '--', 'toolu_01', 'login', 'error']);
+  expect(searchArgv('/root/plugin', { query: 'x' })).toEqual(['python3', '/root/plugin/scripts/search.py', '-n', '8', '--', 'x']);
   expect(searchArgv('/root/plugin', { query: '  ' })).toBeNull();
 });
 
@@ -162,4 +162,60 @@ test('a text that only mentions the marker is cut, and one an earlier compaction
   expect(result.kept).toBe(true);
   expect(result.messages![1].toolUses[0].text.length).toBeLessThan(mention.length / 2);
   expect(result.messages![1].toolUses[1].text).toBe(earlier);
+});
+
+test('a subagent hand-back report is archived, not cut to a stub', () => {
+  const report = `<task-notification>\n${big('finding ', 3000)}\n</task-notification>`;
+  const injected = `<system-reminder>\n${big('rule ', 5000)}\n</system-reminder>`;
+  const messages = [
+    { role: 'user', text: 'task', toolUses: [] },
+    { role: 'user', text: report, toolUses: [] },
+    { role: 'user', text: injected, toolUses: [] },
+    { role: 'assistant', text: 'ok', toolUses: [{ tool_use_id: 't1', tool: 'Bash', input: { command: 'ls' }, text: big('row ', 40000) }] },
+    ...Array.from({ length: 10 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', text: `m${i}`, toolUses: [] })),
+  ];
+  const result = pruneTranscript(messages, '/d/outputs/compact-c.txt');
+  expect(result.kept).toBe(true);
+  expect(result.messages![1].text).toBe(report);
+  expect(result.messages![2].text).toContain('full text is #');
+  expect(result.archive!.items).toContain(injected);
+});
+
+test('every Kiasi last-line marker is left whole, and a cut text keeps its saved-at pointer', () => {
+  const digest = `${big('row ', 300)}\n[kiasi kept the first 1200 of 9000 chars of this output; full text saved at /d/outputs/x.txt, read it with offset if you need more]`;
+  const colour = `${big('row ', 300)}\n[kiasi removed colour codes from this output]`;
+  const pointer = '[kiasi trimmed 5 of 90 lines here; full output saved at /d/outputs/y.txt]';
+  const tailed = `${big('row ', 3000)}\n${pointer}\n${big('tail ', 1000)}`;
+  const messages = [
+    { role: 'user', text: 'task', toolUses: [] },
+    { role: 'assistant', text: 'ok', toolUses: [
+      { tool_use_id: 't1', tool: 'Bash', input: { command: 'a' }, text: digest },
+      { tool_use_id: 't2', tool: 'Bash', input: { command: 'b' }, text: colour },
+      { tool_use_id: 't3', tool: 'Bash', input: { command: 'c' }, text: tailed },
+    ] },
+    ...Array.from({ length: 10 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', text: `m${i}`, toolUses: [] })),
+  ];
+  const result = pruneTranscript(messages);
+  const uses = result.messages![1].toolUses;
+  expect(uses[0].text).toBe(digest);
+  expect(uses[1].text).toBe(colour);
+  expect(uses[2].text.endsWith(pointer)).toBe(true);
+});
+
+test('strings inside a MultiEdit edits array are shrunk too', () => {
+  const edits = [{ old_string: big('a', 5000), new_string: big('b', 5000) }];
+  const messages = [
+    { role: 'user', text: 'task', toolUses: [] },
+    { role: 'assistant', text: 'ok', toolUses: [{ tool_use_id: 't1', tool: 'MultiEdit', input: { file_path: '/f.py', edits }, text: 'done' }] },
+    ...Array.from({ length: 10 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', text: `m${i}`, toolUses: [] })),
+  ];
+  const result = pruneTranscript(messages);
+  const shrunk = result.messages![1].toolUses[0].input.edits[0];
+  expect(shrunk.old_string).toBe('[5000 chars]');
+  expect(shrunk.new_string).toBe('[5000 chars]');
+});
+
+test('a quoted phrase stays one search term', () => {
+  const argv = searchArgv('/r', { query: 'login "timeout waiting" -bash:' })!;
+  expect(argv.slice(argv.indexOf('--') + 1)).toEqual(['login', '"timeout waiting"', '-bash:']);
 });

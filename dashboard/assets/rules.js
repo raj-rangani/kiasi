@@ -5,19 +5,20 @@ const P = s => document.querySelector('#panel-content').querySelector(s);
 function renderSteps(d) {
   const hist = d.steps_hist;
   const warn = d.settings.turn_warn_steps, stop = d.settings.turn_stop_steps;
-  const prompts = hist.reduce((s, h) => s + h.prompts, 0) || 1;
+  const total = hist.reduce((s, h) => s + h.prompts, 0);
+  const prompts = total || 1;
   const bill = hist.reduce((s, h) => s + h.bill, 0) || 1;
   const top = Math.max(...hist.map(h => Math.max(h.prompts / prompts, h.bill / bill))) || 1;
   const bar = (cls, share, value) => `<span class="sb-bar ${cls}"><span class="track"><i style="width:${(share / top * 100).toFixed(1)}%"></i></span><b>${value}</b><small>${pct(share)}</small></span>`;
   const row = h => `<div class="sb-row${h.low >= stop ? ' bad' : h.low >= warn ? ' warn' : ''}"><span class="sb-band">${esc(h.label)}</span>
       ${bar('prompts', h.prompts / prompts, h.prompts.toLocaleString())}${bar('bill', h.bill / bill, fmtM(h.bill))}
       <span class="sb-each">${h.prompts ? fmtM(h.bill / h.prompts) : '–'}</span></div>`;
-  $('#steps-chart').innerHTML = `<div class="sb-head"><span>steps</span><span>prompts with a step · share of ${prompts.toLocaleString()}</span><span>re-read tokens · share of ${fmtM(bill)}</span><span>per prompt</span></div>${hist.map(row).join('')}`;
+  $('#steps-chart').innerHTML = `<div class="sb-head"><span>steps</span><span>prompts with a step · share of ${total.toLocaleString()}</span><span>re-read tokens · share of ${fmtM(bill)}</span><span>per prompt</span></div>${hist.map(row).join('')}`;
   $('#steps-legend').innerHTML = `<span><i class="sbp"></i>prompts</span><span><i class="sbb"></i>re-read tokens</span>${hist.some(h => h.low >= warn && h.low < stop) ? '<span><i class="amber"></i>warned</span>' : ''}<span><i class="red"></i>${stop}+ steps, the turn budget</span><span>both bars are the band's share of the total, on one scale</span>`;
   const over = hist.filter(h => h.low >= warn);
   const overPrompts = over.reduce((s, h) => s + h.prompts, 0);
   const overBill = over.reduce((s, h) => s + h.bill, 0);
-  $('#steps-note').textContent = `A band whose blue bar is longer than its grey bar costs more than its share of prompts. ${overPrompts.toLocaleString()} of ${prompts.toLocaleString()} prompts ran ${over.length ? over[0].low : stop}+ steps and carry ${pct(overBill / bill)} of the re-read tokens.`;
+  $('#steps-note').textContent = `A band whose blue bar is longer than its grey bar costs more than its share of prompts. ${overPrompts.toLocaleString()} of ${total.toLocaleString()} prompts ran ${over.length ? over[0].low : stop}+ steps and carry ${pct(overBill / bill)} of the re-read tokens.`;
 }
 
 let openRule = '';
@@ -39,10 +40,11 @@ function facts(d, rule) {
   }
   if (rule.key === 'turn') {
     const pauses = d.budget_rows.filter(b => b.kind === 'turn_stop');
+    const choices = Object.entries(d.totals.turn_choices || {}).map(([k, v]) => `${v} ${k}`).join(', ');
     const complied = pauses.filter(b => b.after != null && b.after < d.settings.comply_steps).length;
     const over = n('turn_over') ? ` · ${n('turn_over')} over budget in warn mode` : '';
     const mode = d.settings.turn_budget_mode && d.settings.turn_budget_mode !== 'pause' ? ` · budget set to ${d.settings.turn_budget_mode}` : '';
-    return `${n('turn_warn')} warnings · ${n('turn_stop')} pauses (budget ${d.settings.turn_stop_steps} steps, warning at ${d.settings.turn_warn_steps})${pauses.length ? `, ${n('turn_resume')} resumed, ${complied} complied, mean ${d.totals.mean_steps_after_stop} steps after` : ''}${over}${mode}`;
+    return `${n('turn_warn')} warnings · ${n('turn_stop')} pauses (budget ${d.settings.turn_stop_steps} steps, warning at ${d.settings.turn_warn_steps})${pauses.length ? `, ${n('turn_resume')} resumed, ${complied} complied, mean ${d.totals.mean_steps_after_stop} steps after` : ''}${choices ? ` · at the pause question: ${choices}` : ''}${over}${mode}`;
   }
   if (rule.key === 'reread') return `${n('reread_check')} shown · ${n('delegated')} delegated`;
   if (rule.key === 'paste') return `${n('paste_saved')} saved · ${n('paste_refused')} refused`;
@@ -52,13 +54,13 @@ function facts(d, rule) {
 function ruleDays(d) {
   const days = d.per_day.map(p => p.day).slice(-RULE_STRIP_DAYS);
   const perRule = {};
-  d.actions.forEach(a => {
-    const rule = RULES.find(r => r.kinds.includes(a.kind));
+  // from the per-day counts of the report: the actions list is cut, the counts are not
+  d.per_day.forEach(p => Object.entries(p.kinds || {}).forEach(([kind, n]) => {
+    const rule = RULES.find(r => r.kinds.includes(kind));
     if (!rule) return;
     const row = perRule[rule.key] = perRule[rule.key] || {};
-    const day = a.ts.slice(0, 10);
-    row[day] = (row[day] || 0) + 1;
-  });
+    row[p.day] = (row[p.day] || 0) + n;
+  }));
   return { days, perRule };
 }
 

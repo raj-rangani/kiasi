@@ -4,12 +4,81 @@ import os
 import sys
 import time
 from collections import Counter, defaultdict
+from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core import constants
+from core.events import unlock, wait_lock
 
 SYNTHETIC_MODEL = "<synthetic>"
+SKIPPED = Counter()  # what a build could not read: files that vanished, JSON lines that are no event, unreadable timestamps
+_SKIPPED_KEYS = set()  # a build reads a file more than once; each unreadable thing counts once
+
+
+def skip(kind, key):
+    if (kind, key) not in _SKIPPED_KEYS:
+        _SKIPPED_KEYS.add((kind, key))
+        SKIPPED[kind] += 1
+
+
+def reset_skips():
+    SKIPPED.clear()
+    _SKIPPED_KEYS.clear()
+
+
+def read_lines(path):
+    """The JSON objects of a transcript. A file deleted since the glob, a line that is no JSON object and a blank
+    line are skipped; all but the blank lines are counted (skip), so the build never fails on them."""
+    try:
+        handle = open(path, errors="replace")
+    except OSError:
+        skip("files", str(path))
+        return
+    with handle:
+        for number, line in enumerate(handle):
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                entry = None
+            if isinstance(entry, dict):
+                yield entry
+            elif line.strip():
+                skip("lines", (str(path), number))
+
+
+def write_atomic(path, text):
+    """Write beside the file, then replace it: a reader sees the old file or the new one, never half of it."""
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(text)
+    os.replace(tmp, path)
+
+
+@contextmanager
+def file_lock(path, seconds=120):
+    """Hold path's lock file while a build reads, merges and writes path, so two builds (the dashboard thread and Sync) cannot lose each other's rows."""
+    try:
+        handle = open(path.with_name(path.name + ".lock"), "a")
+    except OSError:
+        yield
+        return
+    with handle:
+        held = wait_lock(handle, seconds)
+        try:
+            yield
+        finally:
+            if held:
+                unlock(handle)
+
+
+def local_day(t):
+    return time.strftime("%Y-%m-%d", time.localtime(t))
+
+
+def window_start(days):
+    """Epoch of local midnight `days` days ago: every report counts whole local days from here."""
+    return time.mktime(time.strptime(local_day(time.time() - days * 86400), "%Y-%m-%d"))
 
 
 def first_ask(entry, asked):
@@ -30,10 +99,17 @@ USAGE_KEYS = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_t
 
 
 def transcript_files(days):
-    cutoff = time.time() - days * 86400
+    cutoff = window_start(days)
     root = str(constants.TRANSCRIPT_ROOT)
-    main = [f for f in glob.glob(f"{root}/*/*.jsonl") if os.path.getmtime(f) > cutoff]
-    subs = [f for f in glob.glob(f"{root}/*/*/subagents/*.jsonl") + glob.glob(f"{root}/*/subagents/*.jsonl") if os.path.getmtime(f) > cutoff]
+
+    def fresh(path):
+        try:
+            return os.path.getmtime(path) > cutoff
+        except OSError:  # deleted since the glob
+            skip("files", path)
+            return False
+    main = [f for f in glob.glob(f"{root}/*/*.jsonl") if fresh(f)]
+    subs = [f for f in glob.glob(f"{root}/*/*/subagents/*.jsonl") + glob.glob(f"{root}/*/subagents/*.jsonl") if fresh(f)]
     return main, subs
 
 
@@ -44,12 +120,12 @@ def install_day():
             for line in fh:
                 if line.strip():
                     return json.loads(line).get("ts", "")[:10] or None
-    except (OSError, ValueError):
+    except (OSError, ValueError, AttributeError):
         return None
     return None
 
 
-HISTORY_COUNTING = 2  # 2: the messages a pruned compaction writes back are not steps
+HISTORY_COUNTING = 3  # 2: the messages a pruned compaction writes back are not steps; 3: days are local days, not UTC days
 HISTORY_RECOUNT_DAYS = 45
 
 
@@ -67,7 +143,14 @@ def merge_history(rows, days):
 
     Days the window covers in full replace the stored row; the partly covered first day and
     days outside the window keep the stored row unless the new one counts more steps. A file written
-    under an older HISTORY_COUNTING is recounted once, from the transcripts that still exist."""
+    under an older HISTORY_COUNTING is recounted once, from the transcripts that still exist: it replaces every
+    stored day from the oldest surviving transcript day on; older days, whose transcripts are gone, keep their
+    stored row as it was (UTC-keyed, replays counted)."""
+    with file_lock(constants.HISTORY_FILE):
+        return _merge_history(rows, days)
+
+
+def _merge_history(rows, days):
     try:
         stored_file = json.loads(constants.HISTORY_FILE.read_text())
         history = {r["day"]: r for r in stored_file["per_day"]}
@@ -75,14 +158,16 @@ def merge_history(rows, days):
         stored_file, history = {}, {}
     if history and stored_file.get("counting") != HISTORY_COUNTING:
         rows, days = day_rows(scan(HISTORY_RECOUNT_DAYS)[0]), HISTORY_RECOUNT_DAYS
-    first_full_day = time.strftime("%Y-%m-%d", time.gmtime(time.time() - (days - 1) * 86400))
+        if rows:
+            history = {day: row for day, row in history.items() if day < rows[0]["day"]}
+    first_full_day = local_day(time.time() - (days - 1) * 86400)
     for row in rows:
         stored = history.get(row["day"])
         steps = row["turns"] + row["sub_turns"]
         if row["day"] >= first_full_day or stored is None or steps >= stored.get("turns", 0) + stored.get("sub_turns", 0):
             history[row["day"]] = row
     kept = [history[day] for day in sorted(history)]
-    constants.HISTORY_FILE.write_text(json.dumps({"updated": time.strftime("%Y-%m-%dT%H:%M:%S"), "counting": HISTORY_COUNTING, "per_day": kept}, indent=1))
+    write_atomic(constants.HISTORY_FILE, json.dumps({"updated": time.strftime("%Y-%m-%dT%H:%M:%S"), "counting": HISTORY_COUNTING, "per_day": kept}, indent=1))
     return kept
 
 
@@ -91,7 +176,15 @@ def project_of(path):
 
 
 def day_of(entry):
-    return (entry.get("timestamp") or "")[:10]
+    """The local day of an entry's timestamp (the day the user saw it on); "" for none or an unreadable one, which is counted."""
+    stamp = entry.get("timestamp")
+    if not stamp:
+        return ""
+    try:
+        return local_day(datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp())
+    except (ValueError, TypeError, AttributeError, OverflowError, OSError):
+        skip("timestamps", stamp)
+        return ""
 
 
 def blank_day():
@@ -125,11 +218,7 @@ def scan(days):
         turn_reread = 0
         first_day = None
         asked, results = set(), set()
-        for line in open(path, errors="replace"):
-            try:
-                entry = json.loads(line)
-            except ValueError:
-                continue
+        for entry in read_lines(path):
             kind = entry.get("type")
             message = entry.get("message") or {}
             if kind == "assistant":
@@ -202,11 +291,7 @@ def scan(days):
                              "steps_per_prompt": round(turns / max(1, session_prompts), 1)})
     for path in subs:
         seen = set()
-        for line in open(path, errors="replace"):
-            try:
-                entry = json.loads(line)
-            except ValueError:
-                continue
+        for entry in read_lines(path):
             if entry.get("type") != "assistant":
                 continue
             usage = (entry.get("message") or {}).get("usage") or {}
@@ -222,7 +307,7 @@ def scan(days):
 
 
 def kiasi_actions(days):
-    cutoff = time.time() - days * 86400
+    cutoff = window_start(days)
     actions = Counter()
     saved_chars = 0
     try:
@@ -231,10 +316,12 @@ def kiasi_actions(days):
                 record = json.loads(line)
             except ValueError:
                 continue
+            if not isinstance(record, dict):
+                continue
             try:
                 if time.mktime(time.strptime(record["ts"], "%Y-%m-%dT%H:%M:%S")) < cutoff:
                     continue
-            except (KeyError, ValueError):
+            except (KeyError, ValueError, TypeError):
                 continue
             event = record.get("event")
             if event == "cap":
@@ -256,10 +343,10 @@ def kiasi_actions(days):
                 actions["subagents over budget" if record.get("subagent") else "turns over budget"] += 1
             elif event == "turn_resume":
                 actions["pauses resumed" if record.get("mode") == "resume" else "pauses skipped"] += 1
+            elif event == "agent" and record.get("decision") == "ask":  # logged before the outcome, and with a model set as well
+                actions["repeat reviews questioned"] += 1
             elif event == "agent" and record.get("model_set"):
                 actions["subagent models set"] += 1
-            elif event == "agent" and record.get("decision") == "ask":
-                actions["repeat reviews questioned"] += 1
             elif event == "compact":
                 actions["compactions instructed"] += 1
             elif event == "stop" and record.get("note_written"):
@@ -270,6 +357,7 @@ def kiasi_actions(days):
 
 
 def build(days):
+    reset_skips()
     per_day, sessions, projects, big_outputs, pastes, paste_chars, compactions, steps = scan(days)
     days_out = day_rows(per_day)
     total_main = Counter()
@@ -297,7 +385,8 @@ def build(days):
     }
     constants.LOG_DIR.mkdir(parents=True, exist_ok=True)
     report["history_days"] = len(merge_history(days_out, days))
-    constants.BUDGET_FILE.write_text(json.dumps(report, indent=1))
+    report["skipped"] = dict(SKIPPED)
+    write_atomic(constants.BUDGET_FILE, json.dumps(report, indent=1))
     return report
 
 

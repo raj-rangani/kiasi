@@ -55,7 +55,8 @@ def _run_sync():
         run_tree([sys.executable, str(SYNC_SCRIPT), str(constants.BUDGET_DAYS)], timeout=180)
     except Exception as exc:  # noqa: BLE001
         DATA_DIR.mkdir(parents=True, exist_ok=True)
-        (DATA_DIR / "sync.json").write_text(json.dumps({"state": "failed", "error": str(exc)}))
+        stamp = time.strftime("%Y-%m-%dT%H:%M:%S")
+        (DATA_DIR / "sync.json").write_text(json.dumps({"state": "failed", "trigger": "dashboard", "started": stamp, "finished": stamp, "error": str(exc)}))
 
 
 def periodic_rebuild():

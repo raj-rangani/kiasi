@@ -10,6 +10,7 @@ to statusline-chain.json, so it must not import anything from the plugin.
 """
 import json
 import os
+from contextlib import contextmanager
 import re
 import subprocess
 import sys
@@ -111,19 +112,46 @@ def prune_history(path, now):
     os.replace(tmp, path)
 
 
+@contextmanager
+def limits_lock(target_dir):
+    """One status line at a time reads the last limits, appends what changed and replaces the file, or two sessions log
+    the same reading twice. Waits at most a second, and runs unlocked where the file system cannot lock."""
+    handle = None
+    try:
+        import fcntl
+        handle = open(target_dir / ".limits.lock", "a")
+        deadline = time.monotonic() + 1
+        while True:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    break
+                time.sleep(0.01)
+    except (ImportError, OSError):
+        pass
+    try:
+        yield
+    finally:
+        if handle:
+            handle.close()
+
+
 def save_rate_limits(payload, target_dir):
     limits = payload.get("rate_limits")
     if not isinstance(limits, dict) or not limits:
         return
     now = int(time.time())
-    try:
-        append_history(limits, target_dir, now)
-    except (OSError, TypeError, ValueError):
-        pass
-    fd, tmp = tempfile.mkstemp(prefix=".rate-limits.", dir=target_dir)
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        json.dump({"updated": now, "rate_limits": limits}, handle)
-    os.replace(tmp, target_dir / RATE_LIMITS_NAME)
+    with limits_lock(target_dir):
+        try:
+            append_history(limits, target_dir, now)
+        except (OSError, TypeError, ValueError):
+            pass
+        fd, tmp = tempfile.mkstemp(prefix=".rate-limits.", dir=target_dir)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump({"updated": now, "rate_limits": limits}, handle)
+        os.replace(tmp, target_dir / RATE_LIMITS_NAME)
 
 
 def paint(text, tone):

@@ -1,4 +1,5 @@
 import os
+import tempfile
 from pathlib import Path
 
 # PLUGIN_ROOT is the installed plugin's code directory (read-only, changes on update).
@@ -52,8 +53,10 @@ PASTE_DIR = LOG_DIR / "pastes"
 OUTPUT_DIR = LOG_DIR / "outputs"
 NOTES_DIR = LOG_DIR / "notes"
 CHECKPOINT_DIR = LOG_DIR / "checkpoints"
+# Where a checklist goes when there is no writable project folder: Claude Code accepts a Write under the system temp folder.
+TEMP_CHECKLIST_DIR = Path(tempfile.gettempdir()) / "kiasi" / "checkpoints"
 # Turn checklists go in the project, in a folder git ignores: Claude Code refuses Claude's writes anywhere under
-# ~/.claude, this data folder included, as edits to a sensitive file. CHECKPOINT_DIR is for a session without one.
+# ~/.claude, this data folder included, as edits to a sensitive file. TEMP_CHECKLIST_DIR is for a session without one.
 PROJECT_CHECKLIST_DIR = Path(".kiasi") / "checkpoints"
 BUDGET_FILE = LOG_DIR / "budget.json"
 # Every per-day row budget.py ever built, merged on each build so a day outlives the report window and
@@ -120,6 +123,8 @@ PAUSE_CHOICES = {"continue": "Continue here", "subagent": "Hand to a subagent", 
 NOTIFY_TITLE_ENV = "KIASI_NOTIFY_TITLE"
 NOTIFY_BODY_ENV = "KIASI_NOTIFY_BODY"
 TURN_EXEMPT_TOOLS = {"Agent", "Write", "AskUserQuestion", "TodoWrite", "TaskCreate", "TaskUpdate"}
+# At a pause these pass only for the turn's own checklist, so it is brought up to date instead of written blind.
+TURN_CHECKLIST_TOOLS = {"Read", "Edit", "MultiEdit"}
 # The first prompt after a pause resumes it from the checklist when it is a plain "continue" (or resume, go on, go
 # ahead, carry on, keep going, proceed); any other prompt is only told where the checklist is.
 RESUME_PATTERN = r"^((ok|okay|yes|sure|please)[\s,.!]+)*(continue|resume|go on|go ahead|carry on|keep going|proceed)\b.{0,80}$"
@@ -171,7 +176,7 @@ CAP_WEB_CHARS = 8_000
 CAP_WEB_HEAD_CHARS = 6_000
 CAP_OUTSIDE_READ_CHARS = 12_000
 CAP_OUTSIDE_READ_HEAD_CHARS = 8_000
-OUTSIDE_READ_PATTERN = r"(/\.claude/projects/|^/tmp/|\.(log|jsonl)$)"
+OUTSIDE_READ_PATTERN = r"([\\/]\.claude[\\/]projects[\\/]|^/tmp/|[\\/]AppData[\\/]Local[\\/]Temp[\\/]|\.(log|jsonl)$)"
 CAP_MCP_CHARS = 8_000
 CAP_MCP_HEAD_CHARS = 6_000
 MCP_CAP_EXEMPT_PREFIX = "mcp__kiasi__"
@@ -224,6 +229,8 @@ PLUGIN_QUIET_FIELDS = ("session_id", "before", "after", "applied")
 PLUGIN_COMPACT_FIELDS = ("session_id", "trigger", "agent_id", "mode", "level", "messages", "tokens_before", "tokens_after", "archived")
 COMPACT_EDITED_FILES = 20
 NOTE_MAX_AGE_DAYS = 14
+# Call ids a turn keeps, to tell a PostToolBatch of a cleared turn from one of the current turn.
+TURN_CALLS_KEPT = 200
 NOTE_MIN_INTERVAL_MINUTES = 10
 NOTE_MESSAGE_HEAD_CHARS = 400
 
@@ -282,7 +289,7 @@ ROUTE_WEB_REASON = ("kiasi: fetch {url} with mcp__kiasi__fetch instead (url, plu
                     "If you need WebFetch's summarised answer, repeat the same WebFetch call and it will go through.")
 
 SEARCH_DB = LOG_DIR / "search.db"
-SEARCH_DIRS = (OUTPUT_DIR, PASTE_DIR, NOTES_DIR, CHECKPOINT_DIR)
+SEARCH_DIRS = (OUTPUT_DIR, PASTE_DIR, NOTES_DIR, CHECKPOINT_DIR, TEMP_CHECKLIST_DIR)
 SEARCH_SUFFIXES = {".txt", ".md", ".jsonl", ".json"}
 SEARCH_MAX_FILE_CHARS = 1_000_000
 SEARCH_RESULTS = 8
@@ -350,7 +357,7 @@ STORAGE_LIST_ROWS = 200
 STORAGE_HISTORY_ROWS = 100
 # Only files whose names Kiasi itself writes are ever touched; anything else in these folders stays.
 CLEANUP_PATTERNS = {
-    "outputs": r"(toolu_[A-Za-z0-9_-]+|compact-[0-9a-f]{8}-\d{8}-\d{6}|(run|distill|fetch)-\d{8}-\d{6}-\d+)\.txt",
+    "outputs": r"(toolu_[A-Za-z0-9_-]+|compact-([0-9a-f]{8}|unknown)(-[A-Za-z0-9]+)?-\d{8}-\d{6}(-[0-9a-f]{6})?|unknown-\d{8}-\d{6}(-[0-9a-f]{6})?|(run|distill|fetch)-\d{8}-\d{6}-\d+)\.txt",
     "checkpoints": r"[0-9a-f]{8}-\d+(-\d+)?\.md",
     "pastes": r"[0-9a-f-]{36}-\d+\.txt",
     "sessions": r"[0-9a-f-]{36}\.(json|lock)",
@@ -370,7 +377,7 @@ SUBAGENT_RULE_PREFIX = "- Each subagent has its own budget of"
 TURN_RULES = {
     "pause": ("- Every turn has a budget of {steps} steps (the tool calls of one response are one step, so parallel calls count once) or {tokens} re-read tokens. At the warning, about {margin} steps before the pause, "
               "finish the item in progress, write the remaining work as a checklist to the path kiasi names, then ask the developer the question kiasi gives "
-              "(continue here, hand to a subagent, or stop) and do what they choose; never choose for them. At the pause every call except Write, Agent and that question is refused: write the checklist and ask it. "
+              "(continue here, hand to a subagent, or stop) and do what they choose; never choose for them. At the pause every call except Agent, that question and the checklist's own Write, Read and Edit is refused: bring the checklist up to date and ask it. "
               "When kiasi gives no question, end the turn or hand the checklist to one general-purpose subagent; at a pause, end with its notice, so the developer knows how to resume."),
     "warn": ("- Every turn has a budget of {steps} steps (the tool calls of one response are one step, so parallel calls count once) or {tokens} re-read tokens, which kiasi reports but does not enforce. At the warning, "
              "about {margin} steps before the budget, finish the item in progress, write the remaining work as a checklist to the path kiasi names, "
@@ -449,22 +456,46 @@ def turn_warn_tokens():
 
 def apply_project(cwd):
     """Overlay .kiasi.json from the project root onto this module. Fail-open."""
-    applied = {}
+    applied, bad = {}, []
     try:
         import json as _json
         raw = _json.loads((Path(cwd) / PROJECT_FILE_NAME).read_text(encoding="utf-8"))
         for key, name in PROJECT_KEYS.items():
             value = raw.get(key)
-            if isinstance(value, (int, float)) and int(value) > 0:
-                globals()[name] = int(value)
-                applied[name] = int(value)
+            try:
+                if isinstance(value, (int, float)) and int(value) > 0:
+                    globals()[name] = int(value)
+                    applied[name] = int(value)
+            except (OverflowError, ValueError):  # 1e999 or nan: this key keeps its default
+                bad.append(key)
         for key, (name, choices) in PROJECT_CHOICES.items():
             value = str(raw.get(key, "")).strip().lower()
             if value in choices:
                 globals()[name] = applied[name] = value
-    except (OSError, ValueError, TypeError):
+    except (OSError, ValueError, TypeError, AttributeError):
         pass
+    if bad:
+        report_bad_settings(cwd, bad)
     return applied
+
+
+def report_bad_settings(cwd, keys):
+    """Log each setting of a project that could not be used once, so that a default kept silently can be found. Never raises."""
+    try:
+        import json as _json
+        from core.events import log_error
+        seen_file = LOG_DIR / "bad-settings.json"
+        try:
+            seen = _json.loads(seen_file.read_text())
+        except (OSError, ValueError):
+            seen = []
+        fresh = [f"{cwd}:{key}" for key in keys if f"{cwd}:{key}" not in seen]
+        if fresh:
+            seen_file.parent.mkdir(parents=True, exist_ok=True)
+            seen_file.write_text(_json.dumps(seen[-200:] + fresh))
+            log_error("bad_setting", project=cwd, settings=keys)
+    except Exception:  # noqa: BLE001  a setting that cannot be reported must not stop the hook
+        pass
 SYNC_TIMEOUT_SECONDS = 120
 
 # The dashboard answers only requests addressed to the loopback names it listens on,

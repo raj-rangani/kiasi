@@ -3,6 +3,8 @@ import {
   INPUT_FIELD_KEEP_CHARS, CONTENT_FIELDS, CHARS_PER_TOKEN, MAX_KEEP_TOKENS, MAX_KEEP_RATIO, MARKER_PREFIX, SIZE_MARKER_PATTERN, ARCHIVE_MIN_CHARS,
 } from './constants.js';
 
+const TASK_NOTIFICATION_PATTERN = /^\s*<task-notification/;
+
 const marker = (dropped, ref) => (ref
   ? `${MARKER_PREFIX} ${dropped} chars at compaction; full text is #${ref.index} in ${ref.path}]`
   : `${MARKER_PREFIX} ${dropped} chars at compaction]`);
@@ -16,15 +18,25 @@ function archived(archive, text, dropped) {
   return { index: archive.items.length, path: archive.path };
 }
 
+// Every last-line marker Kiasi writes starts "[kiasi " ("pruned", "kept the first", "trimmed", "removed colour codes").
+const ANY_MARKER_PREFIX = '[kiasi ';
+const POINTER_PATTERN = /^\[kiasi .*saved at /;
+
 function alreadyCut(text) {
   const end = text.trimEnd();
-  return end.slice(end.lastIndexOf('\n') + 1).startsWith(MARKER_PREFIX);
+  return end.slice(end.lastIndexOf('\n') + 1).startsWith(ANY_MARKER_PREFIX);
+}
+
+// A saved-at line in the dropped tail is the only path to the full output, so it survives the cut.
+function pointerIn(tail) {
+  return tail.split('\n').find((line) => POINTER_PATTERN.test(line.trim())) || null;
 }
 
 function head(text, keep, archive) {
   if (text.length <= keep || alreadyCut(text)) return text;
   const dropped = text.length - keep;
-  return `${text.slice(0, keep)}\n${marker(dropped, archived(archive, text, dropped))}`;
+  const pointer = pointerIn(text.slice(keep));
+  return `${text.slice(0, keep)}\n${marker(dropped, archived(archive, text, dropped))}${pointer ? `\n${pointer.trim()}` : ''}`;
 }
 
 function charsOfMessage(message) {
@@ -37,14 +49,16 @@ export function charsOf(messages) {
   return messages.reduce((sum, message) => sum + charsOfMessage(message), 0);
 }
 
+// Strings nested in arrays and objects (a MultiEdit's edits) shrink like top-level ones; the field name decides content or not.
+function pruneValue(key, value, level) {
+  if (typeof value === 'string') return CONTENT_FIELDS.includes(key) ? sizeMarker(value) : head(value, INPUT_FIELD_KEEP_CHARS, level.archive);
+  if (Array.isArray(value)) return value.map((item) => pruneValue(key, item, level));
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([name, item]) => [name, pruneValue(name, item, level)]));
+  return value;
+}
+
 function pruneInput(input, level) {
-  const pruned = {};
-  for (const [key, value] of Object.entries(input || {})) {
-    if (typeof value !== 'string') pruned[key] = value;
-    else if (CONTENT_FIELDS.includes(key)) pruned[key] = sizeMarker(value);
-    else pruned[key] = head(value, INPUT_FIELD_KEEP_CHARS, level.archive);
-  }
-  return pruned;
+  return Object.fromEntries(Object.entries(input || {}).map(([key, value]) => [key, pruneValue(key, value, level)]));
 }
 
 function pruneResult(text, isError, level) {
@@ -52,7 +66,8 @@ function pruneResult(text, isError, level) {
 }
 
 function pruneUserText(text, level) {
-  if (INJECTED_PATTERN.test(text)) return head(text, INJECTED_HEAD_CHARS);
+  // A subagent's hand-back report is the only copy of its findings: it is cut like any long message and archived, never reduced to a stub.
+  if (INJECTED_PATTERN.test(text) && !TASK_NOTIFICATION_PATTERN.test(text)) return head(text, INJECTED_HEAD_CHARS, level.archive);
   if (text.length > (level.userKeepChars ?? USER_TEXT_KEEP_CHARS)) return head(text, USER_TEXT_HEAD_CHARS, level.archive);
   return text;
 }

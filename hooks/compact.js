@@ -14,8 +14,8 @@ async function runKiasi($, eventName, record) {
   }
 }
 
-async function archivePath($, session) {
-  const result = await runKiasi($, ARCHIVE_PATH_EVENT_NAME, { session_id: session });
+async function archivePath($, session, agentId) {
+  const result = await runKiasi($, ARCHIVE_PATH_EVENT_NAME, { session_id: session, agent_id: agentId || null });
   try {
     return JSON.parse(result?.stdout || '{}').path || null;
   } catch (error) {
@@ -35,7 +35,7 @@ export function registerCompact(on) {
   on('session.compact', async ($, e, next) => {
     if (!Array.isArray(e.messages)) return next(e);
     const session = await sessionId($);
-    const result = pruneTranscript(e.messages, await archivePath($, session));
+    let result = pruneTranscript(e.messages, await archivePath($, session, e.agentId));
     const record = {
       session_id: session,
       trigger: e.trigger,
@@ -47,7 +47,23 @@ export function registerCompact(on) {
       tokens_after: tokens(result.after),
       archived: result.archive ? result.archive.items.length : 0,
     };
-    if (result.archive?.items.length) await runKiasi($, ARCHIVE_EVENT_NAME, { path: result.archive.path, items: result.archive.items });
+    if (result.archive?.items.length) {
+      const wrote = await runKiasi($, ARCHIVE_EVENT_NAME, { path: result.archive.path, items: result.archive.items });
+      let written = false;
+      try {
+        written = JSON.parse(wrote?.stdout || '{}').written === true;
+      } catch (error) {
+        written = false;
+      }
+      // Markers must never name a file that was not written: prune again with no archive, so none is named.
+      if (!written) {
+        result = pruneTranscript(e.messages, null);
+        record.archived = 0;
+        record.tokens_after = tokens(result.after);
+        record.level = result.level;
+        record.mode = result.kept ? 'prune' : 'summary';
+      }
+    }
     await runKiasi($, LOG_EVENT_NAME, record);
     if (!result.kept) return next(e);
     if (e.trigger !== 'precompute') {

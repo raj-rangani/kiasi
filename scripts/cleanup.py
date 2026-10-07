@@ -152,7 +152,7 @@ def checklist_folders():
 def managed_folders():
     """(folder name, path, idle days) for every per-session folder, the project checklist folders included."""
     rows = [(name, folder, days) for name, (folder, days) in folders().items()]
-    return rows + [("checkpoints", folder, constants.CLEANUP_IDLE_DAYS) for folder in checklist_folders()]
+    return rows + [("checkpoints", folder, constants.CLEANUP_IDLE_DAYS) for folder in [*checklist_folders(), constants.TEMP_CHECKLIST_DIR]]
 
 
 def owner(name, path, owners):
@@ -186,16 +186,32 @@ def newest_note(path):
         return None
 
 
+def live_pauses(now):
+    """(session ids, checklist paths) of the pause records a resume can still use. Their state and checklist stay as long as the record."""
+    sessions, checklists = set(), set()
+    for path in constants.NOTES_DIR.glob("*.paused*.json"):
+        try:
+            record = json.loads(path.read_text())
+            at = parse_ts(record["at"])
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            continue
+        if at and now - at <= constants.NOTE_MAX_AGE_DAYS * DAY:
+            sessions.add(record.get("session_id") or "")
+            checklists.add(record.get("checkpoint"))
+    return sessions, checklists
+
+
 def schedule(current):
     """(folder name, path, size, last used, due time) for every file cleanup manages, outside the current session."""
     seen = activity_index()
+    paused_sessions, paused_checklists = live_pauses(time.time())
     owners = output_owners()
     recent = constants.CLEANUP_RECENT_HOURS * 3600
     rows = []
     for name, folder, days in managed_folders():
         for path, stat in own_files(name, folder):
             session = owner(name, path, owners)
-            if same_session(session, current):
+            if same_session(session, current) or str(path) in paused_checklists or any(same_session(session, paused) for paused in paused_sessions):
                 continue
             last = max(last_used(stat), session_seen(session, seen))
             rows.append((name, path, stat.st_size, last, last + max(days * DAY, recent)))
@@ -422,11 +438,11 @@ def main():
             with open(constants.EVENT_LOG, "a") as fh:
                 fh.write(json.dumps({"ts": result["ts"], "event": constants.CLEANUP_EVENT_NAME,
                                      **{k: result.get(k) for k in ("mode", "candidates", "moved", "purged", "size", "error") if k in result}}) + "\n")
+    if "error" in result:
+        print(f"cleanup failed: {result['error']}", file=sys.stderr if args.quiet else sys.stdout)
+        return 1
     if args.quiet:
         return 0
-    if "error" in result:
-        print(f"cleanup failed: {result['error']}")
-        return 1
     for name, path, size, reason in found:
         print(f"{'would move' if result['mode'] == 'report' else 'moved'}  {size:>9,}  {reason:<22}  {path}")
     print(f"mode {result['mode']}: {result['candidates']} files ({result['candidate_bytes'] / 1e6:.2f} MB) "
