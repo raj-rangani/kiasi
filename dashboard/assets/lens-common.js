@@ -2,8 +2,8 @@ const $ = s => document.querySelector(s);
 const est = key => `<abbr class="est" title="${esc(EST_TIPS[key] || EST_TIPS.avoided)}">${EST_TAG}</abbr>`;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtM = n => n >= 1e6 ? `${(n / 1e6).toFixed(n >= 1e8 ? 0 : 1)} M` : n >= 1000 ? `${Math.round(n / 1000)} k` : String(Math.round(n || 0));
-const fmtK = n => `${Math.round(n / 1000)} k`;
-const pct = x => `${Math.round(x * 100)}%`;
+const fmtK = n => n == null ? '–' : `${Math.round(n / 1000)} k`;
+const pct = x => x == null ? '–' : `${Math.round(x * 100)}%`;
 const label = k => KIND_LABELS[k] || k;
 const stamp = ts => String(ts || '').replace('T', ' ');
 const read = k => { try { return localStorage.getItem(k); } catch { return null; } };
@@ -426,13 +426,21 @@ function startApp() {
     const lensOk = results[0].status === 'fulfilled';
     if (lensOk || results[1].status === 'fulfilled') {
       const built = (data.lens || data.budget).generated;
-      const sync = await lastSync();
+      let sync = await lastSync();
+      // A run that never wrote its end (its process died) stays "running": past the longest a rebuild can take, it failed.
+      if (sync && sync.state === 'running' && Date.now() - Date.parse(sync.started) > SYNC_RUNNING_MAX_MS) sync = { ...sync, state: 'failed', error: 'it never finished' };
+      const age = Date.now() - Date.parse(built);
+      const skipped = Object.values((data.lens || data.budget).skipped || {}).reduce((a, n) => a + n, 0);
+      const unread = skipped ? ` · ${skipped} unreadable transcript lines or files skipped` : '';
       if (sync && sync.state === 'failed') {
         setStatus(`built ${stamp(built)} · last rebuild failed`, 'bad');
-        $('#banner').textContent = `The rebuild at ${stamp(sync.started)} failed: ${sync.error}. Run /kiasi:sync in Claude Code to see the full error.`;
+        $('#banner').textContent = `The rebuild${sync.started ? ` at ${stamp(sync.started)}` : ''} failed: ${sync.error}. Run /kiasi:sync in Claude Code to see the full error.`;
         $('#banner').classList.remove('hidden');
+      } else if (age > 2 * REBUILD_MS) {
+        setStatus(`built ${stamp(built)} · stale, no rebuild for ${Math.round(age / 3600000)} h${unread}`, 'bad');
+        $('#banner').classList.add('hidden');
       } else {
-        setStatus(`built ${stamp(built)} · ${SYNC_EVERY_TEXT}`, 'ok');
+        setStatus(`built ${stamp(built)} · ${SYNC_EVERY_TEXT}${unread}`, 'ok');
         $('#banner').classList.add('hidden');
       }
     } else {

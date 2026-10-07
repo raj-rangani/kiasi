@@ -90,7 +90,7 @@ class TestLensSignals(KiasiTestCase):
         from reports import lens
         prompt = {"event": "prompt", "ts": "2026-10-06T10:00:00", "session_id": "s", "context_tokens": 150_000,
                   "reread_check": {"mode": "delegate", "steps": 10, "here": 900_000, "delegated": 300_000}}
-        agent, later_prompt = {"event": "agent", "session_id": "s"}, {"event": "prompt", "session_id": "s"}
+        agent, later_prompt = {"event": "agent", "session_id": "s", "decision": "allow"}, {"event": "prompt", "session_id": "s"}
         followed = lens.classify(100, prompt, {}, lens.follow_ups([(100, prompt), (130, agent), (200, later_prompt)]))
         self.assertEqual((followed["kind"], followed["saved"]), ("delegated", 600_000))
         for why, rest in (("no Agent call", []), ("the Agent call came after the next prompt", [(120, later_prompt), (130, agent)]),
@@ -372,9 +372,9 @@ class TestLensReport(ReportTestCase):
                 {"turns": 30, "sub_turns": 10, "mean_context": 3000, "high_share": 0.5, "main": {"cache_read_input_tokens": 150_000},
                  "sub": {"cache_read_input_tokens": 20_000}}]
         m = self.lens.period_metrics(rows)
-        self.assertEqual((m["turns"], m["reread"], m["reread_per_turn"], m["reread_per_day"]), (50, 220_000, 4400, 110_000))
+        self.assertEqual((m["turns"], m["reread"], m["reread_per_turn"], m["reread_per_day"]), (40, 200_000, 5000, 100_000), "main-session steps and re-read only")
         self.assertEqual((m["mean_context"], m["high_share"]), (2500, 0.375))
-        self.assertEqual(self.lens.period_metrics([])["reread_per_turn"], 0)
+        self.assertIsNone(self.lens.period_metrics([])["reread_per_turn"])
 
     def test_since_install_splits_on_install_day_and_computes_factor(self):
         day = lambda n: time.strftime("%Y-%m-%d", time.localtime(time.time() - n * 86400))

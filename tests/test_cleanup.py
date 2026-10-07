@@ -49,6 +49,25 @@ class TestCleanup(KiasiTestCase):
         found = {row[1] for row in self.cleanup.candidates(time.time(), self.SID)}
         self.assertNotIn(idle, found, "the running session keeps its files")
 
+    def test_a_live_pause_keeps_its_session_state_and_checklist(self):
+        state = self.put(constants.SESSION_DIR / f"{self.SID}.json", self.old)
+        checklist = self.put(constants.CHECKPOINT_DIR / f"{self.SID[:8]}-3.md", self.old)
+        record = {"session_id": self.SID, "checkpoint": str(checklist), "at": self.cleanup.stamp(time.time() - 10 * 86400)}
+        self.put(constants.NOTES_DIR / "proj.paused.json", text=json.dumps(record))
+        found = {row[1] for row in self.cleanup.candidates(time.time(), "")}
+        self.assertNotIn(state, found, "a resume still needs the state")
+        self.assertNotIn(checklist, found)
+        self.put(constants.NOTES_DIR / "proj.paused.json", text=json.dumps({**record, "at": self.cleanup.stamp(time.time() - 20 * 86400)}))
+        found = {row[1] for row in self.cleanup.candidates(time.time(), "")}
+        self.assertIn(state, found, "an expired record keeps nothing")
+        self.assertIn(checklist, found)
+
+    def test_unknown_session_outputs_are_cleaned_too(self):
+        names = ("compact-unknown-20260901-101010-abc123.txt", "unknown-20260901-101010.txt", "compact-unknown-agent1-20260901-101010-abc123.txt")
+        files = [self.put(constants.OUTPUT_DIR / name, self.old) for name in names]
+        found = {row[1] for row in self.cleanup.candidates(time.time(), "")}
+        self.assertTrue(set(files) <= found)
+
     def test_symlinks_are_skipped(self):
         target = self.put(self.tmp / "elsewhere.txt", self.old)
         link = constants.OUTPUT_DIR / "toolu_link.txt"

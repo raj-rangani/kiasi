@@ -148,7 +148,7 @@ function openTrash(s) {
 function openLog(s) {
   openPanel('Cleanup log', 'The last moves, deletions and restores, newest first, from cleanup.jsonl.',
     rows(['when', 'action', 'file', '#size', 'why'], s.history.map(h => `<tr><td class="mono">${esc(day(h.ts))}</td><td>${esc(STORAGE_ACTIONS[h.action] || h.action)}</td>
-      <td class="mono">${esc(String(h.path || '').split('/').slice(-2).join('/'))}</td><td class="num">${h.size != null ? mb(h.size) : ''}</td><td>${esc(h.reason || '')}</td></tr>`), 'No file has been moved, deleted or restored yet.'));
+      <td class="mono">${esc(String(h.path || '').split(/[\\/]/).slice(-2).join('/'))}</td><td class="num">${h.size != null ? mb(h.size) : ''}</td><td>${esc(h.reason || '')}</td></tr>`), 'No file has been moved, deleted or restored yet.'));
   finishPanelContent();
 }
 

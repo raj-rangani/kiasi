@@ -3,7 +3,7 @@ import sys
 
 from core import constants
 from core.caps import handle_archive, handle_archive_path
-from core.events import session_lock
+from core.events import log_error, session_lock
 from core.prompt import handle_prompt
 from core.session import handle_plugin_compact, handle_plugin_quiet, handle_pre_compact, handle_session_start, handle_stop
 from core.turn import handle_post_tool, handle_pre_tool_use, handle_tool_batch, handle_tool_failure
@@ -31,7 +31,9 @@ def main():
     handler = HANDLERS.get(payload.get("hook_event_name", ""))
     if not handler:
         return
-    with session_lock(payload.get("session_id", "")):
+    with session_lock(payload.get("session_id", "")) as locked:
+        if not locked:
+            log_error("lock_timeout", session_id=payload.get("session_id", ""), hook=payload.get("hook_event_name", ""))
         output = handler(payload)
     if output:
         print(json.dumps(output))

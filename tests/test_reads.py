@@ -1,3 +1,4 @@
+import json
 import shutil
 import tempfile
 from pathlib import Path
@@ -22,6 +23,24 @@ class TestReadSkip(KiasiTestCase):
         denied = reads.handle_pre_tool(self.payload("PreToolUse", path))
         self.assertEqual(denied["hookSpecificOutput"]["permissionDecision"], "deny")
         self.assertIsNone(reads.handle_pre_tool(self.payload("PreToolUse", path)))
+
+    def test_identical_reads_of_one_response_are_all_refused(self):
+        path = constants.DATA_DIR / "big.txt"
+        path.write_text("x" * 5000)
+        self.read_done(path)
+        transcript = constants.DATA_DIR / "main.jsonl"
+
+        def respond(message_id):
+            transcript.write_text(json.dumps({"type": "assistant", "message": {"id": message_id, "content": []}}) + "\n")
+
+        def read():
+            return reads.handle_pre_tool(self.payload("PreToolUse", path, transcript_path=str(transcript)))
+
+        respond("msg_1")
+        self.assertEqual(read()["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertEqual(read()["hookSpecificOutput"]["permissionDecision"], "deny", "the second identical call of the same response")
+        respond("msg_2")
+        self.assertIsNone(read(), "the repeat of a later response goes through")
 
     def test_change_edit_and_compaction_clear_the_entry(self):
         path = constants.DATA_DIR / "big.txt"

@@ -68,11 +68,11 @@ function renderFixes(b) {
   });
   const rows = [...groups.values()].sort((x, y) => y.chars - x.chars).slice(0, OFFENDER_ROWS);
   $('#fixes').innerHTML = rows.length ? rows.map(g =>
-    `<a class="fx go" href="#sessions/${esc(g.session)}" title="${esc(g.label)}"><span class="fx-size">${fmtK(g.chars / 4)}<small>tokens</small></span>`
+    `<a class="fx go" href="#sessions/${esc(g.session)}" title="${esc(g.label)}"><span class="fx-size">${fmtK(g.chars / CHARS_PER_TOKEN)}<small>tokens</small></span>`
     + `<span class="fx-what"><b>${esc(tail(g.label))}</b><small>${g.label === toolName(g.tool) ? '' : `${esc(toolName(g.tool))} · `}session ${esc(g.session)}</small></span>`
     + `<span class="fx-n">${g.n > 1 ? `×${g.n}` : ''}</span>`
     + `<span class="fx-do">${esc(offenderFix(g.tool, g.n))}</span><span class="chev">›</span></a>`).join('')
-    : `<p class="empty">No tool result over ${fmtK(b.settings.big_output_chars / 4)} tokens this week.</p>`;
+    : `<p class="empty">No tool result over ${fmtK(b.settings.big_output_chars / CHARS_PER_TOKEN)} tokens this week.</p>`;
 }
 
 registerView('budget', b => { renderChart(b); renderFixes(b); }, 'budget');

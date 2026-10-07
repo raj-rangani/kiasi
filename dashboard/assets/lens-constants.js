@@ -49,6 +49,7 @@ const KIND_LABELS = {
   compaction: 'compaction', reread_check: 're-read check', paste_saved: 'paste saved', nudge: 'context nudge', turn_warn: 'turn warning',
   turn_stop: 'turn paused', turn_over: 'turn over budget', turn_resume: 'pause resumed', turn_moved_on: 'pause skipped', read_skipped: 're-read skipped', read_retry: 're-read let through', agent_model: 'subagent model', review_asked: 'review round asked', note: 'session note', recall: 'note recalled', loop: 'loop stopped', state: 'state re-injected',
   routed: 'routed to sandbox', route_retry: 'routing let through',
+  turn_choice: 'pause question answered', quiet: 'output quieted', desktop_notify: 'desktop notification', read_nudge: 'read nudge', brief_suffix: 'subagent brief extended', long_prompt: 'long subagent prompt',
 };
 const RULE_STRIP_DAYS = 8;
 
@@ -155,6 +156,9 @@ const SYNC_URL = '/sync';
 const SYNC_STATUS_FILE = '/reports/sync.json';
 const SYNC_POLL_MS = 1000;
 const SYNC_TIMEOUT_MS = 60000;
+const SYNC_RUNNING_MAX_MS = 5 * 60 * 1000; // two scripts at SYNC_TIMEOUT_SECONDS plus cleanup; a run still "running" after this failed
+const REBUILD_MS = 30 * 60 * 1000; // DASHBOARD_REBUILD_SECONDS; data older than twice this is stale
+const CHARS_PER_TOKEN = 4; // CHARS_PER_TOKEN in constants.py
 const SYNC_EVERY_TEXT = 'auto every 30 min';
 const VIEW_ALIASES = { actions: 'rules' };
 const TOP_MULTIPLES = 8;
@@ -163,12 +167,12 @@ const RULES = [
   { key: 'cap', name: 'Output cap', short: 'Oversized tool output cut; the full text is kept on disk', kinds: ['cap'], what: 'A tool result over its cap is cut and the full text saved to disk; the conversation keeps a marker with the path.' },
   { key: 'route', name: 'Sandbox routing', short: 'Scan-only Bash and WebFetch pointed at the sandbox tools', kinds: ['routed', 'route_retry'], what: 'While the sandbox tools are registered, a Bash command whose output would only be scanned (tests, builds, installs, curl, git log) or a WebFetch is refused once with the mcp__kiasi__run or mcp__kiasi__fetch call to make instead; repeating the same call lets it through.' },
   { key: 'pruner', name: 'Compaction pruner', short: 'Transcript pruned at compaction instead of summarised', kinds: ['pruned', 'summary'], what: 'At compaction the plugin prunes the transcript deterministically instead of calling the summariser; it falls back only if the prune cannot get under the ceiling.' },
-  { key: 'turn', name: 'Turn budget', short: 'Long prompts warned, then paused with the rest saved', kinds: ['turn_warn', 'turn_stop', 'turn_over', 'turn_resume', 'turn_moved_on'], what: 'A prompt that runs too many steps is warned, then paused with the remaining work written down; "continue" resumes it.' },
+  { key: 'turn', name: 'Turn budget', short: 'Long prompts warned, then paused with the rest saved', kinds: ['turn_warn', 'turn_stop', 'turn_over', 'turn_resume', 'turn_moved_on', 'turn_choice'], what: 'A prompt that runs too many steps is warned, then paused with the remaining work written down; "continue" resumes it.' },
   { key: 'reread', name: 'Re-read check', short: 'Cost here against a subagent, shown to Claude', kinds: ['reread_check', 'delegated'], what: 'Shows what the rest of the turn will cost here against in a subagent, and lets Claude delegate.' },
   { key: 'reads', name: 'Re-read skip', short: 'Unchanged file range not read twice', kinds: ['read_skipped', 'read_retry'], what: 'A Read of a file range already in context and unchanged on disk gets a pointer to the earlier copy instead of the text; repeating the Read lets it through.' },
   { key: 'loop', name: 'Loop check', short: 'Repeated failing call told to stop retrying', kinds: ['loop'], what: 'A command or edit that fails three times in one turn, or one command failing five times with different arguments, gets a note to stop retrying and check the assumption. Failed calls also count toward the turn budget.' },
   { key: 'paste', name: 'Paste manager', short: 'Large pastes saved to disk; very large ones refused', kinds: ['paste_saved', 'paste_refused'], what: 'Large pasted prompts are saved to disk so later turns refer to the path; very large ones are refused.' },
-  { key: 'notes', name: 'Notes and recall', short: 'Bookkeeping: session notes, recall, state after compaction', kinds: ['note', 'recall', 'state', 'agent_model', 'compaction', 'nudge', 'review_asked'], what: 'Bookkeeping: a note at every stop and compaction, recalled at the next start; working state re-injected after each compaction; subagent models set by type.', muted: true },
+  { key: 'notes', name: 'Notes and recall', short: 'Bookkeeping: session notes, recall, state after compaction', kinds: ['note', 'recall', 'state', 'agent_model', 'compaction', 'nudge', 'review_asked', 'quiet', 'desktop_notify', 'read_nudge', 'brief_suffix', 'long_prompt'], what: 'Bookkeeping: a note at every stop and compaction, recalled at the next start; working state re-injected after each compaction; subagent models set by type.', muted: true },
 ];
 const DETAIL_HEIGHT = 340;
 const PROMPT_ROWS = 20;

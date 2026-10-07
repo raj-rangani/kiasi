@@ -67,7 +67,13 @@ def handle_prompt(payload):
     changed = config_changes(state, payload.get("cwd"))
     if changed:
         record["config_changed"] = changed
-    state["turns"] = {transcript_key(payload.get("transcript_path")): {"steps": 0, "reread": 0, "warned": False, "stopped": False, "index": state["prompts"]}}
+    main = transcript_key(payload.get("transcript_path"))
+    turns = state.get("turns") or {}
+    # The calls of the turn this prompt ends may still report in a PostToolBatch: they are not steps of the new turn. A subagent
+    # started by this or the previous prompt may still be running and keeps its own count; older ones are done and their turns go.
+    state["cleared_calls"] = [*state.get("cleared_calls", []), *(turns.get(main) or {}).get("calls", [])][-constants.TURN_CALLS_KEPT:]
+    state["turns"] = {**{key: turn for key, turn in turns.items() if key != main and turn.get("index", 0) >= state["prompts"] - 1},
+                      main: {"steps": 0, "reread": 0, "warned": False, "stopped": False, "index": state["prompts"]}}
     resume = resume_context(state, prompt, payload.get("cwd"))
     if resume:
         context_lines.append(resume["context"])

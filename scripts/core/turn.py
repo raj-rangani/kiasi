@@ -2,10 +2,11 @@ import json
 import os
 import re
 import time
+from pathlib import Path
 
 from core import constants
 from core.caps import failure_label, handle_tool_output, leading_command
-from core.events import checklist_folder, ensure_dirs, load_session, log_event, make_checklist_folder, now_iso, project_slug, save_session
+from core.events import checklist_folder, ensure_dirs, load_session, log_error, log_event, make_checklist_folder, now_iso, project_slug, save_session
 from core.notify import notify_desktop
 from core.reads import handle_pre_tool, track_reads
 from core.transcript import caller_key, caller_transcript, current_context_tokens, edited_files, fmt_k, fmt_m, is_short_reply, is_system_prompt, is_task_prompt, last_task_prompt, prompt_text, tail_entries
@@ -97,8 +98,9 @@ def turn_guard(payload, tokens, loose=False):
     # With the budget off the calls are only counted; in warn mode it is reported once at the warning and once at the limit.
     over_stop = mode != "off" and (turn["steps"] >= stop_steps or turn["reread"] >= constants.TURN_STOP_TOKENS)
     over_warn = mode != "off" and (turn["steps"] >= warn_steps or turn["reread"] >= constants.turn_warn_tokens())
-    checkpoint = checkpoint_path(key, turn, payload.get("cwd"))
-    allowed = "Write" if subagent else "Write and Agent"
+    # The path the warning named stays the turn's checklist: a later call would see the file written and name the next free one.
+    checkpoint = Path(turn["checkpoint"]) if turn.get("checkpoint") else checkpoint_path(key, turn, payload.get("cwd"))
+    allowed = "the checklist's Write, Read and Edit" if subagent else "the checklist's Write, Read and Edit, and Agent"
     ask = question_wanted(payload)
     if over_stop and mode == "warn":
         result = None if turn.get("over") else over_budget(payload, turn, scope, checkpoint, tokens)
@@ -114,16 +116,18 @@ def turn_guard(payload, tokens, loose=False):
             if subagent:
                 hand_off = "end with your reply to the caller: what is done, what is verified, what remains and the checklist path"
             elif ask:
-                allowed = "Write, Agent and the one question below"
+                allowed = "the checklist's Write, Read and Edit, Agent and the one question below"
                 hand_off = (f"{pause_question(turn, tokens)} If that call cannot be made or is refused, end the turn reporting what is done, what is "
                             f'verified and what remains, and close your final message with this line for the developer: "{pause_line(turn)}"')
             else:
                 hand_off = ("either make one Agent call with subagent_type general-purpose whose brief is that checklist path plus the done condition, "
                             "or end the turn reporting what is done, what is verified and what remains. If work remains when the turn ends, close "
                             f'your final message with this line for the developer: "{pause_line(turn)}"')
+            # A Write cannot overwrite a file Claude has not read, so a checklist written at the warning is updated, not written again.
+            write = f"Bring the checklist at {checkpoint} up to date (read it, then Edit it)" if checkpoint.exists() else f"Write what remains as a checklist to {checkpoint}"
             context = (
                 f"kiasi paused this {scope}: {turn['steps']} steps and {fmt_m(turn['reread'])} tokens re-read at a context of {fmt_k(tokens)}. "
-                f"Every further call except {allowed} is refused. Write what remains as a checklist to {checkpoint}, then {hand_off}."
+                f"Every further call except {allowed} is refused. {write}, then {hand_off}."
             )
         else:
             context = (f"kiasi: this {scope} is still paused ({turn['steps']} steps, {fmt_m(turn['reread'])} tokens). "
@@ -137,7 +141,7 @@ def turn_guard(payload, tokens, loose=False):
         log_event({"event": "turn_stop", "session_id": session_id, "transcript": key, "steps": turn["steps"], "reread": turn["reread"], "context_tokens": tokens, "first": first, "subagent": subagent,
                    "checkpoint": turn.get("checkpoint", str(checkpoint))})
     elif over_warn and not turn["warned"]:
-        turn["warned"] = True
+        turn.update(warned=True, checkpoint=str(checkpoint))
         make_checklist_folder(checkpoint)
         ask_now = ask and mode == "pause"
         if subagent:
@@ -145,7 +149,7 @@ def turn_guard(payload, tokens, loose=False):
         elif ask_now:
             # Claude follows the warning and so seldom reaches the pause: the developer is asked here, or Claude would choose for them.
             turn["context"] = tokens
-            allowed = "Write, Agent and the question below"
+            allowed = "the checklist's Write, Read and Edit, Agent and the question below"
             next_step = (f"when work remains, {pause_question(turn, tokens)} Do not choose for the developer. If that call cannot be made, "
                          "end the turn with that path or hand the checklist to one general-purpose subagent")
         else:
@@ -171,7 +175,7 @@ def turn_guard(payload, tokens, loose=False):
 def over_budget(payload, turn, scope, checkpoint, tokens):
     """warn mode at the limit: say so once, to Claude and to the developer, but refuse nothing and save nothing to resume."""
     subagent = scope == "subagent"
-    turn.update(over=turn["steps"], warned=True)
+    turn.update(over=turn["steps"], warned=True, checkpoint=str(checkpoint))
     make_checklist_folder(checkpoint)
     next_step = "reply to the caller with that path" if subagent else "end the turn with that path or hand the checklist to one general-purpose subagent"
     context = (f"kiasi: this {scope} reached its budget at {turn['steps']} steps and {fmt_m(turn['reread'])} tokens re-read at a context of "
@@ -348,6 +352,14 @@ def pause_choice(payload):
     return output
 
 
+def checklist_call(payload, turn):
+    """A Read or Edit of the turn's own checklist, let through at a pause so the checklist is updated and not written blind."""
+    path = (payload.get("tool_input") or {}).get("file_path") or ""
+    if payload.get("tool_name") not in constants.TURN_CHECKLIST_TOOLS or not path or not turn.get("checkpoint"):
+        return False
+    return os.path.abspath(os.path.expanduser(path)) == os.path.abspath(os.path.expanduser(turn["checkpoint"]))
+
+
 def paused_call(payload):
     """PreToolUse: once a turn or subagent is paused, refuse every call but the checklist Write and the hand-off."""
     # Only pause mode refuses, so a turn paused before the mode was changed is let go.
@@ -357,28 +369,47 @@ def paused_call(payload):
     state = load_session(session_id)
     key = caller_key(payload)
     turn = state.get("turns", {}).get(key)
-    if not turn or not turn.get("stopped"):
+    if not turn or not turn.get("stopped") or checklist_call(payload, turn):
         return None
     subagent = bool(payload.get("agent_id"))
-    turn["denied"] = turn.get("denied", 0) + 1
+    # Once Claude Code sends batches, a refusal counts per response in handle_tool_batch: three parallel refused calls are one.
+    batched = batch_scope(payload) in state.get("batch_hook", [])
+    if not batched:
+        turn["denied"] = turn.get("denied", 0) + 1
+    if payload.get("tool_use_id"):
+        # Marked here, so the batch knows a refused call by its id and not by what a tool's output says.
+        turn["refused"] = [*turn.get("refused", []), payload["tool_use_id"]][-constants.TURN_CALLS_KEPT:]
     turn.setdefault("checkpoint", str(checkpoint_path(key, turn, payload.get("cwd"))))
     save_session(session_id, state)
     scope, next_step = ("subagent", "end with your reply to the caller") if subagent else ("turn", "end the turn with the pause notice for the developer")
     reason = (f"kiasi paused this {scope} at {turn['stopped']} steps, so this call was not run. "
-              f"Write what remains to {turn['checkpoint']} if you have not yet, then {next_step}.")
+              f"Bring the checklist at {turn['checkpoint']} up to date (Read it, then Edit it; Write it if it is not there yet), then {next_step}.")
     output = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": reason}}
-    if not subagent and turn["denied"] >= constants.TURN_DENY_BACKSTOP:
+    if not subagent and turn.get("denied", 0) >= constants.TURN_DENY_BACKSTOP:
         # Claude kept calling tools after the pause, so the turn ends here. A subagent is only refused:
         # continue: false would end the developer's turn along with it. VS Code shows no stop reason, so the turn
         # would end there without a word; it does show a system message.
         output.update({"continue": False, "stopReason": pause_notice(turn), "systemMessage": backstop_notice(turn)})
-        if turn["denied"] == constants.TURN_DENY_BACKSTOP:
+        if turn.get("denied", 0) == constants.TURN_DENY_BACKSTOP and not batched:
             desktop_notice(payload, f"Kiasi ended this turn, paused at {turn['stopped']} steps")
     return output
 
 
+def note_call(payload):
+    """PreToolUse: keep the call's id in its turn, so a PostToolBatch that arrives after the next prompt cleared the turn is known."""
+    call_id, session_id = payload.get("tool_use_id"), payload.get("session_id", "")
+    if not call_id:
+        return
+    state = load_session(session_id)
+    turn = (state.get("turns") or {}).get(caller_key(payload))
+    if turn is not None:
+        turn["calls"] = [*turn.get("calls", []), call_id][-constants.TURN_CALLS_KEPT:]
+        save_session(session_id, state)
+
+
 def handle_pre_tool_use(payload):
     """PreToolUse for every tool: a paused turn refuses the call, then the routed tools get their own checks."""
+    note_call(payload)
     refused = paused_call(payload)
     if refused or payload.get("tool_name") not in constants.PRE_TOOL_HOOKED:
         return refused
@@ -408,42 +439,70 @@ def pause_reminder(payload):
     return {"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": context}}
 
 
-def paused_file(cwd):
-    return constants.NOTES_DIR / f"{project_slug(cwd)}.paused.json"
+def paused_file(cwd, session_id=""):
+    """A project's pause record of one session: sessions of a project pause at the same time, and each keeps its own."""
+    return constants.NOTES_DIR / f"{project_slug(cwd)}.paused.{re.sub(r'[^A-Za-z0-9_-]', '_', session_id or 'unknown')}.json"
+
+
+def paused_files(cwd):
+    """Every pause record of the project: one per session, and the single project record of earlier versions."""
+    return sorted(constants.NOTES_DIR.glob(f"{project_slug(cwd)}.paused*.json"))
 
 
 def forget_paused_file(cwd, checkpoint):
-    try:
-        if json.loads(paused_file(cwd).read_text()).get("checkpoint") == checkpoint:
-            paused_file(cwd).unlink()
-    except (OSError, ValueError, AttributeError):
-        pass
+    """Remove the pause record of this checklist. True when this call removed it: of two sessions that resume one pause, the first wins."""
+    removed = False
+    for path in paused_files(cwd):
+        try:
+            if json.loads(path.read_text()).get("checkpoint") == checkpoint:
+                path.unlink()
+                removed = True
+        except FileNotFoundError:
+            continue  # another session just resumed it
+        except (OSError, ValueError, AttributeError) as exc:
+            log_error("paused_file", path=str(path), error=str(exc))
+    return removed
 
 
 def record_pause(payload, turn, state):
     """At a turn's pause, keep what a resume needs: this session's next prompt reads it from the state, a new session
     in the project from the paused file. The task and the edited files carry a resume when Claude wrote no checklist."""
     entries = tail_entries(payload.get("transcript_path"))
+    if not entries and payload.get("transcript_path"):
+        log_error("pause_no_task", session_id=payload.get("session_id", ""), error="transcript unreadable: the pause records no task")
     # A turn resumed with "continue" has no task prompt of its own: it keeps the task and files of the pause it resumed.
     resumed = state.get("resumed") or {}
     paused = {"checkpoint": turn["checkpoint"], "steps": turn["stopped"], "reread": turn["reread"], "at": now_iso(), "session_id": payload.get("session_id", ""),
               "task": (last_task_prompt(entries) or resumed.get("task", ""))[:constants.RESUME_TASK_CHARS],
               "files": list(dict.fromkeys([*resumed.get("files", []), *edited_files(entries)]))}
     state["paused"] = paused
-    ensure_dirs()
-    paused_file(payload.get("cwd")).write_text(json.dumps(paused))
+    # The session's own state first: a pause record that cannot be written must not keep the budget from tripping.
+    save_session(payload.get("session_id", ""), state)
+    try:
+        ensure_dirs()
+        paused["recorded"] = True
+        paused_file(payload.get("cwd"), payload.get("session_id", "")).write_text(json.dumps(paused))
+    except OSError as exc:
+        paused.pop("recorded")
+        log_error("pause_record", session_id=payload.get("session_id", ""), error=str(exc))
 
 
 def pause_elsewhere(payload):
     """SessionStart: a turn paused in another session of this project is offered here, and this session's first prompt resumes it."""
     session_id = payload.get("session_id", "")
-    try:
-        paused = json.loads(paused_file(payload.get("cwd")).read_text())
-        age_days = (time.time() - time.mktime(time.strptime(paused["at"], "%Y-%m-%dT%H:%M:%S"))) / 86400
-    except (OSError, ValueError, KeyError, TypeError):
+    found = None
+    for path in paused_files(payload.get("cwd")):
+        try:
+            paused = json.loads(path.read_text())
+            age_days = (time.time() - time.mktime(time.strptime(paused["at"], "%Y-%m-%dT%H:%M:%S"))) / 86400
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            continue
+        if paused.get("session_id") != session_id and age_days <= constants.NOTE_MAX_AGE_DAYS and (not found or paused["at"] > found["at"]):
+            found = paused
+    if not found:
         return None
-    if paused.get("session_id") == session_id or age_days > constants.NOTE_MAX_AGE_DAYS:
-        return None
+    # The newest pause of the project is offered; what is offered came from a record, which the first resume removes.
+    paused = {**found, "recorded": True}
     state = load_session(session_id)
     state["paused"] = paused
     save_session(session_id, state)
@@ -459,7 +518,8 @@ def resume_context(state, prompt, cwd):
     paused = state.pop("paused", None)
     if not paused:
         return None
-    forget_paused_file(cwd, paused["checkpoint"])
+    if not forget_paused_file(cwd, paused["checkpoint"]) and paused.get("recorded"):
+        return None  # its record is gone: another session of the project resumed this pause first
     try:
         with open(paused["checkpoint"]) as fh:
             checklist = fh.read()
@@ -494,23 +554,46 @@ def batch_counted(payload):
     return batch_scope(payload) in load_session(payload.get("session_id", "")).get("batch_hook", [])
 
 
+def refused_batch(payload, state, turn, batched):
+    """A batch of calls all refused at the pause: one refused response. The third ends the turn, as three refused calls did before."""
+    if not batched:
+        return None  # paused_call counted these call by call
+    session_id = payload.get("session_id", "")
+    turn["denied"] = turn.get("denied", 0) + 1
+    save_session(session_id, state)
+    if payload.get("agent_id") or turn["denied"] < constants.TURN_DENY_BACKSTOP:
+        return None
+    if turn["denied"] == constants.TURN_DENY_BACKSTOP:
+        desktop_notice(payload, f"Kiasi ended this turn, paused at {turn['stopped']} steps")
+    return {"continue": False, "stopReason": pause_notice(turn), "systemMessage": backstop_notice(turn)}
+
+
 def handle_tool_batch(payload):
     """One step for the tool calls of one response: the next request re-reads the context once for all of them.
     PostToolBatch comes after the calls' own PostToolUse hooks, so until the first one arrives the calls are counted one
     by one, and that first batch gives the extra counts back."""
     calls = [call for call in payload.get("tool_calls") or [] if isinstance(call, dict)]
-    # Calls refused at the pause never ran, so a batch of them is not a step.
-    ran = [call for call in calls if "kiasi paused this" not in str(call.get("tool_response") or "")]
-    if calls and not ran:
-        return None
     session_id = payload.get("session_id", "")
     state = load_session(session_id)
+    ids = [call["tool_use_id"] for call in calls if call.get("tool_use_id")]
+    if ids and all(call_id in state.get("cleared_calls", []) for call_id in ids):
+        return None  # the calls of a turn the next prompt cleared: not a step of the new one
     seen = state.setdefault("batch_hook", [])
     turn = (state.get("turns") or {}).get(caller_key(payload)) or {}
+    # Calls refused at the pause never ran, so a batch of them is not a step. paused_call marked them by id.
+    refused = turn.get("refused", [])
+    ran = [call for call in calls if call.get("tool_use_id") not in refused]
+    dirty = bool(refused)
+    if dirty:
+        turn["refused"] = [call_id for call_id in refused if call_id not in ids]
+    if calls and not ran:
+        return refused_batch(payload, state, turn, batch_scope(payload) in seen)
     loose = turn.pop("loose", None)
     if batch_scope(payload) in seen and not loose:
         names = [call.get("tool_name", "") for call in ran]
         tool_name = next((name for name in names if name not in constants.TURN_EXEMPT_TOOLS), names[0] if names else "")
+        if dirty:
+            save_session(session_id, state)
         return turn_guard({**payload, "tool_name": tool_name}, current_context_tokens(tail_entries(caller_transcript(payload))))
     if batch_scope(payload) not in seen:
         seen.append(batch_scope(payload))
@@ -565,6 +648,9 @@ def loop_check(payload):
 def handle_tool_failure(payload):
     # A call refused at the pause never ran, so it is neither a step nor a failure to rethink.
     if payload.get("is_interrupt") or "kiasi paused this" in str(payload.get("error") or ""):
+        return None
+    turn = (load_session(payload.get("session_id", "")).get("turns") or {}).get(caller_key(payload)) or {}
+    if payload.get("tool_use_id") in turn.get("refused", []):
         return None
     entries = tail_entries(caller_transcript(payload))
     guard = None if batch_counted(payload) else turn_guard(payload, current_context_tokens(entries), loose=True)

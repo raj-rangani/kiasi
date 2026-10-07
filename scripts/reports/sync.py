@@ -21,7 +21,9 @@ def now():
 
 
 def write_status(**fields):
-    constants.SYNC_STATUS.write_text(json.dumps(fields, indent=1) + "\n")
+    tmp = constants.SYNC_STATUS.with_suffix(".tmp")
+    tmp.write_text(json.dumps(fields, indent=1) + "\n")
+    os.replace(tmp, constants.SYNC_STATUS)
 
 
 def main(days):
@@ -42,6 +44,9 @@ def main(days):
                                  capture_output=True, text=True, timeout=constants.SYNC_TIMEOUT_SECONDS)
         except subprocess.TimeoutExpired:
             error = f"{script}: no result after {constants.SYNC_TIMEOUT_SECONDS}s"
+            break
+        except OSError as exc:  # never leave the status at "running"
+            error = f"{script}: {exc}"
             break
         if run.returncode != 0:
             error = f"{script}: " + (run.stderr.strip().splitlines() or [f"exit {run.returncode}"])[-1]

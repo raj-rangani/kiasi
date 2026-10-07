@@ -33,6 +33,15 @@ class TestSearch(KiasiTestCase):
         self.assertEqual(self.paths("login", "timeout"), ["toolu_a.txt"])
         self.assertEqual(sorted(self.paths("test")), ["toolu_a.txt", "toolu_b.txt"], "'test' also finds 'tests'")
 
+    def test_quoted_phrase_matches_in_order_only(self):
+        (constants.OUTPUT_DIR / "toolu_c.txt").write_text("waiting for timeout here\n" + "noise " * 200)
+        self.assertEqual(self.paths('"Timeout waiting"'), ["toolu_a.txt"])
+        self.assertEqual(self.paths("timeout", "waiting"), ["toolu_a.txt", "toolu_c.txt"])
+
+    def test_leading_dash_word_is_a_word(self):
+        with mock.patch("sys.argv", ["search.py", "-bash:", "-n", "3"]), mock.patch("builtins.print"):
+            self.search.main()
+
     def test_or_not_phrase_and_prefix(self):
         self.assertEqual(sorted(self.paths("redirect", "OR", "passed")), ["proj.jsonl", "toolu_b.txt"])
         self.assertEqual(self.paths("login", "NOT", "FAIL"), ["proj.jsonl"])
