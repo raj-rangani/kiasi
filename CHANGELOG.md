@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+## 0.4.2 - 2026-10-07
+
 - After a pause, parallel refused calls now count as one refused response even before Claude Code has sent a tool batch, so a pause in the first response no longer ends the turn early.
 - The status line now locks its limits files on Windows too, so two sessions no longer log the same reading twice there.
 - The Rules tab has a Problems block, shown only when something went wrong: pauses that could not be saved, lock timeouts and ignored `.kiasi.json` values, each with a plain explanation, a count and the last message.
