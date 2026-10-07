@@ -4,6 +4,7 @@ import re
 from core import constants
 from core.caps import response_text
 from core.events import load_session, log_event, save_session
+from core.holdout import held_off
 from core.transcript import caller_key, response_id, tail_entries
 
 
@@ -140,6 +141,8 @@ def is_scan_command(command):
 def route_once(payload, target, key, label, reason):
     session_id = payload.get("session_id", "")
     state = load_session(session_id)
+    if held_off(state, "sandbox"):
+        return None
     routed = state.setdefault("routed", {}).setdefault(caller_key(payload), [])
     record = {"session_id": session_id, "tool_name": payload.get("tool_name"), "target": target, "label": label, "agent_id": payload.get("agent_id")}
     if key in routed:

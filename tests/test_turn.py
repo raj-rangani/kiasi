@@ -957,3 +957,64 @@ class TestPauseChecklistAndSubagentTurns(KiasiTestCase):
         self.assertIn(str(taskfile.path_for(None, "s-both")), warned[0])
         self.assertIn("task file", warned[0])
         self.assertNotIn("as a checklist", warned[0])
+
+
+class TestDelegationBrief(KiasiTestCase):
+    SID = "s-brief-0001"
+    PROMPT = "Refactor the exporter module to stream rows and update every caller"
+
+    def setUp(self):
+        super().setUp()
+        self.cwd = str(self.tmp / "app")
+
+    def check(self, tokens, **kwargs):
+        return turn.reread_check(self.PROMPT, tokens, [], {}, cwd=self.cwd, session_id=self.SID, **kwargs)
+
+    def test_delegate_mode_writes_the_task_file_and_hands_over_the_brief(self):
+        check = self.check(400_000)
+        self.assertEqual(check["mode"], "delegate")
+        path = taskfile.path_for(self.cwd, self.SID)
+        self.assertTrue(path.exists())
+        sections = taskfile.parse(path.read_text())
+        self.assertEqual(sections["Goal"], self.PROMPT)
+        self.assertEqual(sections["Next step"], self.PROMPT)
+        self.assertTrue(check["brief"])
+        brief = (f"Task file: {path}. Read it first and keep it updated. Goal: {self.PROMPT}. Working directory: {self.cwd}. "
+                 f"Budget: {constants.SUBAGENT_STEP_LIMIT} steps; batch commands; run each test suite once. Do not commit. "
+                 "Report in under 300 words: what changed, what was verified, what is left.")
+        self.assertTrue(check["context"].endswith("Ready brief, paste as the Agent prompt (subagent_type general-purpose, never fork):\n" + brief))
+
+    def test_here_mode_and_a_missing_session_touch_no_file(self):
+        with mock.patch.object(constants, "REREAD_DELEGATE_RATIO", 0):
+            here = self.check(400_000)
+        self.assertEqual(here["mode"], "here")
+        self.assertNotIn("brief", here)
+        self.assertFalse(taskfile.path_for(self.cwd, self.SID).exists())
+        plain = turn.reread_check(self.PROMPT, 400_000, [], {})
+        self.assertEqual(plain["mode"], "delegate")
+        self.assertNotIn("brief", plain)
+        self.assertNotIn("Ready brief", plain["context"])
+
+    def test_an_existing_task_file_keeps_its_checklist_and_decisions(self):
+        path = taskfile.write(self.cwd, self.SID, goal="old", decisions=["use csv"], checklist=["- [ ] wire it"], files=["/r/a.py"])
+        self.check(400_000)
+        sections = taskfile.parse(path.read_text())
+        self.assertEqual(sections["Checklist"], "- [ ] wire it")
+        self.assertIn("use csv", sections["Decisions"])
+        self.assertIn("/r/a.py", sections["Files touched"])
+        self.assertEqual(sections["Goal"], self.PROMPT)
+
+    def test_the_pause_notice_and_the_subagent_choice_carry_the_brief_once(self):
+        for name, value in (("TURN_STOP_STEPS", 3), ("PAUSE_QUESTION", "off")):
+            self.addCleanup(setattr, constants, name, getattr(constants, name))
+            setattr(constants, name, value)
+        post = {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": self.SID, "cwd": self.cwd,
+                "transcript_path": str(self.tmp / f"{self.SID}.jsonl")}
+        paused = None
+        for _ in range(3):
+            paused = turn.turn_guard(post, 1000) or paused
+        context = paused["hookSpecificOutput"]["additionalContext"]
+        path = events.load_session(self.SID)["turns"][self.SID]["checkpoint"]
+        self.assertEqual(context.count("Ready brief, paste as the Agent prompt"), 1)
+        self.assertIn(f"Task file: {path}. Read it first", context)
+        self.assertIn(f"Working directory: {self.cwd}.", context)

@@ -152,6 +152,16 @@ SUBAGENT_BRIEF_SUFFIX = (
 )
 BUDGET_FRESH_HOURS = 48
 
+# Delegation brief: the ready Agent prompt handed to Claude when the re-read check or a pause points at a subagent.
+DELEGATION_GOAL_CHARS = 300
+DELEGATION_PROMPT_CHARS = 2000
+DELEGATION_BRIEF = (
+    "Task file: {path}. Read it first and keep it updated. Goal: {goal}. Working directory: {cwd}. "
+    "Budget: {steps} steps; batch commands; run each test suite once. Do not commit. "
+    "Report in under 300 words: what changed, what was verified, what is left."
+)
+DELEGATION_BRIEF_LEAD = "Ready brief, paste as the Agent prompt (subagent_type general-purpose, never fork):\n"
+
 AGENT_TOOL = "Agent"
 READ_TOOL = "Read"
 BASH_TOOL = "Bash"
@@ -432,6 +442,9 @@ TURN_BUDGET_MODE = _env_choice("CLAUDE_PLUGIN_OPTION_TURN_BUDGET_MODE", TURN_BUD
 PAUSE_NOTIFICATION = _env_choice("CLAUDE_PLUGIN_OPTION_PAUSE_NOTIFICATION", PAUSE_NOTIFICATION, PAUSE_NOTIFICATION_MODES)
 PAUSE_QUESTION = _env_choice("CLAUDE_PLUGIN_OPTION_PAUSE_QUESTION", PAUSE_QUESTION, PAUSE_QUESTION_MODES)
 PASTE_BLOCK_CHARS = _env_int("CLAUDE_PLUGIN_OPTION_PASTE_REFUSAL_CHARS", PASTE_BLOCK_CHARS)
+# Holdout experiment: the named rule is switched off in sessions whose id hashes odd (core/holdout.py).
+HOLDOUT_RULES = ("reread_check", "turn_budget", "context_notices", "output_cap", "sandbox")
+HOLDOUT = _env_choice("CLAUDE_PLUGIN_OPTION_HOLDOUT", "", ("",) + HOLDOUT_RULES)
 COMPACTION_WINDOW_TEXT = os.environ.get("CLAUDE_PLUGIN_OPTION_COMPACTION_WINDOW_TEXT", "200000")
 
 # Per-project overrides: a .kiasi.json at the project root (the session's cwd) tunes
@@ -453,7 +466,8 @@ PROJECT_KEYS = {
 }
 # Settings that take one of a few words rather than a number; any other value is ignored.
 PROJECT_CHOICES = {"turn_budget_mode": ("TURN_BUDGET_MODE", TURN_BUDGET_MODES), "pause_notification": ("PAUSE_NOTIFICATION", PAUSE_NOTIFICATION_MODES),
-                   "pause_question": ("PAUSE_QUESTION", PAUSE_QUESTION_MODES)}
+                   "pause_question": ("PAUSE_QUESTION", PAUSE_QUESTION_MODES),
+                   "holdout": ("HOLDOUT", HOLDOUT_RULES)}
 
 
 def warn_steps(stop_steps):
@@ -591,3 +605,8 @@ SESSION_RULE_LINES = (
     "Load /kiasi:rules for the full rules.",
 )
 TASKFILE_START_SOURCES = ("startup", "clear", "resume")
+
+# Rule outcomes
+LENS_HANDOFF_WINDOW_MINUTES = 60  # a handoff notice is followed by a restored session in the project within this
+LENS_NUDGE_PROMPTS = 3  # a compact or clear nudge is followed by a compaction or a new session within this many prompts
+LENS_EXPERIMENT_MIN_SESSIONS = 10  # sessions needed on each side of a holdout before the comparison counts

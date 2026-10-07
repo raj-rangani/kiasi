@@ -7,6 +7,7 @@ from pathlib import Path
 from core import constants
 from core.caps import failure_label, handle_tool_output, leading_command
 from core import taskfile
+from core.holdout import held_off
 from core.events import checklist_folder, ensure_dirs, first_context_tokens, load_session, log_error, log_event, make_checklist_folder, now_iso, project_slug, save_session
 from core.notify import notify_desktop
 from core.reads import handle_pre_tool, track_reads
@@ -32,7 +33,21 @@ def steps_per_prompt(entries):
     return counts[-constants.REREAD_RECENT_PROMPTS:]
 
 
-def reread_check(prompt, tokens, entries, state):
+def delegation_brief(path, cwd, goal=""):
+    """The ready Agent prompt for a subagent that continues the task file at path."""
+    goal = " ".join((goal or "").split())[: constants.DELEGATION_GOAL_CHARS] or "see the task file"
+    brief = constants.DELEGATION_BRIEF.format(path=path, goal=goal, cwd=cwd or os.getcwd(), steps=constants.SUBAGENT_STEP_LIMIT)
+    return constants.DELEGATION_BRIEF_LEAD + brief
+
+
+def task_goal(path):
+    try:
+        return taskfile.parse(Path(path).read_text()).get("Goal", "")
+    except OSError:
+        return ""
+
+
+def reread_check(prompt, tokens, entries, state, cwd=None, session_id=None):
     if tokens < constants.REREAD_ASK_TOKENS or not is_task_prompt(prompt) or is_short_reply(prompt):
         return None
     if tokens - state.get("reread_asked_at", 0) < constants.REREAD_ASK_STEP_TOKENS:
@@ -61,7 +76,14 @@ def reread_check(prompt, tokens, entries, state):
         f"(2) if the work needs back-and-forth with the user or the exact state of this conversation, do it here; " + rule
     )
     message = f"kiasi: context {fmt_k(tokens)}, about {mean_steps} steps per prompt lately: roughly {fmt_m(here)} tokens re-read if done here, {fmt_m(delegated)} in a subagent. {verdict}"
-    return {"context": context, "message": message, "steps": mean_steps, "here": here, "delegated": delegated, "mode": mode}
+    result = {"context": context, "message": message, "steps": mean_steps, "here": here, "delegated": delegated, "mode": mode}
+    if mode == "delegate" and cwd and session_id:
+        goal = " ".join(prompt.split())[: constants.DELEGATION_GOAL_CHARS]
+        path = taskfile.write(cwd, session_id, goal=goal, next_step=prompt[: constants.DELEGATION_PROMPT_CHARS])
+        if path:
+            result["context"] += "\n" + delegation_brief(path, cwd, goal)
+            result["brief"] = True
+    return result
 
 
 def turn_file(key, turn, payload):
@@ -101,7 +123,7 @@ def turn_guard(payload, tokens, loose=False):
     if loose:
         # Counted call by call, before a PostToolBatch has arrived: handle_tool_batch gives the extra counts back.
         turn["loose"] = turn.get("loose", []) + [tokens]
-    mode = constants.TURN_BUDGET_MODE
+    mode = "off" if held_off(state, "turn_budget") else constants.TURN_BUDGET_MODE
     state["turn_budget"] = {"warn": constants.turn_warn_steps(), "stop": constants.TURN_STOP_STEPS, "mode": mode}
     result = None
     # With the budget off the calls are only counted; in warn mode it is reported once at the warning and once at the limit.
@@ -126,10 +148,11 @@ def turn_guard(payload, tokens, loose=False):
                 hand_off = "end with your reply to the caller: what is done, what is verified, what remains and the task file path"
             elif ask:
                 allowed = "the task file's Write, Read and Edit, Agent and the one question below"
-                hand_off = (f"{pause_question(turn, tokens)} If that call cannot be made or is refused, end the turn reporting what is done, what is "
+                hand_off = (f"{pause_question(turn, tokens, delegation_brief(checkpoint, payload.get('cwd'), task_goal(checkpoint)))} If that call cannot be made or is refused, end the turn reporting what is done, what is "
                             f'verified and what remains, and close your final message with this line for the developer: "{pause_line(turn)}"')
             else:
-                hand_off = ("either make one Agent call with subagent_type general-purpose whose brief is that task file path plus the done condition, "
+                hand_off = ("either make one Agent call with subagent_type general-purpose whose prompt is the ready brief below, "
+                            f"{delegation_brief(checkpoint, payload.get('cwd'), task_goal(checkpoint))} "
                             "or end the turn reporting what is done, what is verified and what remains. If work remains when the turn ends, close "
                             f'your final message with this line for the developer: "{pause_line(turn)}"')
             # A Write cannot overwrite a file Claude has not read, so a checklist written at the warning is updated, not written again.
@@ -246,7 +269,7 @@ def loads_question(payload):
             and question_wanted(payload))
 
 
-def pause_question(turn, tokens):
+def pause_question(turn, tokens, brief=""):
     """The AskUserQuestion call Claude makes at a pause, spelled out so that pause_answer can read the choice."""
     labels = constants.PAUSE_CHOICES
     reached = (f"Kiasi paused this turn at {turn['stopped']} steps" if turn.get("stopped") else
@@ -254,10 +277,10 @@ def pause_question(turn, tokens):
     return (f'make one AskUserQuestion call with one question, the header "{constants.PAUSE_QUESTION_HEADER}", the question '
             f'"{reached} ({fmt_m(turn["reread"])} tokens re-read). How should the rest go on?" '
             f'and exactly these three options: "{labels["continue"]}" (keep going in this session with a fresh budget of {constants.TURN_STOP_STEPS} steps; '
-            f'each step re-reads about {fmt_k(tokens)} tokens), "{labels["subagent"]}" (one subagent with a fresh context works through the task file), '
+            f'each step re-reads about {fmt_k(tokens)} tokens), "{labels["subagent"]}" (one subagent with a fresh context works through the task file{"; if chosen, use the ready brief below" if brief else ""}), '
             f'"{labels["stop"]}" (end the turn; replying continue later resumes it, and /clear first makes that cheaper). '
             "Kiasi reads the answer and tells you what to do next. If AskUserQuestion is not loaded yet, load it first with the ToolSearch "
-            'query "select:AskUserQuestion", which is let through.')
+            'query "select:AskUserQuestion", which is let through.' + (f"\n{brief}\n" if brief else ""))
 
 
 def pause_answer(payload):
@@ -344,9 +367,8 @@ def pause_choice(payload):
                    f"Carry on from the task file at {checkpoint}. An item stays open until you have verified it.")
         output["systemMessage"] = f"Kiasi: continuing in this session with a fresh budget of {constants.TURN_STOP_STEPS} steps."
     elif choice == "subagent":
-        context = (f"kiasi: the developer chose a subagent. Make one Agent call with subagent_type general-purpose whose brief is the task file at "
-                   f"{checkpoint} plus the done condition, then relay its summary and what remains, naming that path. This turn stays paused, "
-                   "so every other call is refused.")
+        context = (f"kiasi: the developer chose a subagent. Make one Agent call with subagent_type general-purpose whose prompt is the ready brief below, then relay its summary and what remains, naming that path. This turn stays paused, "
+                   "so every other call is refused.\n" + delegation_brief(checkpoint, payload.get("cwd"), task_goal(checkpoint)))
     elif choice == "stop":
         context = ("kiasi: the developer chose to stop. Make no more tool calls: report what is done, what is verified and what remains, and close "
                    f'your final message with this line: "{pause_line(turn)}"')

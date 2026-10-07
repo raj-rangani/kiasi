@@ -6,6 +6,7 @@ import time
 from core import constants, taskfile
 from core.events import ensure_dirs, load_session, log_event, save_session
 from core.transcript import current_context_tokens, fmt_k, is_system_prompt, last_prompt_epoch, tail_entries, transcript_key
+from core.holdout import held_off
 from core.turn import reread_check, resume_context
 
 
@@ -138,7 +139,10 @@ def handle_prompt(payload):
         context_lines.append(f"The pasted content in this prompt ({len(prompt)} chars) is also saved at {path}. After this turn refer to it by that path instead of quoting it, and expect it to be dropped from the conversation summary.")
         record["paste_saved"] = str(path)
     nudge = None
-    if tokens >= constants.CONTEXT_HARD_TOKENS and tokens - state.get("nudged_at", 0) >= constants.CONTEXT_NUDGE_STEP_TOKENS:
+    notices_off = held_off(state, "context_notices")
+    if notices_off:
+        pass
+    elif tokens >= constants.CONTEXT_HARD_TOKENS and tokens - state.get("nudged_at", 0) >= constants.CONTEXT_NUDGE_STEP_TOKENS:
         nudge = f"Context is at {fmt_k(tokens)} tokens; every turn re-reads all of it. Run /compact now, or /clear if this prompt starts a new task."
     elif tokens >= constants.CONTEXT_WARN_TOKENS and gap_min >= constants.NEW_TASK_GAP_MINUTES and tokens - state.get("nudged_at", 0) >= constants.CONTEXT_NUDGE_STEP_TOKENS:
         nudge = f"You were away {int(gap_min)} min and the context is at {fmt_k(tokens)} tokens. If this is a new task, /clear first; the last session note is saved for the next session."
@@ -146,21 +150,23 @@ def handle_prompt(payload):
         messages.append(nudge)
         state["nudged_at"] = tokens
         record["nudge"] = nudge
-    handoff = handoff_notice(state, tokens)
+    handoff = None if notices_off else handoff_notice(state, tokens)
     if handoff:
         messages.append(handoff)
         record["handoff_notice"] = handoff
-    elif not nudge:
+    elif not nudge and not notices_off:
         switch = task_switch_notice(state, payload.get("cwd"), session_id, prompt, tokens, last_call_gap_minutes(state))
         if switch:
             messages.append(switch)
             record["task_switch"] = True
-    check = reread_check(prompt, tokens, entries, state)
+    check = None if held_off(state, "reread_check") else reread_check(
+        prompt, tokens, entries, state, cwd=payload.get("cwd"), session_id=session_id
+    )
     if check:
         context_lines.append(check["context"])
         messages.append(check["message"])
         state["reread_asked_at"] = tokens
-        record["reread_check"] = {"steps": check["steps"], "here": check["here"], "delegated": check["delegated"], "mode": check["mode"]}
+        record["reread_check"] = {"steps": check["steps"], "here": check["here"], "delegated": check["delegated"], "mode": check["mode"], "brief": check.get("brief", False)}
     save_session(session_id, state)
     log_event(record)
     if not context_lines and not messages:
