@@ -1,6 +1,6 @@
 # Changelog
 
-### Unreleased
+## 0.5.0 - 2026-10-07
 
 - One task file per task under the project's `.kiasi/checkpoints/` folder, with goal, decisions, a checklist checked only when verified, files touched and next step. The turn-budget pause, the compaction note, the stop note and the new `/kiasi:handoff` skill all write it, and a new session (start, clear or resume) is handed it with "continue from here; re-verify before marking anything done".
 - Two context notices at the prompt: at 150k tokens, "run /kiasi:handoff, then /clear: this task continues from about {floor}k"; and on return after the prompt cache has gone cold with over 100k of context. The floor is measured from the session's first reply. Session state carries `context_floor`, `context_tokens` and `last_call_at`.
