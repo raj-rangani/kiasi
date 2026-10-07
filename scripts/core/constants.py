@@ -105,6 +105,8 @@ TURN_WARN_TOKENS = None
 TURN_REMIND_STEPS = 5
 # Calls refused after a pause before the turn is ended outright, so a model that ignores the refusals stops re-reading.
 TURN_DENY_BACKSTOP = 3
+# Refusals this close together count as one response when the transcript names none: parallel calls arrive at once.
+REFUSAL_RESPONSE_SECONDS = 3
 # A desktop notification at a pause: auto (only in the apps below, whose chat raises none; the terminal gets
 # pause_alert's), always or off. pause_notification sets it; any other word leaves it as it is.
 PAUSE_NOTIFICATION_MODES = ("auto", "always", "off")

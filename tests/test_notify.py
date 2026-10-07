@@ -3,6 +3,7 @@ import os
 import shutil
 import subprocess
 import sys
+from unittest import mock
 
 from helpers import SCRIPTS, KiasiTestCase
 from core import constants  # noqa: E402
@@ -122,8 +123,9 @@ class TestPauseNotification(KiasiTestCase):
         for _ in range(constants.TURN_STOP_STEPS):
             turn.turn_guard(self.post("s-end"), 1000)
         pre = self.post("s-end", hook_event_name="PreToolUse", tool_name="Edit")
-        for _ in range(constants.TURN_DENY_BACKSTOP + 2):
-            turn.paused_call(pre)
+        for response in range(constants.TURN_DENY_BACKSTOP + 2):
+            with mock.patch("core.turn.time.time", return_value=1000.0 + response * 10):
+                turn.paused_call(pre)
         self.assertEqual([title for title, _ in self.sent], ["Kiasi paused this turn at 6 steps", "Kiasi ended this turn, paused at 6 steps"])
 
     def test_a_subagent_pause_and_warn_mode_notify_nobody(self):

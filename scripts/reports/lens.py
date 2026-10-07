@@ -16,6 +16,14 @@ from reports.budget import SKIPPED, SYNTHETIC_MODEL, file_lock, first_ask, insta
 
 SAVING_KINDS = ("cap", "paste_refused", "delegated", "pruned", "read_skipped")
 CONTEXT_KEYS = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
+PROBLEM_KINDS = {
+    "pause_record": "A pause could not be saved, so a later 'continue' has nothing to resume.",
+    "pause_no_task": "A pause was saved without the task, because the transcript could not be read.",
+    "paused_file": "A saved pause could not be read back.",
+    "lock_timeout": "State was written without the lock after waiting for it.",
+    "bad_setting": "A value in .kiasi.json was ignored.",
+    "checklist_folder": "The checklist folder could not be created.",
+}
 MARK_KINDS = {"compaction": "compaction", "pruned": "pruned", "reread_check": "check", "delegated": "check", "turn_stop": "stop"}
 
 
@@ -268,6 +276,21 @@ def read_events(days):
     except OSError:
         pass
     return events
+
+
+def problem_rows(events):
+    found = {}
+    for t, record in events:
+        if record.get("event") != "error":
+            continue
+        kind = str(record.get("kind") or "unknown")
+        row = found.setdefault(kind, {"kind": kind, "explanation": PROBLEM_KINDS.get(kind, "Kiasi worked around a failure of this kind."), "count": 0})
+        row["count"] += 1
+        detail = record.get("error") or record.get("path") or record.get("settings") or record.get("project") or record.get("hook") or ""
+        row.update({"ts": record.get("ts") or epoch_iso(t), "session": str(record.get("session_id") or "")[:8],
+                    "message": detail if isinstance(detail, str) else json.dumps(detail, ensure_ascii=False),
+                    "path": str(record.get("path") or "")})
+    return sorted(found.values(), key=lambda row: (-row["count"], row["kind"]))
 
 
 def tokens(chars):
@@ -855,6 +878,7 @@ def build(days):
         "cache": cache_report(days, cache_days, misses_all, sum(bill.values())),
         "storage": storage([r for info in sessions.values() for r in info["recalls"]]),
         "compactions": compaction_rows(events),
+        "problems": problem_rows(events),
         "checks": list(reversed(checks)),
         "pastes": list(reversed(pastes)),
         "budget_rows": list(reversed(budget_rows)),

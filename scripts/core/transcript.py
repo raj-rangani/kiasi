@@ -151,3 +151,12 @@ def caller_transcript(payload):
     if not (path and agent_id):
         return path
     return str(Path(path).with_suffix("") / "subagents" / f"agent-{agent_id}.jsonl")
+
+
+def response_id(payload):
+    """The id of the response a call belongs to: the parallel calls of one response share it. None when the transcript has none."""
+    for entry in reversed(tail_entries(caller_transcript(payload))):
+        if entry.get("type") == "assistant":
+            message = entry.get("message")
+            return message.get("id") if isinstance(message, dict) else None
+    return None

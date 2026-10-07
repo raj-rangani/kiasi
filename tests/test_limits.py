@@ -1,5 +1,8 @@
 import json
+import sys
 import time
+import types
+from unittest import mock
 
 from helpers import KiasiTestCase
 from core import constants  # noqa: E402
@@ -104,3 +107,31 @@ class TestLimits(KiasiTestCase):
         constants.CLAUDE_SETTINGS_FILE.write_text("{broken")
         self.assertEqual(self.limits.main(["setup"]), 1)
         self.assertEqual(constants.CLAUDE_SETTINGS_FILE.read_text(), "{broken")
+
+
+class LimitsLockTest(KiasiTestCase):
+    def setUp(self):
+        super().setUp()
+        import statusline
+        self.statusline = statusline
+
+    def test_the_lock_is_taken_and_released(self):
+        with self.statusline.limits_lock(self.tmp):
+            self.assertTrue((self.tmp / ".limits.lock").exists())
+        with self.statusline.limits_lock(self.tmp):
+            pass
+
+    def test_windows_locks_a_byte_with_msvcrt_when_fcntl_is_missing(self):
+        calls = []
+        fake = types.SimpleNamespace(LK_NBLCK=2, LK_UNLCK=0, locking=lambda fd, mode, size: calls.append((mode, size)))
+        with mock.patch.dict(sys.modules, {"fcntl": None, "msvcrt": fake}):
+            self.assertIs(self.statusline.lock_backend(), fake)
+            with self.statusline.limits_lock(self.tmp):
+                self.assertEqual(calls, [(2, 1)])
+        self.assertEqual(calls, [(2, 1), (0, 1)])
+
+    def test_it_runs_unlocked_with_no_lock_module(self):
+        with mock.patch.dict(sys.modules, {"fcntl": None, "msvcrt": None}):
+            self.assertIsNone(self.statusline.lock_backend())
+            with self.statusline.limits_lock(self.tmp):
+                pass
