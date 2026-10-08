@@ -456,12 +456,24 @@ details.fold .block-head:first-of-type { margin-top: 4px; }
 }
 
 /* Overview: the week on one axis */
-.week { padding: 30px 0 26px; border-bottom: 1px solid var(--rule); display: grid; row-gap: 6px; }
-.lead { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 30px; line-height: 1.22; letter-spacing: -.01em; color: var(--ink); max-width: 30ch; }
-.lead em { font-style: normal; }
+.week { padding: 30px 0 26px; border-bottom: 1px solid var(--rule); }
+.week-head { display: grid; grid-template-columns: minmax(0, 34ch) minmax(0, 1fr); column-gap: 48px; align-items: start; margin-bottom: 26px; }
+.lead { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 30px; line-height: 1.22; letter-spacing: -.01em; color: var(--ink); }
+.lead em { font-style: normal; white-space: nowrap; }
 .lead em.bad { color: var(--bad); }
 .lead em.good { color: var(--ok); }
-.lead-sub { margin: 0 0 18px; font-size: 14px; color: var(--muted); }
+.lead-sub { margin: 6px 0 0; font-size: 14px; color: var(--muted); }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 28px; padding-top: 8px; }
+.facts > div { display: grid; row-gap: 4px; align-content: start; position: relative; }
+.facts > div + div::before { content: ""; position: absolute; left: -14px; top: 0; bottom: 0; border-left: 1px solid var(--rule); }
+.facts b { font-family: var(--serif); font-weight: 400; font-size: 30px; line-height: 1.05; color: var(--ink); display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.facts b small { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.facts b .fact-text { font-size: 22px; line-height: 1.15; }
+.fact-sub { font-size: 13px; line-height: 1.45; color: var(--muted); }
+.fact-sub em { font-style: normal; }
+.fact-sub em.good { color: var(--ok); }
+.fact-sub em.bad { color: var(--bad); }
+.fact-sub a { color: var(--ink); }
 .week-chart svg { width: 100%; height: auto; display: block; }
 .week-chart .wk-row { font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; fill: var(--muted); }
 .week-chart .wk-day { font-family: var(--mono); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; fill: var(--muted); }
@@ -478,17 +490,10 @@ details.fold .block-head:first-of-type { margin-top: 4px; }
 .week-chart .wk-reset { stroke: var(--ink); stroke-width: 1; }
 .week-chart .wk-now { stroke: var(--accent-ink); stroke-width: 1; stroke-dasharray: 3 4; }
 .week-chart .wk-base { stroke: var(--rule); }
-.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 32px; padding-top: 22px; margin-top: 10px; border-top: 1px solid var(--rule); }
-.facts > div { display: grid; row-gap: 4px; align-content: start; position: relative; }
-.facts > div + div::before { content: ""; position: absolute; left: -16px; top: 0; bottom: 0; border-left: 1px solid var(--rule); }
-.facts b { font-family: var(--serif); font-weight: 400; font-size: 32px; line-height: 1.05; color: var(--ink); display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.facts b small { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-.facts b .fact-text { font-size: 24px; line-height: 1.15; }
-.fact-sub { font-size: 13.5px; line-height: 1.45; color: var(--muted); }
-.fact-sub em { font-style: normal; }
-.fact-sub em.good { color: var(--ok); }
-.fact-sub em.bad { color: var(--bad); }
-.fact-sub a { color: var(--ink); }
+@media (max-width: 1060px) {
+  .week-head { grid-template-columns: 1fr; row-gap: 22px; }
+  .facts { padding-top: 18px; border-top: 1px solid var(--rule); }
+}
 @media (max-width: 760px) {
   .lead { font-size: 24px; }
   .facts { grid-template-columns: 1fr; row-gap: 16px; }
