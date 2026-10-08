@@ -70,15 +70,15 @@ function renderWeek(d, l) {
     if (line.length > 1) {
       const start = `${x(line[0][0]).toFixed(1)},${bandBottom}`;
       svg += `<path class="wk-area" d="M${start} L${line.map(P).join(' L')} L${x(cur[0]).toFixed(1)},${bandBottom} Z"/>`
-        + `<path class="wk-line" d="M${line.map(P).join(' L')}"/>`;
+        + `<path class="wk-line draw" pathLength="1" d="M${line.map(P).join(' L')}"/>`;
     }
     if (end) {
-      svg += `<path class="wk-proj-line" d="M${P(cur)} L${P(end)}"/>`;
+      svg += `<path class="wk-proj-line after" d="M${P(cur)} L${P(end)}"/>`;
       if (r.state === 'runs_out') {
         const rx = x(end[0]);
         const nearReset = rx > x(t1) - 130, inside = nearReset || W < 640;   // keep clear of the reset label
-        svg += `<line class="wk-runout" x1="${rx}" x2="${rx}" y1="${bandTop - 6}" y2="${barBottom}"/>`
-          + `<circle class="wk-runout-dot" cx="${rx}" cy="${bandTop}" r="4"/>`
+        svg += `<line class="wk-runout after" x1="${rx}" x2="${rx}" y1="${bandTop - 6}" y2="${barBottom}"/>`
+          + `<circle class="wk-runout-dot pop" cx="${rx}" cy="${bandTop}" r="4"/>`
           + `<text class="wk-runout-lbl" x="${rx + (nearReset ? -8 : 8)}" y="${inside ? bandTop + 16 : bandTop - 10}" text-anchor="${nearReset ? 'end' : 'start'}">runs out ${esc(whenText(r.run_out_at))}</text>`;
       } else if (r.state === 'clear') {
         svg += `<circle class="wk-end-dot" cx="${x(end[0])}" cy="${yPct(end[1])}" r="3.5"/>`
@@ -88,17 +88,18 @@ function renderWeek(d, l) {
     const cx = x(cur[0]), cy = yPct(cur[1]);
     const leftSide = cx > x(t1) - 170;
     const tip = `${r.used}% of the weekly limit used${r.burn_per_day ? `, ${r.burn_per_day}% a day` : ''}${pts.length ? ` · ${pts.length} readings this window` : ''}`;
-    svg += `<g data-tip="${esc(tip)}"><circle class="wk-now-dot" cx="${cx}" cy="${cy}" r="4.5"/>`
+    svg += `<g data-tip="${esc(tip)}"><circle class="wk-now-dot pop" cx="${cx}" cy="${cy}" r="4.5"/>`
       + `<text class="wk-now-lbl" x="${cx + (leftSide ? -10 : 10)}" y="${cy + 4}" text-anchor="${leftSide ? 'end' : 'start'}">${r.used}% used${r.burn_per_day ? ` · ${r.burn_per_day}% a day` : ''}</text></g>`;
     svg += `<line class="wk-reset" x1="${x(t1)}" x2="${x(t1)}" y1="${pad.top}" y2="${barBottom}"/><text class="wk-sub" x="${x(t1) - 4}" y="${pad.top + 12}" text-anchor="end">reset ${esc(whenText(r.resets_at))}</text>`;
   }
   // sent bars
   svg += rowLabel(barBottom - 2, 'SENT');
-  days.forEach(day => {
+  days.forEach((day, i) => {
     const a = Math.max(dayStart(day.day), t0), b = Math.min(dayStart(day.day) + DAY_MS, t1);
     const bx = x(a) + 6, bw = Math.max(4, x(b) - x(a) - 12), top = yBar(day.paid);
+    const delay = `style="animation-delay:${i * 45}ms"`;
     const tip = `${day.day} · ${fmtM(day.paid)} sent · ${day.prompts || 0} prompts · ${fmtK(day.reread_per_prompt || 0)} per prompt · ${day.sessions || 0} sessions`;
-    svg += `<g data-tip="${esc(tip)}"><rect class="hist" x="${bx}" y="${top}" width="${bw}" height="${Math.max(0, barBottom - top)}" rx="2"/><text class="lbl" x="${bx + bw / 2}" y="${top - 6}" text-anchor="middle">${fmtM(day.paid)}</text></g>`;
+    svg += `<g data-tip="${esc(tip)}"><rect class="hist grow" ${delay} x="${bx}" y="${top}" width="${bw}" height="${Math.max(0, barBottom - top)}" rx="2"/><text class="lbl rise" ${delay} x="${bx + bw / 2}" y="${top - 6}" text-anchor="middle">${fmtM(day.paid)}</text></g>`;
   });
   // now
   if (now > t0 && now < t1) svg += `<line class="wk-now" x1="${x(now)}" x2="${x(now)}" y1="${pad.top}" y2="${barBottom}"/>`;
@@ -121,7 +122,7 @@ function renderFacts(d) {
   else if (b && a) since = `${fmtK(a.reread_per_turn)} per request now, ${fmtK(b.reread_per_turn)} before Kiasi`;
   else since = `${fmtK(t.reread_per_prompt)} of context per prompt`;
   if (bb && bb.days != null) {
-    out.push(fact('Bought back', bb.days < 0.1 ? `${Math.round(bb.days * 240) / 10}<small>hours</small>` : `${bb.days}<small>days</small>`, `of the weekly limit · ${since}`,
+    out.push(fact('Bought back', bb.days < 0.1 ? `<span data-count="${Math.round(bb.days * 240) / 10}">${Math.round(bb.days * 240) / 10}</span><small>hours</small>` : `<span data-count="${bb.days}">${bb.days}</span><small>days</small>`, `of the weekly limit · ${since}`,
       `${fmtM(bb.kept_out)} tokens kept out, ${fmtM(bb.saved)} of re-reads avoided, at ${fmtM(bb.rate)} a day. Every token kept out would have been re-sent on every later request of its session.`));
   } else {
     out.push(fact('Kept out', `${fmtM(kind('cap').kept_out + kind('pruned').kept_out)}<small>tokens</small>`, since, `${kind('cap').count} outputs capped, ${t.pruned} compactions pruned`));
@@ -138,6 +139,19 @@ function renderFacts(d) {
     out.push(fact('Next fix', `<span class="fact-text">${esc(name)}</span>`, `${Math.round(top.share * 100)}% of the context sent · <a href="#fix-block">how</a>`, ''));
   }
   $('#facts').innerHTML = out.join('');
+  $('#facts').querySelectorAll('[data-count]').forEach(countUp);
+}
+
+function countUp(el) {
+  const target = parseFloat(el.dataset.count), decimals = (el.dataset.count.split('.')[1] || '').length;
+  if (!isFinite(target) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const t0 = performance.now(), ms = COUNT_UP_MS;
+  const tick = now => {
+    const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = (target * e).toFixed(decimals);
+    if (k < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
 }
 
 function renderRunway(l) {

@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- Dashboard motion: short ease-out entrances on render. The runway sentence and the facts rise in with a stagger, the bought-back number counts up, the burn line draws, the daily bars grow from the baseline and the fix bars fill. Transform and opacity only, 300 to 700 ms, and every one of them is off under `prefers-reduced-motion`. The trailing rule under the last block of each view is gone.
 - Overview chart: the limit row is a cumulative burn line. The readings of the current window draw solid to today, the forecast continues dashed at the current burn to the run-out or the reset, and the run-out drops a mark through the daily bars. The runway now carries the window's readings as `points` (`RUNWAY_POINTS_MAX` of them at most).
 - Overview: one week on one axis. The runway is a sentence, then the weekly limit track and the context sent per day share one Mon-to-Sun axis, so used, pace, run-out and the days that caused it line up. Three facts under it: bought back, this week against last, and the next fix. The four cards and the separate daily chart are gone.
 - One parser for every stamp: event-log stamps are local time with no zone and transcript stamps are UTC, and the report, the budget cutoff and the session receipt now read both through `core.events.event_epoch`. Before, a stamp read in the wrong zone would have shifted a cut against its session's steps by the local offset.

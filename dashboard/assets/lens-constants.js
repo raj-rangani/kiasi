@@ -197,3 +197,4 @@ const EST_TIPS = {
   extra: 'Estimate: tokens written again after each miss, priced against a cache read.',
 };
 const EST_NOTE = 'Figures marked est. come from a formula; everything else is read from your transcripts.';
+const COUNT_UP_MS = 600;      // the bought-back number counts up on render, ease-out; KPI counters sit in the 400-800ms range
