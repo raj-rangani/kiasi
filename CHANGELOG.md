@@ -3,6 +3,7 @@
 ### Unreleased
 
 - Overview: the spike line shows only when the spike session started today or yesterday. Older spikes stay marked in Sessions and on the month card.
+- Dashboard: Budget and Rules draw in the Overview's palette; Budget shows only the 5-hour window, since the Overview owns the weekly runway, and says its pace in words; session cards lead with the project and date, with the id in the tooltip, and the legend lists only the marks on the page; each tab explains itself once; the cut-next rows carry a short tag with the sentence in the tooltip; the Storage legend keeps sizes in tooltips; the Rules breakdown is a list on phones.
 - Rules: the breakdown column wrapped again. The Overview ledger's grid style had leaked onto the rules' facts paragraph through a shared class name and pushed the table off the page.
 - Overview: the bought-back note fits on one line.
 - Dashboard colour: four low-saturation washes join the palette, with dark-mode values. The burn line and the daily bars take the blue, today's bar and column take the amber, the band past run-out takes a faint red, and the spike notice sits on an amber wash. Each fact in the ledger carries a coloured dot, and the three fixes take blue, violet and teal on their rank, bar and share.

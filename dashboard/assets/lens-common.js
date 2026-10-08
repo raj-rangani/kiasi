@@ -63,13 +63,30 @@ function untilText(ms) {
   return `${Math.floor(hours / 24)}d ${hours % 24}h`;
 }
 
+// The project name a session card shows: the path with its container directories dropped, so
+// "-var-www-html-kiasi" reads as "kiasi". A session at a container itself keeps that container's name.
+const PROJECT_ROOTS = new Set(['var', 'www', 'html', 'home', 'users', 'srv', 'opt', 'tmp', 'mnt', 'projects', 'code', 'src', 'dev', 'work', 'repos', 'sites', 'htdocs']);
+const PROJECT_NAME_CHARS = 22;
+
+function projectTail(project) {
+  const segs = (project || '').replace(/^-+/, '').split('-').filter(Boolean);
+  let i = 0;
+  while (i < segs.length - 1 && PROJECT_ROOTS.has(segs[i].toLowerCase())) i++;
+  const rest = segs.slice(i);
+  if (!rest.length) return project || '';
+  // Too long: keep whole segments from the end, since the last ones name the project.
+  let keep = rest.length;
+  while (keep > 1 && rest.slice(rest.length - keep).join('-').length > PROJECT_NAME_CHARS) keep--;
+  return (keep < rest.length ? '…' : '') + rest.slice(rest.length - keep).join('-');
+}
+
 const LIMIT_SPAN = { session: 5 * 3600, weekly: 7 * 86400 };
 
 function paceText(used, pace) {
   const gap = used - pace;
-  if (gap > LIMIT_PACE_SLACK) return `${gap} pts ahead of pace`;
-  if (gap < -LIMIT_PACE_SLACK) return `${-gap} pts under pace`;
-  return 'on pace';
+  if (gap > LIMIT_PACE_SLACK) return 'using it faster than the clock runs';
+  if (gap < -LIMIT_PACE_SLACK) return 'using it slower than the clock runs';
+  return 'on pace with the clock';
 }
 
 function limitColumn(item, now, first, stale, updated) {
@@ -99,7 +116,8 @@ function renderLimits(l) {
   window.limitsReading = l;
   if (typeof renderRunway === 'function') renderRunway(l);
   const el = $('#limits');
-  const items = (l && l.limits || []).filter(item => item.used != null);
+  // The Overview owns the weekly runway; Budget shows only the windows the Overview does not.
+  const items = (l && l.limits || []).filter(item => item.used != null && item.group !== 'weekly');
   if (!items.length) {
     const hint = LIMITS_HINTS[l && l.setup];
     el.hidden = !hint;

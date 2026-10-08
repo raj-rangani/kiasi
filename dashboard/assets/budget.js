@@ -51,6 +51,14 @@ function offenderFix(tool, n) {
   return 'Cap the tool or ask for less.';
 }
 
+// The short tag shown on the row; the full sentence sits in its tooltip and the intro says it once.
+function offenderTag(tool, n) {
+  if (n > 1) return 'read once';
+  if (tool === 'Read') return 'by section';
+  if (tool === 'WebFetch') return 'save it';
+  return 'cap it';
+}
+
 function toolName(tool) {
   return tool.replace(/^mcp__/, '').split('__').join(' · ');
 }
@@ -74,7 +82,7 @@ function renderFixes(b) {
     `<a class="fx go" href="#sessions/${esc(g.session)}" title="${esc(g.label)}"><span class="fx-size">${fmtK(g.chars / CHARS_PER_TOKEN)}<small>tokens</small></span>`
     + `<span class="fx-what"><b>${esc(tail(g.label))}</b><small>${g.label === toolName(g.tool) ? '' : `${esc(toolName(g.tool))} · `}session ${esc(g.session)}</small></span>`
     + `<span class="fx-n">${g.n > 1 ? `×${g.n}` : ''}</span>`
-    + `<span class="fx-do">${esc(offenderFix(g.tool, g.n))}</span><span class="chev">›</span></a>`).join('')
+    + `<span class="fx-do tag" title="${esc(offenderFix(g.tool, g.n))}">${esc(offenderTag(g.tool, g.n))}</span><span class="chev">›</span></a>`).join('')
     : `<p class="empty">No tool result over ${fmtK(b.settings.big_output_chars / CHARS_PER_TOKEN)} tokens this week.</p>`;
 }
 

@@ -40,11 +40,25 @@ function sessionSvg(s, settings, W, H, detailed) {
 function renderMultiples(d) {
   const host = $('#multiples');
   const W = 300;
-  host.innerHTML = d.sessions.slice(0, TOP_MULTIPLES).map(s => `<article class="mini ${s.session === selected ? 'selected' : ''}" data-session="${esc(s.session)}">
-    <h3><b>${esc(s.short)}</b><span>${esc(s.day)}</span></h3><div class="proj" title="${esc(s.project)}">${esc(s.project)}</div>${sessionSvg(s, d.settings, W, MINI_HEIGHT, false)}
+  const shown = d.sessions.slice(0, TOP_MULTIPLES);
+  host.innerHTML = shown.map(s => `<article class="mini ${s.session === selected ? 'selected' : ''}" data-session="${esc(s.session)}" title="session ${esc(s.short)} · ${esc(s.project)}">
+    <h3><b>${esc(projectTail(s.project))}</b><span>${esc(s.day)}</span></h3>${sessionSvg(s, d.settings, W, MINI_HEIGHT, false)}
     <dl class="kv"><dt>prompts</dt><dd>${s.prompts}</dd><dt>steps</dt><dd>${s.steps}</dd><dt>peak</dt><dd>${fmtK(s.peak)}</dd><dt>bill</dt><dd>${fmtM(s.bill)}</dd></dl></article>`).join('') || emptyLine('sessions');
   host.querySelectorAll('.mini').forEach(el => el.addEventListener('click', () => select(el.dataset.session)));
   bindTips(host);
+  const legend = host.parentElement && host.parentElement.querySelector('.legend');
+  if (legend) legend.innerHTML = markLegend(shown);
+}
+
+// Only the marks that actually appear in the cards shown, so the legend never explains a symbol that is not on the page.
+function markLegend(sessions) {
+  const has = kind => sessions.some(s => (s.series || []).some(p => (p.marks || []).includes(kind)));
+  return '<span><i class="tick"></i>prompt</span>'
+    + (has('compaction') ? '<span><i class="ring"></i>compaction</span>' : '')
+    + (has('pruned') ? '<span><i class="ring pruned"></i>pruned compaction</span>' : '')
+    + (has('check') ? '<span><i class="amber"></i>re-read check</span>' : '')
+    + (has('stop') ? '<span><i class="red"></i>turn stopped</span>' : '')
+    + '<span><i class="line"></i>warning</span><span><i class="line warn"></i>hard limit</span>';
 }
 
 let openAction = null;

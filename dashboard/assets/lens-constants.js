@@ -82,9 +82,9 @@ const KIND_HELP = {
 const MARK_LABELS = { compaction: 'compaction', pruned: 'pruned compaction', check: 're-read check', stop: 'turn stopped' };
 const VIEWS = [
   ['overview', 'Overview', 'Is Kiasi cutting what your Claude Code sessions send, and what to fix next.'],
-  ['sessions', 'Sessions', 'One chart per session: context at every step, prompts as ticks, compactions as rings. Click a session for its full trajectory and every Kiasi action inside it.'],
-  ['rules', 'Rules', 'Each rule of Kiasi: how often it fired, how many tokens it cut, and its log. Click a rule for its detail.'],
-  ['budget', 'Budget', 'Where the weekly limit goes: every turn re-reads the whole conversation, so the cost is context size times turns.'],
+  ['sessions', 'Sessions', ''],   // the sheet heads below carry the one-line intro, so the tagline stays empty
+  ['rules', 'Rules', ''],
+  ['budget', 'Budget', ''],
   ['storage', 'Storage', 'What Kiasi keeps on disk and for how long. A saved file follows its session: once both are unused for a week it goes to trash, and the trash is emptied a week later.']
 ];
 // Page-level empty states, one per view. `missing` is shown when no report exists yet,

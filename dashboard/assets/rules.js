@@ -9,6 +9,11 @@ function countOf(d, kind) { return (d.by_kind[kind] || {}).count || 0; }
 function fired(d, rule) { return rule.kinds.reduce((t, k) => t + countOf(d, k), 0); }
 function keptOut(d, rule) { return rule.kinds.reduce((t, k) => t + ((d.by_kind[k] || {}).kept_out || 0), 0); }
 
+// Each fact as its own span: inline with separators on a desktop, one per line on a phone.
+function factItems(text) {
+  return text.split(' · ').map(t => `<span class="fact">${esc(t)}</span>`).join('');
+}
+
 function facts(d, rule) {
   const n = kind => countOf(d, kind);
   if (rule.key === 'cap') {
@@ -70,7 +75,7 @@ function renderRules(d) {
       <b class="rl-num fired" data-label="fired">${n.toLocaleString()}</b>
       <b class="rl-num cut${cut ? '' : ' none'}" data-label="tokens cut">${cut ? fmtM(cut) : '–'}</b>
       <div class="rl-days">${days.length ? dayLine(counts, days, install) : ''}</div>
-      <div class="rl-facts"><p class="facts">${esc(facts(d, rule))}</p>${outcomeLines(d, rule)}</div><span class="chev">›</span></div>`;
+      <div class="rl-facts"><p class="facts">${factItems(facts(d, rule))}</p>${outcomeLines(d, rule)}</div><span class="chev">›</span></div>`;
   };
   $('#rules').innerHTML = `<div class="rl-head"><span>rule</span><span class="num">fired · ${d.days || d.per_day.length} days</span><span class="num">tokens cut</span><span class="rl-dayhead"><em>fired per day${span}</em>${dayCellLabels(days)}</span><span>breakdown</span><span></span></div>${RULES.map(row).join('')}`;
   $('#rules').querySelectorAll('.rl-row').forEach(el => {

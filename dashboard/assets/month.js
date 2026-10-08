@@ -14,7 +14,7 @@ function rows(w) {
   out.push(['Kept out', `${fmtM(w.kept_out)} tokens`, `${fmtM(w.saved)} of re-reads avoided`]);
   out.push(['Context sent', fmtBig(w.sent), `${w.prompts.toLocaleString()} prompts on ${w.active_days} days`]);
   if (w.busiest) out.push(['Busiest day', dayText(w.busiest.day), `${fmtM(w.busiest.sent)} sent`]);
-  if (w.heaviest) out.push(['Heaviest session', (w.heaviest.project || '').replace(/^-+/, '').split('-').slice(-2).join('-') || w.heaviest.short, `${fmtM(w.heaviest.bill)} re-read, ${dayText(w.heaviest.day)}`]);
+  if (w.heaviest) out.push(['Heaviest session', projectTail(w.heaviest.project) || w.heaviest.short, `${fmtM(w.heaviest.bill)} re-read, ${dayText(w.heaviest.day)}`]);
   if (w.top_tool && w.top_tool.count) out.push(['Most cut', toolName(w.top_tool.tool), `${w.top_tool.count} outputs, ${fmtM(w.top_tool.kept_out)} kept out`]);
   return out;
 }
