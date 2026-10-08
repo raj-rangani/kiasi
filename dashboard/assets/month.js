@@ -1,4 +1,4 @@
-// The Month view: the last 30 days on one card, to copy as text or save as an SVG image.
+// The month card: the last 30 days on one card in the side panel, to copy as text or save as an SVG image.
 (() => {
 const fmtBig = n => n >= 1e9 ? `${(n / 1e9).toFixed(2)} B` : fmtM(n);
 const toolName = t => (t || '').replace(/^mcp__([^_]+(?:_[^_]+)*)__/, '$1 ').replace(/_/g, ' ');
@@ -74,14 +74,17 @@ function flash(msg) {
   clearTimeout(flash.t); flash.t = setTimeout(() => { el.hidden = true; }, 1800);
 }
 
-function render(d) {
+function openMonthPanel(d) {
   const w = { ...d.wrapped, last_day: (d.per_day && d.per_day.length ? d.per_day[d.per_day.length - 1].day : undefined) };
-  $('#wrap-card').innerHTML = cardHtml(w);
+  const html = `<div class="panel-month"><div class="wrap-card">${cardHtml(w)}</div>`
+    + `<div class="wrap-actions"><button type="button" id="wrap-copy">Copy as text</button><button type="button" id="wrap-save">Save as image</button><span class="wrap-done" id="wrap-done" hidden>Copied</span></div></div>`;
+  openPanel('Your month', `The last ${w.days} days with Kiasi on one card, to paste or post.`, html);
   $('#wrap-copy').onclick = async () => {
     try { await navigator.clipboard.writeText(cardText(w)); flash('Copied'); } catch { download(`kiasi-month-${w.last_day || 'card'}.txt`, cardText(w), 'text/plain'); }
   };
   $('#wrap-save').onclick = () => { download(`kiasi-month-${w.last_day || 'card'}.svg`, cardSvg(w), 'image/svg+xml'); flash('Saved'); };
+  finishPanelContent();
 }
 
-registerView('month', render, 'lens', d => d && d.wrapped && d.wrapped.active_days > 0);
+window.openMonthPanel = openMonthPanel;
 })();

@@ -88,7 +88,7 @@ The days before you installed Kiasi are the baseline, built from your own transc
 
 ### Runway, receipt and digest
 
-The Overview leads with the runway: whether the weekly limit lasts to its reset at the current burn, from the status line readings. Under it, the days of that limit Kiasi bought back: the re-reads it avoided, divided by what you send a day. The Month tab is the last 30 days on one card, to copy as text or save as an image.
+The Overview leads with the runway: whether the weekly limit lasts to its reset at the current burn, from the status line readings. Under it, the days of that limit Kiasi bought back: the re-reads it avoided, divided by what you send a day. "Share your month" opens the last 30 days on one card, to copy as text or save as an image.
 
 Outside the dashboard, two notices and nothing else:
 

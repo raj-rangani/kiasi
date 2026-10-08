@@ -85,7 +85,6 @@ const VIEWS = [
   ['sessions', 'Sessions', 'One chart per session: context at every step, prompts as ticks, compactions as rings. Click a session for its full trajectory and every Kiasi action inside it.'],
   ['rules', 'Rules', 'Each rule of Kiasi: how often it fired, how many tokens it cut, and its log. Click a rule for its detail.'],
   ['budget', 'Budget', 'Where the weekly limit goes: every turn re-reads the whole conversation, so the cost is context size times turns.'],
-  ['month', 'Month', 'Your last 30 days with Kiasi on one card: the factor, the days of limit bought back, the busiest day and the heaviest session. Copy it or save it as an image.'],
   ['storage', 'Storage', 'What Kiasi keeps on disk and for how long. A saved file follows its session: once both are unused for a week it goes to trash, and the trash is emptied a week later.']
 ];
 // Page-level empty states, one per view. `missing` is shown when no report exists yet,
@@ -102,10 +101,6 @@ const EMPTY_STATES = {
   rules: {
     missing: ['Rules have not fired yet', 'Each rule\'s count, savings and log fill in as you work in Claude Code with Kiasi on. Nothing has been built yet.'],
     empty: ['No rule fired in the last {days} days', 'Each rule\'s count, savings and log fill in from the next session with Kiasi on. The report rebuilds every 30 minutes.'],
-  },
-  month: {
-    missing: ['No month to show yet', 'The month card fills in from the per-day history once a report has been built. Nothing has been built yet.'],
-    empty: ['Nothing sent in the last 30 days', 'The month card fills in from the next session with Kiasi on. The report rebuilds every 30 minutes.'],
   },
   budget: {
     missing: ['No re-read bill yet', 'The per-day bill and the costliest tool results appear here after the first session. Plan limits above stay live. Nothing has been built yet.'],

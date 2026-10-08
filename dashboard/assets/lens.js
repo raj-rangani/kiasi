@@ -110,6 +110,9 @@ function renderWeek(d, l) {
   $('#week-chart').innerHTML = svg;
   bindTips($('#week-chart'));
   renderFacts(d);
+  const share = $('#month-share'), canShare = typeof openMonthPanel === 'function' && d.wrapped && d.wrapped.active_days > 0;
+  share.hidden = !canShare;
+  share.onclick = canShare ? () => openMonthPanel(d) : null;
 }
 
 function fact(label, value, sub, tip) {
@@ -121,12 +124,12 @@ function renderFacts(d) {
   const kind = key => (d.by_kind || {})[key] || { count: 0, kept_out: 0 };
   const out = [];
   let since = '';
-  if (b && a && s.factor != null) since = s.factor >= 1 ? `<em class="good">${s.factor}× less</em> per request since Kiasi` : `<em class="bad">${(1 / s.factor).toFixed(1)}× more</em> per request since Kiasi`;
+  if (b && a && s.factor != null) since = s.factor >= 1 ? `<em class="good">${s.factor}× less</em> since Kiasi` : `<em class="bad">${(1 / s.factor).toFixed(1)}× more</em> since Kiasi`;
   else if (b && a) since = `${fmtK(a.reread_per_turn)} per request now, ${fmtK(b.reread_per_turn)} before Kiasi`;
   else since = `${fmtK(t.reread_per_prompt)} of context per prompt`;
   if (bb && bb.days != null) {
     out.push(fact('Bought back', bb.days < 0.1 ? `<span data-count="${Math.round(bb.days * 240) / 10}">${Math.round(bb.days * 240) / 10}</span><small>hours</small>` : `<span data-count="${bb.days}">${bb.days}</span><small>days</small>`, `of the weekly limit · ${since}`,
-      `${fmtM(bb.kept_out)} tokens kept out, ${fmtM(bb.saved)} of re-reads avoided, at ${fmtM(bb.rate)} a day. Every token kept out would have been re-sent on every later request of its session.`));
+      `Context per request compared with before Kiasi. ${fmtM(bb.kept_out)} tokens kept out, ${fmtM(bb.saved)} of re-reads avoided, at ${fmtM(bb.rate)} a day. Every token kept out would have been re-sent on every later request of its session.`));
   } else {
     out.push(fact('Kept out', `${fmtM(kind('cap').kept_out + kind('pruned').kept_out)}<small>tokens</small>`, since, `${kind('cap').count} outputs capped, ${t.pruned} compactions pruned`));
   }
