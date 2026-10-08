@@ -34,6 +34,19 @@ class TestLimitsForecast(KiasiTestCase):
         self.assertEqual(item["severity"], "warning")
         self.assertGreater(item["burn_per_day"], 15)
 
+    def test_the_runway_carries_the_window_readings_thinned(self):
+        now = int(time.time())
+        resets = now + 5 * 86400
+        self.write_reading(40, resets)
+        points = [{"ts": now - 2 * 86400 + i * 600, "used": min(40, i // 8), "resets_at": resets} for i in range(288)]
+        points.insert(0, {"ts": resets - 8 * 86400, "used": 90, "resets_at": resets - 7 * 86400})  # last window: left out
+        self.write_history(points)
+        runway = self.limits_data.get_limits()["runway"]
+        self.assertLessEqual(len(runway["points"]), constants.RUNWAY_POINTS_MAX)
+        self.assertEqual(runway["points"][0], [now - 2 * 86400, 0], "the first reading of the window is kept")
+        self.assertEqual(runway["points"][-1], [points[-1]["ts"], points[-1]["used"]], "and so is the last")
+        self.assertTrue(all(a[0] < b[0] for a, b in zip(runway["points"], runway["points"][1:])), "in time order")
+
     def test_short_or_flat_history_stays_quiet(self):
         now = int(time.time())
         resets = now + 5 * 86400

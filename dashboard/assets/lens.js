@@ -35,16 +35,16 @@ function renderWeek(d, l) {
   const w0 = t1 - 7 * DAY_MS;           // the limit window
   const t0 = midnight(w0);              // the axis starts at the midnight before it, so every day is whole
   const days = d.per_day.filter(day => dayStart(day.day) + DAY_MS > t0 && dayStart(day.day) < t1);
-  const W = chartWidth('#week-chart'), H = r ? 250 : 190, pad = WEEK_PAD;
+  const W = chartWidth('#week-chart'), H = r ? 320 : 190, pad = WEEK_PAD;
   const innerW = W - pad.left - pad.right;
   const x = t => pad.left + (t - t0) / (t1 - t0) * innerW;
-  const trackY = pad.top + 38, trackH = 14;
-  const barTop = r ? trackY + trackH + 50 : pad.top + 24, barBottom = H - pad.bottom;
+  const bandTop = pad.top + 24, bandH = 96, bandBottom = bandTop + bandH;
+  const yPct = v => bandBottom - Math.max(0, Math.min(100, v)) / 100 * bandH;
+  const barTop = r ? bandBottom + 46 : pad.top + 24, barBottom = H - pad.bottom;
   const max = Math.max(...days.map(day => day.paid), 1);
   const yBar = v => barBottom - v / max * (barBottom - barTop);
-  const rowLabel = (y, text) => `<text class="wk-row" x="${pad.left - 12}" y="${y}" text-anchor="end">${text}</text>`;
-  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="The week: limit used and context sent per day">`
-    + `<defs><pattern id="wk-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" class="wk-hatch"/></pattern></defs>`;
+  const rowLabel = (y, text, cls = 'wk-row') => `<text class="${cls}" x="${pad.left - 12}" y="${y}" text-anchor="end">${text}</text>`;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="The week: limit used and context sent per day">`;
   // day columns and labels
   for (let t = midnight(t0 + DAY_MS); t < t1; t += DAY_MS) svg += `<line class="wk-tick" x1="${x(t)}" x2="${x(t)}" y1="${pad.top}" y2="${barBottom}"/>`;
   for (let t = midnight(t0); t < t1; t += DAY_MS) {
@@ -53,22 +53,42 @@ function renderWeek(d, l) {
     const today = midnight(now) === t;
     svg += `<text class="wk-day${today ? ' today' : ''}" x="${x((a + b) / 2)}" y="${pad.top - 10}" text-anchor="middle">${today ? 'today' : new Date(t).toLocaleDateString([], { weekday: 'short' })}</text>`;
   }
-  // limit track
+  // limit used: a cumulative line from the readings, projected at the current burn
   if (r) {
-    const end = r.state === 'runs_out' ? r.run_out_at * 1000 : t1;
-    svg += rowLabel(trackY + trackH - 2, 'LIMIT')
-      + `<rect class="wk-track" x="${x(w0)}" y="${trackY}" width="${x(t1) - x(w0)}" height="${trackH}" rx="3"/>`
-      + `<rect class="wk-proj" x="${x(Math.min(now, end))}" y="${trackY}" width="${Math.max(0, x(end) - x(Math.min(now, end)))}" height="${trackH}"/>`
-      + `<rect class="wk-used" x="${x(w0)}" y="${trackY}" width="${Math.max(0, x(Math.min(now, t1)) - x(w0))}" height="${trackH}" rx="3"/>`
-      + `<text class="wk-sub" x="${x(w0)}" y="${trackY + trackH + 18}">${r.used}% used${r.burn_per_day ? ` · ${r.burn_per_day}% a day` : ''}</text>`;
-    if (r.state === 'runs_out') {
-      const rx = x(end);
-      const nearReset = rx > x(t1) - 130;
-      svg += `<line class="wk-runout" x1="${rx}" x2="${rx}" y1="${trackY - 6}" y2="${trackY + trackH + 6}"/>`
-        + `<text class="wk-runout-lbl" x="${rx}" y="${nearReset ? trackY + trackH + 18 : trackY - 10}" text-anchor="${nearReset ? 'end' : rx < pad.left + 70 ? 'start' : 'middle'}">runs out ${esc(whenText(r.run_out_at))}</text>`;
-    } else if (r.state === 'clear') {
-      svg += `<text class="wk-sub good" x="${x(t1) - 4}" y="${trackY + trackH + 18}" text-anchor="end">${r.spare}% to spare</text>`;
+    const pts = (r.points || []).map(([t, u]) => [t * 1000, u]).filter(([t]) => t >= w0 && t <= now);
+    const cur = [now, r.used];
+    const line = pts.length ? pts.concat([cur]) : [cur];
+    const P = p => `${x(p[0]).toFixed(1)},${yPct(p[1]).toFixed(1)}`;
+    const burnMs = (r.burn_per_day || 0) / DAY_MS;       // percent per millisecond
+    let end = null;
+    if (r.state === 'runs_out') end = [r.run_out_at * 1000, 100];
+    else if (burnMs > 0) end = [t1, Math.min(100, r.used + burnMs * (t1 - now))];
+    svg += rowLabel(bandTop + 4, '100%', 'wk-row') + rowLabel(bandBottom, '0', 'wk-row') + rowLabel((bandTop + bandBottom) / 2 + 4, 'LIMIT')
+      + `<line class="wk-ceiling" x1="${x(w0)}" x2="${x(t1)}" y1="${bandTop}" y2="${bandTop}"/>`
+      + `<line class="wk-floor" x1="${x(w0)}" x2="${x(t1)}" y1="${bandBottom}" y2="${bandBottom}"/>`;
+    if (line.length > 1) {
+      const start = `${x(line[0][0]).toFixed(1)},${bandBottom}`;
+      svg += `<path class="wk-area" d="M${start} L${line.map(P).join(' L')} L${x(cur[0]).toFixed(1)},${bandBottom} Z"/>`
+        + `<path class="wk-line" d="M${line.map(P).join(' L')}"/>`;
     }
+    if (end) {
+      svg += `<path class="wk-proj-line" d="M${P(cur)} L${P(end)}"/>`;
+      if (r.state === 'runs_out') {
+        const rx = x(end[0]);
+        const nearReset = rx > x(t1) - 130, inside = nearReset || W < 640;   // keep clear of the reset label
+        svg += `<line class="wk-runout" x1="${rx}" x2="${rx}" y1="${bandTop - 6}" y2="${barBottom}"/>`
+          + `<circle class="wk-runout-dot" cx="${rx}" cy="${bandTop}" r="4"/>`
+          + `<text class="wk-runout-lbl" x="${rx + (nearReset ? -8 : 8)}" y="${inside ? bandTop + 16 : bandTop - 10}" text-anchor="${nearReset ? 'end' : 'start'}">runs out ${esc(whenText(r.run_out_at))}</text>`;
+      } else if (r.state === 'clear') {
+        svg += `<circle class="wk-end-dot" cx="${x(end[0])}" cy="${yPct(end[1])}" r="3.5"/>`
+          + `<text class="wk-sub good" x="${x(t1) - 8}" y="${yPct(end[1]) - 10}" text-anchor="end">${r.spare}% to spare</text>`;
+      }
+    }
+    const cx = x(cur[0]), cy = yPct(cur[1]);
+    const leftSide = cx > x(t1) - 170;
+    const tip = `${r.used}% of the weekly limit used${r.burn_per_day ? `, ${r.burn_per_day}% a day` : ''}${pts.length ? ` · ${pts.length} readings this window` : ''}`;
+    svg += `<g data-tip="${esc(tip)}"><circle class="wk-now-dot" cx="${cx}" cy="${cy}" r="4.5"/>`
+      + `<text class="wk-now-lbl" x="${cx + (leftSide ? -10 : 10)}" y="${cy + 4}" text-anchor="${leftSide ? 'end' : 'start'}">${r.used}% used${r.burn_per_day ? ` · ${r.burn_per_day}% a day` : ''}</text></g>`;
     svg += `<line class="wk-reset" x1="${x(t1)}" x2="${x(t1)}" y1="${pad.top}" y2="${barBottom}"/><text class="wk-sub" x="${x(t1) - 4}" y="${pad.top + 12}" text-anchor="end">reset ${esc(whenText(r.resets_at))}</text>`;
   }
   // sent bars

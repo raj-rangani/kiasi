@@ -128,6 +128,20 @@ def _forecast(points, item, now):
             "burn_per_day": round(rate * 86400, 1)}
 
 
+def runway_points(points, runway, now, limit=constants.RUNWAY_POINTS_MAX):
+    """The weekly readings of the current window as [ts, used] pairs for the burn line, thinned to at most
+    `limit` points with the first and last always kept."""
+    if not runway:
+        return []
+    resets = runway["resets_at"]
+    mine = sorted((p for p in points if p.get("key") == "seven_day" and p.get("used") is not None
+                   and resets - constants.LIMIT_GROUP_SPAN["weekly"] <= p.get("ts", 0) <= now), key=lambda p: p["ts"])
+    if len(mine) > limit:
+        step = (len(mine) - 1) / (limit - 1)
+        mine = [mine[round(i * step)] for i in range(limit)]
+    return [[int(p["ts"]), int(p["used"])] for p in mine]
+
+
 def add_forecast(reading):
     points = _history_points()
     now = int(time.time())
@@ -157,6 +171,8 @@ def get_limits():
         best = _merge(best, older)
     reading = add_forecast(dict(best, setup="ready"))
     reading["runway"] = digest.runway(reading)
+    if reading["runway"]:
+        reading["runway"]["points"] = runway_points(_history_points(), reading["runway"], int(time.time()))
     return reading
 
 

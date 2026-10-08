@@ -588,6 +588,8 @@ LIMITS_HISTORY_NAME = "limits-history.jsonl"
 FORECAST_MIN_POINTS = 2
 FORECAST_MIN_SPAN_SECONDS = 4 * 3600
 LIMIT_GROUP_SPAN = {"session": 5 * 3600, "weekly": 7 * 86400}
+# The burn line on the Overview draws at most this many readings of the current weekly window.
+RUNWAY_POINTS_MAX = 120
 
 # Session postmortem: deterministic findings ranked by token cost, shown in the
 # dashboard's session detail. A jump is one step growing the context this much.
