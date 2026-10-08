@@ -57,12 +57,13 @@ function renderWeek(d, l) {
   if (r) {
     const pts = (r.points || []).map(([t, u]) => [t * 1000, u]).filter(([t]) => t >= w0 && t <= now);
     const cur = [now, r.used];
-    const line = pts.length ? pts.concat([cur]) : [cur];
+    const line = [[w0, 0]].concat(pts.filter(([t]) => t > w0), [cur]);   // the window opens at zero at the previous reset
     const P = p => `${x(p[0]).toFixed(1)},${yPct(p[1]).toFixed(1)}`;
     const burnMs = (r.burn_per_day || 0) / DAY_MS;       // percent per millisecond
     let end = null;
     if (r.state === 'runs_out') end = [r.run_out_at * 1000, 100];
     else if (burnMs > 0) end = [t1, Math.min(100, r.used + burnMs * (t1 - now))];
+    if (x(w0) > pad.left + 1) svg += `<rect class="wk-before" x="${pad.left}" y="${bandTop}" width="${x(w0) - pad.left}" height="${bandH}"/><text class="wk-sub" x="${x(w0) - 6}" y="${bandBottom - 6}" text-anchor="end">last window</text>`;
     svg += rowLabel(bandTop + 4, '100%', 'wk-row') + rowLabel(bandBottom, '0', 'wk-row') + rowLabel((bandTop + bandBottom) / 2 + 4, 'LIMIT')
       + `<line class="wk-ceiling" x1="${x(w0)}" x2="${x(t1)}" y1="${bandTop}" y2="${bandTop}"/>`
       + `<line class="wk-floor" x1="${x(w0)}" x2="${x(t1)}" y1="${bandBottom}" y2="${bandBottom}"/>`;
@@ -125,7 +126,11 @@ function renderFacts(d) {
   } else {
     out.push(fact('Kept out', `${fmtM(kind('cap').kept_out + kind('pruned').kept_out)}<small>tokens</small>`, since, `${kind('cap').count} outputs capped, ${t.pruned} compactions pruned`));
   }
-  if (p.rate != null && p.prior_rate) out.push(fact('This week', change(p.prior_rate, p.rate), `${fmtM(p.rate)} a day against ${fmtM(p.prior_rate)} last week`, p.note || ''));
+  if (p.rate != null && p.prior_rate) {
+    const r = (p.rate - p.prior_rate) / p.prior_rate, pct = Math.abs(Math.round(r * 100));
+    const value = pct === 0 ? 'Level' : `<em class="${r < 0 ? 'good' : 'bad'}">${pct}% ${r < 0 ? 'less' : 'more'}</em>`;
+    out.push(fact('This week', value, `${fmtM(p.rate)} a day against ${fmtM(p.prior_rate)} last week`, p.note || ''));
+  }
   else if (p.rate != null) out.push(fact('This week', fmtM(p.rate), 'a day · no earlier week to compare', p.note || ''));
   const top = ((d.attribution || {}).kinds || [])[0];
   if (top) {

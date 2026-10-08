@@ -475,6 +475,9 @@ details.fold .block-head:first-of-type { margin-top: 4px; }
 .facts b { font-family: var(--serif); font-weight: 400; font-size: 24px; line-height: 1.1; color: var(--ink); display: flex; align-items: baseline; gap: 7px; white-space: nowrap; }
 .facts b small { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .facts b .fact-text { font-size: 20px; }
+.facts b em { font-style: normal; }
+.facts b em.good { color: var(--ok); }
+.facts b em.bad { color: var(--bad); }
 .fact-sub { font-size: 13px; line-height: 1.45; color: var(--muted); }
 .fact-sub em { font-style: normal; }
 .fact-sub em.good { color: var(--ok); }
@@ -487,6 +490,7 @@ details.fold .block-head:first-of-type { margin-top: 4px; }
 .week-chart .wk-tick { stroke: var(--rule); stroke-dasharray: 2 4; }
 .week-chart .wk-ceiling { stroke: var(--ink); stroke-width: 1; stroke-dasharray: 2 3; }
 .week-chart .wk-floor { stroke: var(--rule); }
+.week-chart .wk-before { fill: var(--rule); opacity: .35; }
 .week-chart .wk-area { fill: var(--ink); opacity: .07; }
 .week-chart .wk-line { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; }
 .week-chart .wk-proj-line { fill: none; stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 4 4; opacity: .55; }
