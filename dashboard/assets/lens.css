@@ -264,6 +264,7 @@ html.panel-open .panel-body, html.panel-open .panel-content { touch-action: auto
 .store-total span { color: var(--muted); font-size: 15px; }
 .store-total em { font-style: normal; color: var(--ink); }
 .store-bar { display: flex; height: 32px; margin: 16px 0 12px; border-radius: 8px; overflow: hidden; background: var(--card); box-shadow: inset 0 0 0 1px var(--rule); }
+.store-fill { display: flex; width: 100%; height: 100%; }
 .store-bar i { display: block; flex: none; min-width: 3px; }
 .store-key { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); }
 .store-key span { display: inline-flex; align-items: center; gap: 6px; }
@@ -561,18 +562,27 @@ details.fold .block-head:first-of-type { margin-top: 4px; }
 .lim:nth-child(3) { animation-delay: 120ms; }
 .lim-bar i { transform-origin: left; animation: growX .5s cubic-bezier(.2,.7,.2,1) .1s both; }
 .mini, .rl-row, .fx, .store-row { animation: rise .32s cubic-bezier(.2,.7,.2,1) both; }
-.mini:nth-child(2), .rl-row:nth-child(3), .fx:nth-child(2), .store-row:nth-child(2) { animation-delay: 50ms; }
-.mini:nth-child(3), .rl-row:nth-child(4), .fx:nth-child(3), .store-row:nth-child(3) { animation-delay: 100ms; }
-.mini:nth-child(4), .rl-row:nth-child(5), .fx:nth-child(4), .store-row:nth-child(4) { animation-delay: 150ms; }
-.mini:nth-child(5), .rl-row:nth-child(6), .fx:nth-child(5), .store-row:nth-child(5) { animation-delay: 200ms; }
-.mini:nth-child(6), .rl-row:nth-child(7), .fx:nth-child(6), .store-row:nth-child(6) { animation-delay: 250ms; }
-.mini:nth-child(7), .rl-row:nth-child(8), .fx:nth-child(7), .store-row:nth-child(7) { animation-delay: 300ms; }
-.mini:nth-child(8), .rl-row:nth-child(9), .fx:nth-child(8), .store-row:nth-child(8) { animation-delay: 350ms; }
+.mini:nth-child(2), .rl-row:nth-child(3), .fx:nth-child(2) { animation-delay: 50ms; }
+.mini:nth-child(3), .rl-row:nth-child(4), .fx:nth-child(3) { animation-delay: 100ms; }
+.mini:nth-child(4), .rl-row:nth-child(5), .fx:nth-child(4) { animation-delay: 150ms; }
+.mini:nth-child(5), .rl-row:nth-child(6), .fx:nth-child(5) { animation-delay: 200ms; }
+.mini:nth-child(6), .rl-row:nth-child(7), .fx:nth-child(6) { animation-delay: 250ms; }
+.mini:nth-child(7), .rl-row:nth-child(8), .fx:nth-child(7) { animation-delay: 300ms; }
+.mini:nth-child(8), .rl-row:nth-child(9), .fx:nth-child(8) { animation-delay: 350ms; }
 .mini path.ctx, .day-line polyline { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw .7s cubic-bezier(.4,0,.2,1) .15s forwards; }
 .day-line polygon { animation: fade .6s ease-out .4s both; }
 .mx-bar, .mx-subbar { transform-box: fill-box; transform-origin: bottom; animation: growY .45s cubic-bezier(.2,.7,.2,1) both; }
-.store-bar i { transform-origin: left; animation: growX .6s cubic-bezier(.2,.7,.2,1) both; }
-@media (prefers-reduced-motion: reduce) { .sheet-head, .store-head, .store-foot, .store-rec, .lim, .lim-bar i, .mini, .rl-row, .fx, .store-row, .mini path.ctx, .day-line polyline, .day-line polygon, .mx-bar, .mx-subbar, .store-bar i { animation: none; stroke-dasharray: none; } }
+/* Storage: the hero first, then the fill grows once from the left, then the key and the foot */
+.store-fill { transform-origin: left; animation: growX .7s cubic-bezier(.2,.7,.2,1) .12s both; }
+.store-key span { animation: rise .3s cubic-bezier(.2,.7,.2,1) both; }
+.store-key span:nth-child(1) { animation-delay: .25s; } .store-key span:nth-child(2) { animation-delay: .29s; } .store-key span:nth-child(3) { animation-delay: .33s; } .store-key span:nth-child(4) { animation-delay: .37s; }
+.store-key span:nth-child(5) { animation-delay: .41s; } .store-key span:nth-child(6) { animation-delay: .45s; } .store-key span:nth-child(7) { animation-delay: .49s; } .store-key span:nth-child(n+8) { animation-delay: .53s; }
+.store-foot { animation-delay: .4s; }
+[data-view="storage"] .sheet-head { animation-delay: .3s; }
+.store-rec { animation-delay: .38s; } .store-rec:nth-child(2) { animation-delay: .44s; } .store-rec:nth-child(3) { animation-delay: .5s; }
+.store-row { animation-delay: .42s; }
+.store-row:nth-child(2) { animation-delay: 470ms; } .store-row:nth-child(3) { animation-delay: 520ms; } .store-row:nth-child(4) { animation-delay: 570ms; } .store-row:nth-child(5) { animation-delay: 620ms; } .store-row:nth-child(6) { animation-delay: 670ms; } .store-row:nth-child(7) { animation-delay: 720ms; } .store-row:nth-child(8) { animation-delay: 770ms; }
+@media (prefers-reduced-motion: reduce) { .sheet-head, .store-head, .store-foot, .store-rec, .lim, .lim-bar i, .mini, .rl-row, .fx, .store-row, .mini path.ctx, .day-line polyline, .day-line polygon, .mx-bar, .mx-subbar, .store-fill, .store-key span { animation: none; stroke-dasharray: none; } }
 .tabs a, .iconbtn { transition: color .15s ease-out, border-color .15s ease-out, background-color .15s ease-out; }
 .tabs a:active, .iconbtn:active { transform: translateY(1px); }
 @keyframes rise { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }

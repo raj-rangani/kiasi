@@ -49,8 +49,8 @@ function renderMeter(s, cats) {
   const shown = cats.filter(c => c.bytes);
   const free = Math.max(0, s.max - s.size);
   $('#store-meter').innerHTML = `<div class="store-total"><b>${mb(s.size)}</b><span>of ${mb(s.max)} used · ${(used * 100).toFixed(used < 0.1 ? 1 : 0)}% · <em>${mb(free)} free</em></span></div>
-    <div class="store-bar" role="img" aria-label="${esc(`${mb(s.size)} of ${mb(s.max)} used, ${mb(free)} free`)}">${shown.map(c =>
-      `<i class="cat-${c.key}" style="width:${(c.bytes / Math.max(s.max, s.size) * 100).toFixed(3)}%" title="${esc(`${c.label}: ${mb(c.bytes)}`)}"></i>`).join('')}</div>
+    <div class="store-bar" role="img" aria-label="${esc(`${mb(s.size)} of ${mb(s.max)} used, ${mb(free)} free`)}"><div class="store-fill">${shown.map(c =>
+      `<i class="cat-${c.key}" style="width:${(c.bytes / Math.max(s.max, s.size) * 100).toFixed(3)}%" title="${esc(`${c.label}: ${mb(c.bytes)}`)}"></i>`).join('')}</div></div>
     <div class="store-key">${shown.map(c => `<span title="${mb(c.bytes)}"><i class="cat-${c.key}"></i>${esc(c.label)}</span>`).join('')}<span title="${mb(free)}"><i class="cat-free"></i>Free</span></div>
     <p class="store-foot">${growth}. Saved files leave once they and their session go unused; the log and caches stay.</p>`;
 }
