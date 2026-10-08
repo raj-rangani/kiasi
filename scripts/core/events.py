@@ -3,6 +3,7 @@ import os
 import re
 import sys
 import time
+from datetime import datetime
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -17,6 +18,22 @@ except ImportError:
 
 def now_iso():
     return time.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def event_epoch(ts):
+    """Seconds since the epoch for a stamp. Event-log stamps (now_iso) are local time with no zone; transcript
+    stamps carry a Z or an offset and are read as such. 0 when the stamp is missing or unreadable."""
+    if not ts or not isinstance(ts, str):
+        return 0
+    if ts.endswith("Z") or re.search(r"[+-]\d\d:?\d\d$", ts):
+        try:
+            return datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            return 0
+    try:
+        return time.mktime(time.strptime(ts[:19], "%Y-%m-%dT%H:%M:%S"))
+    except ValueError:
+        return 0
 
 
 def project_slug(cwd):

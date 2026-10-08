@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core import constants
-from core.events import unlock, wait_lock
+from core.events import event_epoch, unlock, wait_lock
 
 REPLACE_TRIES = 5
 REPLACE_WAIT = 0.02  # seconds between tries: on Windows a reader holding the file open makes the replace fail briefly
@@ -413,10 +413,8 @@ def kiasi_actions(days):
                 continue
             if not isinstance(record, dict):
                 continue
-            try:
-                if time.mktime(time.strptime(record["ts"], "%Y-%m-%dT%H:%M:%S")) < cutoff:
-                    continue
-            except (KeyError, ValueError, TypeError):
+            t = event_epoch(record.get("ts"))
+            if not t or t < cutoff:
                 continue
             event = record.get("event")
             if event == "cap":

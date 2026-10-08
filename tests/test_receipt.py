@@ -35,9 +35,13 @@ class TestCapEpoch(KiasiTestCase):
     def test_local_and_utc_stamps_agree(self):
         now = int(time.time())
         local = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now))
+        self.assertEqual(events.event_epoch(local), now, "an event-log stamp is local time with no zone")
+        self.assertEqual(events.event_epoch(stamp(now)), now, "a transcript stamp is UTC")
+        self.assertEqual(events.event_epoch(stamp(now)[:-1] + ".250Z"), now + 0.25)
+        self.assertEqual(events.event_epoch("1970-01-01T05:30:00+05:30"), 0)
+        for junk in ("", None, "soon", "2026-13-40T00:00:00", 12):
+            self.assertEqual(events.event_epoch(junk), 0, junk)
         self.assertEqual(receipt.cap_epoch(local), now)
-        self.assertEqual(receipt.cap_epoch(stamp(now)), now)
-        self.assertEqual(receipt.cap_epoch(""), 0)
 
 
 class TestBuildReceipt(ReceiptCase):

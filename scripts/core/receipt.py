@@ -5,13 +5,11 @@ The counterfactual is the same sum the report uses: every token a cap kept out w
 every later step of that session, so the avoided re-read is kept tokens times the steps that followed."""
 import json
 import os
-import re
-import time
 from bisect import bisect_right
 from pathlib import Path
 
 from core import constants
-from core.events import load_session, log_event, now_iso
+from core.events import event_epoch, load_session, log_event, now_iso
 from core.notify import notify_desktop
 from core.transcript import entry_epoch
 
@@ -73,15 +71,7 @@ def cap_records(session_id):
 
 
 def cap_epoch(ts):
-    """Event-log stamps are local time with no zone (now_iso); transcript stamps carry a Z or an offset."""
-    if not ts:
-        return 0
-    if ts.endswith("Z") or re.search(r"[+-]\d\d:?\d\d$", ts):
-        return entry_epoch({"timestamp": ts})
-    try:
-        return time.mktime(time.strptime(ts[:19], "%Y-%m-%dT%H:%M:%S"))
-    except ValueError:
-        return 0
+    return event_epoch(ts)
 
 
 def build_receipt(session_id, transcript_path, cwd, state):

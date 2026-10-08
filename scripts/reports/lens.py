@@ -12,6 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core import constants
+from core.events import event_epoch
 from reports.budget import SKIPPED, SYNTHETIC_MODEL, file_lock, first_ask, install_day, project_of, read_lines, reset_skips, skip, transcript_files, window_start, write_atomic
 
 SAVING_KINDS = ("cap", "paste_refused", "delegated", "pruned", "read_skipped")
@@ -51,7 +52,11 @@ def synthetic_kind(entry, message):
 
 
 def epoch_local(ts):
-    return time.mktime(time.strptime(ts, "%Y-%m-%dT%H:%M:%S"))
+    """An event-log stamp as seconds since the epoch; raises ValueError when unreadable, as the callers skip such records."""
+    t = event_epoch(ts)
+    if not t:
+        raise ValueError(f"unreadable stamp {ts!r}")
+    return t
 
 
 def epoch_iso(ts):
@@ -550,7 +555,7 @@ def problem_rows(events):
         row = found.setdefault(kind, {"kind": kind, "explanation": PROBLEM_KINDS.get(kind, "Kiasi worked around a failure of this kind."), "count": 0})
         row["count"] += 1
         detail = record.get("error") or record.get("path") or record.get("settings") or record.get("project") or record.get("hook") or ""
-        row.update({"ts": record.get("ts") or epoch_iso(t), "session": str(record.get("session_id") or "")[:8],
+        row.update({"ts": record["ts"], "session": str(record.get("session_id") or "")[:8],
                     "message": detail if isinstance(detail, str) else json.dumps(detail, ensure_ascii=False),
                     "path": str(record.get("path") or "")})
     return sorted(found.values(), key=lambda row: (-row["count"], row["kind"]))

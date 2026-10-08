@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- One parser for every stamp: event-log stamps are local time with no zone and transcript stamps are UTC, and the report, the budget cutoff and the session receipt now read both through `core.events.event_epoch`. Before, a stamp read in the wrong zone would have shifted a cut against its session's steps by the local offset.
 - Runway: the Overview leads with whether the weekly limit lasts to its reset at the current burn (runs out at a time, clear with a share to spare, or on or off pace before a forecast exists). It is the weekly window's forecast from the status line readings, served under `runway` at `/limits`.
 - Bought back: the days of the weekly limit the avoided re-reads amount to at this week's daily rate, in place of the kept-out token count; the report carries it under `bought_back`.
 - Session receipt: at `SessionEnd` a desktop notification with what the session sent, what it would have sent without Kiasi and the costliest output cut, kept in `receipts.jsonl`; the next startup in the same project shows it as one line.
