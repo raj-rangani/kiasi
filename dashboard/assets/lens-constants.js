@@ -193,3 +193,5 @@ const EST_TIPS = {
 };
 const EST_NOTE = 'Figures marked est. come from a formula; everything else is read from your transcripts.';
 const COUNT_UP_MS = 600;      // the bought-back number counts up on render, ease-out; KPI counters sit in the 400-800ms range
+// The Overview's spike line shows only when the spike session started within this many days, so it reads as news and clears on its own.
+const SPIKE_NOTE_DAYS = 2;

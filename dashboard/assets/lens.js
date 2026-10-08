@@ -209,7 +209,8 @@ function renderFixes(d) {
 }
 
 function renderSpikeNote(d) {
-  const rows = (d.spikes || {}).rows || [];
+  const fresh = new Date(Date.now() - (SPIKE_NOTE_DAYS - 1) * DAY_MS).toISOString().slice(0, 10);
+  const rows = ((d.spikes || {}).rows || []).filter(r => String(r.day || '').slice(0, 10) >= fresh);
   const host = $('#spike-note');
   host.hidden = !rows.length;
   if (host.hidden) return;

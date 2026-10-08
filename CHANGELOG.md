@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- Overview: the spike line shows only when the spike session started today or yesterday. Older spikes stay marked in Sessions and on the month card.
 - Rules: the breakdown column wrapped again. The Overview ledger's grid style had leaked onto the rules' facts paragraph through a shared class name and pushed the table off the page.
 - Overview: the bought-back note fits on one line.
 - Dashboard colour: four low-saturation washes join the palette, with dark-mode values. The burn line and the daily bars take the blue, today's bar and column take the amber, the band past run-out takes a faint red, and the spike notice sits on an amber wash. Each fact in the ledger carries a coloured dot, and the three fixes take blue, violet and teal on their rank, bar and share.
