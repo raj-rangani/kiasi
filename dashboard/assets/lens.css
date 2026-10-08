@@ -344,7 +344,7 @@ abbr.est { margin-left: 5px; font-family: var(--mono); font-size: 10px; letter-s
 .sheet .since { margin-top: 0; padding: 0; border-bottom: 0; }
 .sheet .measured { padding: 0 0 26px; border-bottom: 0; }
 .block-head { margin: 0 0 6px; font-family: var(--mono); font-size: 11px; font-weight: 400; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 32px; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); margin-bottom: 28px; }
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 32px; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); margin-bottom: 28px; }
 .kpi { position: relative; padding: 14px 0; display: grid; grid-row: span 3; grid-template-rows: subgrid; row-gap: 5px; }
 .kpi + .kpi::before { content: ""; position: absolute; left: -16px; top: 0; bottom: 0; border-left: 1px solid var(--rule); }
 .kpi-label { font-family: var(--mono); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }

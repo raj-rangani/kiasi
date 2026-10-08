@@ -2,7 +2,8 @@
 
 ### Unreleased
 
-- Overview shows two dollar figures, both measured from the transcripts and priced at public API rates per model: what the prompt cache saved (every cache-read token at its model's read rate against the input rate it would have cost fresh) and what the usage would cost on the API. Each day's row in the report carries the same two figures. The tile notes say they are not the subscription fee; tokens on a model without a known price are left out and said so.
+- Overview shows two figures priced at public API rates per model, both measured from the transcripts: the usage at API rates (fresh input, cache writes, cache reads and output) and what the prompt cache saved (every cache-read token at its model's read rate against the input rate it would have cost fresh). On the API they are the bill; on a Pro or Max subscription the tiles say they are the weight of the usage against the limit, not a charge. Each day's row in the report carries both; tokens on a model without a known price are left out and said so. The report lists the usage per model.
+- A pace tile: re-read tokens a day over the 7 full days before today, against the 7 days before those, with today so far. Days without work count as zero, as a weekly limit sees them.
 - "Before and after Kiasi" leads with the headline it was missing: re-read tokens per main-session step before the install against since, and the factor between them once each side has enough steps.
 - "What Kiasi did" has a row for rule notices followed: how many of the turn pauses, routing refusals, handoff and task-switch notices and read nudges Claude acted on, with the per-rule split and a link to how each is measured.
 - The Experiment sheet on the Rules tab is no longer blank when no holdout is running: it says how to start one and when the comparison will appear.

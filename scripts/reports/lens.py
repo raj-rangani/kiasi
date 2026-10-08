@@ -808,6 +808,25 @@ def period_metrics(rows):
     }
 
 
+def pace_report(today_tokens):
+    """Re-read tokens a day over the 7 full days before today against the 7 before those, from the day history budget.py keeps.
+
+    A day with no work counts as zero: the pace is what a weekly limit sees, not the mean of busy days. None until a full day is known."""
+    tokens = {}
+    for row in history_rows():
+        tokens[row["day"]] = sum((row.get(side) or {}).get("cache_read_input_tokens", 0) for side in ("main", "sub"))
+    day = lambda n: local_day(time.time() - n * 86400)
+    last = [tokens.get(day(n), 0) for n in range(1, 8)]
+    prior = [tokens.get(day(n), 0) for n in range(8, 15)]
+    if not any(day(n) in tokens for n in range(1, 8)):
+        return None
+    has_prior = any(day(n) in tokens for n in range(8, 15))
+    return {"rate": int(sum(last) / 7), "week": sum(last), "prior_rate": int(sum(prior) / 7) if has_prior else None,
+            "prior_week": sum(prior) if has_prior else None, "today": today_tokens,
+            "series": [{"day": day(n), "tokens": tokens.get(day(n), 0)} for n in range(14, 0, -1)],
+            "note": "the 7 full days before today against the 7 before those; days without work count as zero"}
+
+
 def history_rows():
     """Per-day rows from HISTORY_FILE, which keeps every day budget.py ever built; budget.json's window when there is none yet."""
     for path in (constants.HISTORY_FILE, constants.BUDGET_FILE):
@@ -1205,6 +1224,7 @@ def build(days):
         "since": since_install(),
         "all_time": all_time,
         "cost": cost,
+        "pace": pace_report(bill.get(local_day(time.time()), 0)),
         "per_day": [{"day": day, "paid": bill.get(day, 0), "prompts": prompts.get(day, 0), "reread_per_prompt": int(main_bill.get(day, 0) / prompts[day]) if prompts.get(day) else None,
                      "sessions": len(startups.get(day, [])), "startup": int(sum(startups[day]) / len(startups[day])) if startups.get(day) else None,
                      "kinds": dict(kind_counts.get(day, {})),

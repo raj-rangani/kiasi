@@ -144,13 +144,22 @@ function costTiles(d, span, series) {
   const priced = k.models.filter(m => m.priced);
   const names = priced.map(m => m.model.replace(/^claude-/, '').replace(/-\d{8}$/, '')).join(', ');
   const unpriced = k.unpriced_tokens ? ` · ${fmtM(k.unpriced_tokens)} tokens on models without a known price are left out` : '';
-  const measured = 'Measured: every cache-read token in your transcripts, priced at its model\'s cache-read rate against the input rate it would have cost fresh. Public API prices per model.';
-  const api = 'What this usage would cost at public API rates: fresh input, cache writes, cache reads and output, each at its model\'s rate. A subscription pays a flat fee instead.';
+  const measured = 'Measured: every cache-read token in your transcripts, priced at its model\'s cache-read rate against the input rate it would have cost fresh. Public API prices per model; on a subscription, read it as how much lighter the cache makes your usage against the limit.';
+  const api = 'Fresh input, cache writes, cache reads and output, each at its model\'s public API rate. On the API this is the bill. On a Pro or Max subscription it is not a charge: the limits are consumption-based and heavier models use them up faster, so this is the best available weight of your usage against them.';
   return [
-    ['Cache saving, measured', fmtUsd(k.saved), series('cache_saved_usd'), true,
-      `cache reads priced against fresh input${k.saved_share == null ? '' : ` · <em class="good">${pct(k.saved_share)} off</em> the API-equivalent bill`}${unpriced}`, measured],
-    ['API-equivalent cost', fmtUsd(k.cost), series('cost_usd'), true, `at public API rates for ${esc(names)} · not your subscription fee`, api],
+    ...paceTile(d, span),
+    ['Usage at API rates', fmtUsd(k.cost), series('cost_usd'), true, `${esc(names)} · the weight of your usage against a subscription limit, not a charge`, api],
+    ['Cache saving at API rates', fmtUsd(k.saved), series('cache_saved_usd'), true,
+      `cache reads priced against fresh input${k.saved_share == null ? '' : ` · <em class="good">${pct(k.saved_share)} off</em> what the same usage would weigh uncached`}${unpriced}`, measured],
   ];
+}
+
+function paceTile(d) {
+  const p = d.pace;
+  if (!p) return [];
+  const against = p.prior_rate == null ? 'no earlier week to compare' : `<em class="${p.rate > p.prior_rate ? 'bad' : 'good'}">${change(p.prior_rate, p.rate)}</em> against ${fmtM(p.prior_rate)} a day the week before`;
+  return [['Re-read tokens a day', fmtM(p.rate), p.series.map(x => x.tokens), true,
+    `${fmtM(p.week)} over the 7 full days before today · ${against} · today so far ${fmtM(p.today)}`, `${p.note}. The line is the last 14 full days.`]];
 }
 
 function renderDid(d) {

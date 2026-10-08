@@ -590,6 +590,21 @@ class TestCostReport(ReportTestCase):
         self.assertEqual(cost["unpriced_tokens"], 1000 + 10 + 90 + 5, "the main step carries no model in this fixture")
 
 
+class TestPaceReport(ReportTestCase):
+    def test_pace_compares_the_last_seven_full_days_with_the_seven_before(self):
+        day = lambda n: time.strftime("%Y-%m-%d", time.localtime(time.time() - n * 86400))
+        row = lambda d, main, sub=0: {"day": d, "main": {"cache_read_input_tokens": main}, "sub": {"cache_read_input_tokens": sub}}
+        constants.BUDGET_FILE.write_text(json.dumps({"per_day": [row(day(10), 700_000), row(day(3), 350_000, 350_000), row(day(1), 700_000), row(day(0), 50_000)]}))
+        pace = self.lens.pace_report(50_000)
+        self.assertEqual((pace["rate"], pace["week"], pace["prior_rate"], pace["prior_week"], pace["today"]), (200_000, 1_400_000, 100_000, 700_000, 50_000))
+        self.assertEqual(len(pace["series"]), 14)
+        self.assertEqual(pace["series"][-1], {"day": day(1), "tokens": 700_000}, "today is partial and left out of the series")
+        constants.BUDGET_FILE.write_text(json.dumps({"per_day": [row(day(2), 100)]}))
+        self.assertIsNone(self.lens.pace_report(0)["prior_week"], "no row in the week before means no comparison")
+        constants.BUDGET_FILE.write_text(json.dumps({"per_day": [row(day(0), 100)]}))
+        self.assertIsNone(self.lens.pace_report(100), "today alone is not a full day")
+
+
 class TestRuleOutcomes(ReportTestCase):
     def session(self, name, prompts, steps, agents=(), read=100_000):
         """A transcript with typed prompts at the given seconds, steps (one request each) and Agent calls."""
