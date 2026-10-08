@@ -936,6 +936,41 @@ def pace_report(today_tokens):
             "note": "the 7 full days before today against the 7 before those; days without work count as zero"}
 
 
+def bought_back_report(totals, pace):
+    """Days of the weekly limit the avoided re-reads amount to at this week's daily rate, from core.digest."""
+    from core import digest
+    days = digest.bought_back(totals.get("saved"), (pace or {}).get("rate"))
+    return {"days": days, "saved": totals.get("saved", 0), "kept_out": totals.get("kept_out", 0), "rate": (pace or {}).get("rate")} if days is not None else None
+
+
+def savings_rows():
+    try:
+        return json.loads(constants.SAVINGS_FILE.read_text()).get("per_day") or []
+    except (OSError, ValueError, AttributeError):
+        return []
+
+
+def wrapped_report(session_rows, caps, since, pace, days=constants.WRAPPED_DAYS):
+    """The month card: the last WRAPPED_DAYS days from the per-day history and savings, plus the window's heaviest session and most-cut tool."""
+    first = local_day(time.time() - (days - 1) * 86400)
+    hist = [r for r in history_rows() if r.get("day", "") >= first]
+    sent = {r["day"]: sum((r.get(side) or {}).get("cache_read_input_tokens", 0) for side in ("main", "sub")) for r in hist}
+    prompts = sum(int(r.get("prompts") or 0) for r in hist)
+    saves = [r for r in savings_rows() if r.get("day", "") >= first]
+    kept = sum(r.get("kept_out", 0) for r in saves)
+    saved = sum(r.get("saved", 0) for r in saves)
+    busiest = max(sent, key=sent.get) if sent else None
+    top_tool = (caps.get("by_tool") or [{}])[0] if caps else {}
+    heaviest = session_rows[0] if session_rows else None
+    from core import digest
+    return {"days": days, "first_day": first, "active_days": len([d for d, v in sent.items() if v]), "sent": sum(sent.values()), "prompts": prompts,
+            "kept_out": kept, "saved": saved, "bought_back_days": digest.bought_back(saved, (pace or {}).get("rate")),
+            "busiest": {"day": busiest, "sent": sent[busiest]} if busiest else None,
+            "factor": (since or {}).get("factor"), "install_day": (since or {}).get("install_day"),
+            "heaviest": {"short": heaviest["short"], "project": heaviest["project"], "bill": heaviest["bill"], "day": heaviest["day"]} if heaviest else None,
+            "top_tool": {"tool": top_tool.get("tool") or top_tool.get("name") or top_tool.get("label"), "count": top_tool.get("count"), "kept_out": top_tool.get("kept_out")} if top_tool else None}
+
+
 def history_rows():
     """Per-day rows from HISTORY_FILE, which keeps every day budget.py ever built; budget.json's window when there is none yet."""
     for path in (constants.HISTORY_FILE, constants.BUDGET_FILE):
@@ -1341,6 +1376,8 @@ def build(days):
         "all_time": all_time,
         "cost": cost,
         "pace": pace_report(bill.get(local_day(time.time()), 0)),
+        "bought_back": None,
+        "wrapped": None,
         "attribution": attribution_report(sessions),
         "spikes": spike_report(sessions),
         "per_day": [{"day": day, "paid": bill.get(day, 0), "prompts": prompts.get(day, 0), "reread_per_prompt": int(main_bill.get(day, 0) / prompts[day]) if prompts.get(day) else None,
@@ -1370,6 +1407,8 @@ def build(days):
                      "holdout": constants.HOLDOUT, "holdout_rules": list(constants.HOLDOUT_RULES), "experiment_min_sessions": constants.LENS_EXPERIMENT_MIN_SESSIONS,
                      "delegation_credit": "only when an Agent call is logged as allowed or a subagent transcript starts after it: the log records no outcome"},
     }
+    report["bought_back"] = bought_back_report(report["totals"], report["pace"])
+    report["wrapped"] = wrapped_report(session_rows, report["caps"], report["since"], report["pace"])
     report["skipped"] = dict(SKIPPED)
     constants.LOG_DIR.mkdir(parents=True, exist_ok=True)
     constants.LENS_FILE.parent.mkdir(parents=True, exist_ok=True)

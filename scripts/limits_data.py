@@ -13,7 +13,7 @@ import json
 import time
 from datetime import datetime
 
-from core import constants
+from core import constants, digest
 
 
 def _read_json(path):
@@ -155,7 +155,9 @@ def get_limits():
     best = readings[0]
     for older in readings[1:]:
         best = _merge(best, older)
-    return add_forecast(dict(best, setup="ready"))
+    reading = add_forecast(dict(best, setup="ready"))
+    reading["runway"] = digest.runway(reading)
+    return reading
 
 
 def _merge(newer, older):

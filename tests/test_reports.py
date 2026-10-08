@@ -742,3 +742,22 @@ class TestRuleOutcomes(ReportTestCase):
         timed.append((self.lens.epoch_iso(self.stamp(0)), start("off9", True)[1]))
         self.assertTrue(self.lens.experiment_report(timed, self.lens.scan_sessions(7)[0])["enough"])
         self.assertIsNone(self.lens.experiment_report([], found))
+
+
+class TestBoughtBackAndMonth(KiasiTestCase):
+    def test_blocks_from_history_and_savings(self):
+        from reports import lens
+        today = time.strftime("%Y-%m-%d")
+        constants.HISTORY_FILE.write_text(json.dumps({"per_day": [
+            {"day": today, "prompts": 10, "main": {"cache_read_input_tokens": 300}, "sub": {"cache_read_input_tokens": 100}},
+            {"day": "2020-01-01", "prompts": 99, "main": {"cache_read_input_tokens": 9999}, "sub": {}}]}))
+        constants.SAVINGS_FILE.write_text(json.dumps({"per_day": [{"day": today, "kept_out": 50, "saved": 200}, {"day": "2020-01-01", "kept_out": 7, "saved": 7}]}))
+        rows = [{"short": "abc12345", "project": "-home-user-app", "bill": 400, "day": today}]
+        w = lens.wrapped_report(rows, {"by_tool": [{"tool": "Bash", "count": 2, "kept_out": 50}]}, {"factor": 2.0, "install_day": today}, {"rate": 100})
+        self.assertEqual((w["days"], w["sent"], w["prompts"], w["active_days"]), (constants.WRAPPED_DAYS, 400, 10, 1))
+        self.assertEqual((w["kept_out"], w["saved"], w["bought_back_days"]), (50, 200, 2.0))
+        self.assertEqual(w["busiest"], {"day": today, "sent": 400})
+        self.assertEqual(w["heaviest"]["short"], "abc12345")
+        self.assertEqual(w["top_tool"]["tool"], "Bash")
+        self.assertEqual(lens.bought_back_report({"saved": 200, "kept_out": 50}, {"rate": 100}), {"days": 2.0, "saved": 200, "kept_out": 50, "rate": 100})
+        self.assertIsNone(lens.bought_back_report({"saved": 200}, {}))

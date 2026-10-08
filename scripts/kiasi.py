@@ -4,6 +4,7 @@ import sys
 from core import constants
 from core.caps import handle_archive, handle_archive_path
 from core.events import log_error, session_lock
+from core.receipt import handle_session_end
 from core.prompt import handle_prompt
 from core.session import handle_plugin_compact, handle_plugin_quiet, handle_pre_compact, handle_session_start, handle_stop
 from core.turn import handle_post_tool, handle_pre_tool_use, handle_tool_batch, handle_tool_failure
@@ -22,6 +23,7 @@ HANDLERS = {
     "PluginQuiet": handle_plugin_quiet,
     "Stop": handle_stop,
     "SessionStart": handle_session_start,
+    "SessionEnd": handle_session_end,
 }
 
 

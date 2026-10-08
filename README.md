@@ -68,6 +68,7 @@ Each rule is a Claude Code hook with a fixed threshold you can change. Nothing i
 | A whole log pasted to ask one question | Paste manager | `UserPromptSubmit` |
 | Compaction forgets what you were doing | Pruner and state | `session.compact` (experimental) |
 | No idea where the week went | Local dashboard | `SessionStart` |
+| The week runs out before the reset | Runway, session receipt, weekly digest | `SessionEnd`, `SessionStart` |
 
 Cuts keep the head and tail and leave a `[kiasi kept …]` or `[kiasi trimmed …]` marker naming the saved file. File reads, range commands and diffs are never cut, so code quality does not depend on the cap.
 
@@ -84,6 +85,17 @@ The days before you installed Kiasi are the baseline, built from your own transc
 | `/kiasi:sync` | Rebuild the reports now |
 | `/kiasi:limits setup` | Install the Kiasi status line, the only source of your plan limits |
 | `/kiasi:limits remove` | Put your previous status line back |
+
+### Runway, receipt and digest
+
+The Overview leads with the runway: whether the weekly limit lasts to its reset at the current burn, from the status line readings. Under it, the days of that limit Kiasi bought back: the re-reads it avoided, divided by what you send a day. The Month tab is the last 30 days on one card, to copy as text or save as an image.
+
+Outside the dashboard, two notices and nothing else:
+
+- **Session receipt.** When a session ends, a desktop notification with what it sent, what it would have sent without Kiasi, and the costliest output cut. The next session in the same project sees it as one line at start.
+- **Weekly digest.** Once a week at session start: the factor since the install, what was kept out and the days it bought back, the week against the week before, any spike session, the next fix, and the runway.
+
+Both come from the same event log and report the dashboard reads; nothing is sent anywhere.
 
 ## Privacy
 

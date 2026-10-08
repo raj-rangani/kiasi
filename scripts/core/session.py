@@ -14,6 +14,9 @@ from core import taskfile
 from core.reads import forget_reads
 from core.transcript import current_context_tokens, edited_files, failing_commands, fmt_k, fmt_m, last_task_prompt, tail_entries, tool_uses, transcript_key
 from core.turn import pause_elsewhere, pause_reminder
+from core import digest, receipt
+from core.notify import notify_desktop
+import limits_data
 
 
 def handle_pre_compact(payload):
@@ -310,9 +313,32 @@ def handle_session_start(payload):
         lines.append(f"The last session in this project was paused by kiasi at {paused['steps']} steps; its remaining work is in "
                      f"{paused['checkpoint']}. If the developer says continue, read that file and resume from its first open item.")
     text = "\n".join(line for line in lines if line)
-    if not text:
+    shown = developer_lines(payload, paused)
+    if not text and not shown:
         return None
-    output = {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}}
-    if paused:
-        output["systemMessage"] = f"Kiasi: the last session paused with work left in {paused['checkpoint']}. Reply continue to resume it."
+    output = {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}} if text else {}
+    if shown:
+        output["systemMessage"] = "\n".join(shown)
     return output
+
+
+def developer_lines(payload, paused):
+    """What the developer sees at a fresh start: a pause to resume, the last session's receipt, and the weekly digest when due."""
+    if payload.get("source") != "startup":
+        return [f"Kiasi: the last session paused with work left in {paused['checkpoint']}. Reply continue to resume it."] if paused else []
+    lines = []
+    if paused:
+        lines.append(f"Kiasi: the last session paused with work left in {paused['checkpoint']}. Reply continue to resume it.")
+    last = receipt.last_receipt(payload.get("cwd") or "", payload.get("session_id", ""))
+    if last and last.get("kept_out"):
+        lines.append("Kiasi receipt for the last session here: " + receipt.receipt_text(last).replace("\n", " "))
+    try:
+        reading = limits_data.get_limits()
+    except Exception:  # the limits are a nicety; a start never fails over them
+        reading = None
+    text = digest.weekly_digest(reading)
+    if text:
+        lines.append("Kiasi, your week:\n" + text)
+        notify_desktop("Kiasi, your week", text)
+        log_event({"event": "digest", "session_id": payload.get("session_id", "")})
+    return lines

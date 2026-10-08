@@ -95,11 +95,37 @@ function heroCard(label, big, tone, sub, note, tip) {
   return `<div class="hero-card"${tip ? ` title="${esc(tip)}"` : ''}><span class="hero-label">${esc(label)}</span><b class="${tone}">${big}</b><span class="hero-sub">${sub}</span><span class="hero-note">${note}</span></div>`;
 }
 
+function runwayCard(l) {
+  const r = l && l.runway;
+  if (!r) {
+    const hint = l && l.setup && LIMITS_HINTS[l.setup];
+    return heroCard('Runway', '<span class="hero-text">No weekly reading</span>', '', 'how long the limit lasts shows here',
+      esc(hint || 'Run /kiasi:limits setup in Claude Code to install the status line that reads your plan limits.'), '');
+  }
+  const when = epoch => new Date(epoch * 1000).toLocaleString([], WHEN_OPTS);
+  if (r.state === 'runs_out') {
+    return heroCard('Runway', `<span class="hero-text">Runs out ${esc(when(r.run_out_at))}</span>`, 'bad', `before the reset ${esc(when(r.resets_at))}`,
+      `${r.used}% of the weekly limit used, ${r.burn_per_day}% a day. The next fix below buys the most time.`, 'At the burn measured from the status line readings since the window opened.');
+  }
+  if (r.state === 'clear') {
+    return heroCard('Runway', '<span class="hero-text">Clear to the reset</span>', 'good', `about ${r.spare}% to spare at ${esc(when(r.resets_at))}`,
+      `${r.used}% of the weekly limit used, ${r.burn_per_day}% a day`, 'At the burn measured from the status line readings since the window opened.');
+  }
+  const gap = r.gap, pace = Math.abs(gap) <= LIMIT_PACE_SLACK ? 'on pace' : `${Math.abs(gap)} pts ${gap > 0 ? 'ahead of' : 'under'} pace`;
+  return heroCard('Runway', `${r.used}%<small>used</small>`, gap > LIMIT_PACE_SLACK ? 'bad' : '', `${pace} for the reset ${esc(when(r.resets_at))}`,
+    'the forecast appears after a few status line readings', 'Pace compares the share of the limit used with the share of the week gone.');
+}
+
+function renderRunway(l) {
+  const slot = document.getElementById('runway');
+  if (slot) slot.outerHTML = runwayCard(l).replace('<div class="hero-card"', '<div class="hero-card" id="runway"');
+}
+
 function renderHero(d) {
-  const s = d.since || {}, b = s.before, a = s.after, t = d.totals, p = d.pace || {};
+  const s = d.since || {}, b = s.before, a = s.after, t = d.totals, p = d.pace || {}, bb = d.bought_back;
   const kind = key => (d.by_kind || {})[key] || { count: 0, kept_out: 0 };
   const kept = kind('cap').kept_out + kind('pruned').kept_out;
-  const cards = [];
+  const cards = ['<div class="hero-card" id="runway"></div>'];
   let since, sinceTip;
   if (b && a && a.reread_per_turn != null && b.reread_per_turn != null && s.factor != null) {
     since = s.factor >= 1 ? `<em class="good">${s.factor}× less</em> context per request since Kiasi` : `<em class="bad">${(1 / s.factor).toFixed(1)}× more</em> context per request since Kiasi`;
@@ -111,9 +137,16 @@ function renderHero(d) {
     since = `${fmtK(t.reread_per_prompt)} of context per prompt`;
     sinceTip = 'The comparison with before Kiasi appears after its first full day.';
   }
-  cards.push(heroCard('Kept out of your limit', `${fmtM(kept)}<small>tokens</small>`, 'good', since,
-    `${kind('cap').count} outputs capped, ${t.pruned} compactions pruned, ${d.days || d.per_day.length} days`,
-    `Tokens that would have sat in the context on every later request: tool output past the cap, and transcript removed at compaction. ${sinceTip}`));
+  if (bb && bb.days != null) {
+    const amount = bb.days < 0.1 ? `${Math.round(bb.days * 240) / 10}<small>hours</small>` : `${bb.days}<small>days</small>`;
+    cards.push(heroCard('Bought back', amount, 'good', since,
+      `of your weekly limit: ${fmtM(bb.kept_out)} tokens kept out, ${fmtM(bb.saved)} of re-reads avoided, at ${fmtM(bb.rate)} a day`,
+      `Re-reads avoided divided by the context you send a day this week. Every token kept out would have been re-sent on every later request of its session. ${sinceTip}`));
+  } else {
+    cards.push(heroCard('Kept out of your limit', `${fmtM(kept)}<small>tokens</small>`, 'good', since,
+      `${kind('cap').count} outputs capped, ${t.pruned} compactions pruned, ${d.days || d.per_day.length} days`,
+      `Tokens that would have sat in the context on every later request: tool output past the cap, and transcript removed at compaction. ${sinceTip}`));
+  }
   if (p.rate != null && p.prior_rate) {
     cards.push(heroCard('This week', change(p.prior_rate, p.rate), p.rate <= p.prior_rate ? 'good' : 'bad', 'context sent, against last week',
       `${fmtM(p.rate)} a day, ${fmtM(p.prior_rate)} last week`, p.note || ''));
@@ -126,6 +159,7 @@ function renderHero(d) {
     cards.push(heroCard('Next fix', `<span class="hero-text">${esc(name)}</span>`, '', `${Math.round(top.share * 100)}% of the context sent`, esc(ATTRIB_ADVICE[top.kind] || what), ''));
   }
   $('#hero').innerHTML = `${cards.join('')}<p class="hero-caption">Every request re-sends the whole conversation to the model. That is what uses up a limit.</p>`;
+  renderRunway(window.limitsReading);
   $('#chart-sub').textContent = `${d.days || d.per_day.length} days`;
 }
 

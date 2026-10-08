@@ -6,7 +6,7 @@
 <meta name="description" content="What the context kiasi did and how many re-read tokens each action kept off the weekly limit.">
 <title>Kiasi</title>
 <link rel="stylesheet" href="assets/budget.css?v=2026100701">
-<link rel="stylesheet" href="assets/lens.css?v=2026100811">
+<link rel="stylesheet" href="assets/lens.css?v=2026100812">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cstyle%3E.s{fill:none;stroke:%231d1a16}@media (prefers-color-scheme:dark){.s{stroke:%23f6f2ea}}%3C/style%3E%3Cpath class='s' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' d='M8 3H4v18h4M16 3h4v18h-4'/%3E%3Ccircle fill='%23f2b632' cx='12' cy='12' r='3.6'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -83,6 +83,14 @@
   </section>
   </main>
 
+  <main class="view" data-view="month" hidden>
+  <section class="view-empty" hidden></section>
+  <section class="wrap">
+    <div class="wrap-card" id="wrap-card"></div>
+    <div class="wrap-actions"><button type="button" id="wrap-copy">Copy as text</button><button type="button" id="wrap-save">Save as image</button><span class="wrap-done" id="wrap-done" hidden>Copied</span></div>
+  </section>
+  </main>
+
   <main class="view" data-view="storage" hidden>
   <section class="view-empty" hidden></section>
   <section class="sheet">
@@ -110,12 +118,13 @@
       <div class="panel-content" id="panel-content" tabindex="-1"></div>
     </div>
   </aside>
-  <script src="assets/lens-constants.js?v=2026100811"></script>
-<script src="assets/lens-common.js?v=2026100801"></script>
-<script src="assets/lens.js?v=2026100811"></script>
+  <script src="assets/lens-constants.js?v=2026100812"></script>
+<script src="assets/lens-common.js?v=2026100812"></script>
+<script src="assets/lens.js?v=2026100812"></script>
 <script src="assets/sessions.js?v=2026100811"></script>
 <script src="assets/rules.js?v=2026100811"></script>
 <script src="assets/budget.js?v=2026100811"></script>
+<script src="assets/month.js?v=2026100812"></script>
 <script src="assets/storage.js?v=2026100701"></script>
 <script src="assets/sync.js?v=2026100201"></script>
 <script>startApp();</script>

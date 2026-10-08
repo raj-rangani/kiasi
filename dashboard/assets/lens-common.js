@@ -96,6 +96,8 @@ function limitColumn(item, now, first, stale, updated) {
 }
 
 function renderLimits(l) {
+  window.limitsReading = l;
+  if (typeof renderRunway === 'function') renderRunway(l);
   const el = $('#limits');
   const items = (l && l.limits || []).filter(item => item.used != null);
   if (!items.length) {

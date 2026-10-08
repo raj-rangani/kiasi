@@ -75,6 +75,12 @@ BUDGET_FILE = LOG_DIR / "budget.json"
 HISTORY_FILE = LOG_DIR / "history.json"
 # What Kiasi avoided per day, merged on each lens.py build the same way; the Overview's all-time avoided figure is its sum.
 SAVINGS_FILE = LOG_DIR / "savings.json"
+RECEIPTS_FILE = LOG_DIR / "receipts.jsonl"  # one session receipt a line, newest last
+RECEIPTS_KEEP = 200
+DIGEST_FILE = LOG_DIR / "digest.json"  # when the weekly digest was last shown
+DIGEST_DAYS = 7
+DIGEST_MIN_DAYS = 7  # report days needed before a digest is worth showing
+LIMIT_PACE_SLACK = 5  # percentage points either side of the window's elapsed share that still count as on pace
 TRANSCRIPT_ROOT = Path.home() / ".claude" / "projects"
 
 TRANSCRIPT_TAIL_BYTES = 400_000
@@ -328,6 +334,7 @@ SEARCH_HIT_LINES = 5
 LENS_FILE = LOG_DIR / "lens.json.gz"  # gzipped; the dashboard server sends it as is with Content-Encoding: gzip
 LENS_MAX_ACTIONS = 2000
 LENS_MAX_SESSIONS = 60
+WRAPPED_DAYS = 30  # the month card covers the last 30 days of the per-day history
 LENS_SERIES_POINTS = 240
 LENS_COMPACT_JOIN_SECONDS = 180
 LENS_STEP_BUCKETS = ((1, 1), (2, 5), (6, 10), (11, 20), (21, 29), (30, 59), (60, None))
