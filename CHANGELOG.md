@@ -2,7 +2,9 @@
 
 ### Unreleased
 
-- Overview shows two figures priced at public API rates per model, both measured from the transcripts: the usage at API rates (fresh input, cache writes, cache reads and output) and what the prompt cache saved (every cache-read token at its model's read rate against the input rate it would have cost fresh). On the API they are the bill; on a Pro or Max subscription the tiles say they are the weight of the usage against the limit, not a charge. Each day's row in the report carries both; tokens on a model without a known price are left out and said so. The report lists the usage per model.
+- Accounts billed through the API see a line under the Overview tiles with the window's cost at public API rates per model and what the prompt cache saved, measured: every cache-read token at its model's read rate against the input rate it would have cost fresh. The report carries both per day and per model. Subscription accounts do not see it: the figures are not what they pay. The plan is read from the key variables Claude Code honours and the billing type in its account record; no token is read.
+- A steps-per-prompt tile: main-session requests per prompt over the window, with today against the mean of earlier days. Each day's row in the report carries the steps and the ratio.
+- Overview tiles sit in even rows of three with a rule between rows.
 - A pace tile: re-read tokens a day over the 7 full days before today, against the 7 days before those, with today so far. Days without work count as zero, as a weekly limit sees them.
 - "Before and after Kiasi" leads with the headline it was missing: re-read tokens per main-session step before the install against since, and the factor between them once each side has enough steps.
 - "What Kiasi did" has a row for rule notices followed: how many of the turn pauses, routing refusals, handoff and task-switch notices and read nudges Claude acted on, with the per-rule split and a link to how each is measured.

@@ -26,6 +26,7 @@ class KiasiTestCase(unittest.TestCase):
 
     def _patch_data_dir(self, data_dir):
         constants.DATA_DIR = data_dir
+        constants.CLAUDE_CONFIG_FILE = data_dir / "claude.json"
         constants.LOG_DIR = data_dir
         constants.EVENT_LOG = data_dir / "kiasi.jsonl"
         constants.SESSION_DIR = data_dir / "sessions"

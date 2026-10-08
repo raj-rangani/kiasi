@@ -129,29 +129,34 @@ function renderStats(d) {
   const share = v => `${(v * 100).toFixed(1)}%`;
   const range = rates.length > 1 ? `${share(Math.min(...rates))} to ${share(Math.max(...rates))} per day · ` : '';
   const tiles = [
-    ['Re-read tokens paid', fmtM(t.paid), series('paid'), true, `${t.prompts.toLocaleString()} prompts · ${t.steps.toLocaleString()} steps · ${t.mean_steps} per prompt · ${t.sessions} sessions`],
+    ['Re-read tokens paid', fmtM(t.paid), series('paid'), true, `${t.prompts.toLocaleString()} prompts · ${t.steps.toLocaleString()} steps · ${t.sessions} sessions`],
     ['Re-read tokens per prompt', fmtK(t.reread_per_prompt), series('reread_per_prompt'), true, versus(todayVersus(d, 'reread_per_prompt'))],
     ['First-request context per new session', fmtK(t.startup_mean), series('startup'), true, versus(todayVersus(d, 'startup'))],
     ['Cache hit rate', c && c.hit_rate != null ? share(c.hit_rate) : '–', rates, false, c ? `${range}${c.avoidable} avoidable misses of ${c.misses}${c.prior_avoidable == null ? '' : ` · ${c.prior_avoidable} the week before`}` : ''],
-    ...costTiles(d, span, series),
+    ...paceTile(d),
+    ['Steps per prompt', t.mean_steps ?? '–', series('steps_per_prompt'), true, stepsVersus(todayVersus(d, 'steps_per_prompt')), 'Main-session steps per prompt; subagent steps are not counted. A step is one request to the model, so this is how many times the conversation was re-sent for each thing you asked.'],
   ];
   $('#stats').innerHTML = tiles.map(([label, big, values, fromZero, note, tip]) => `<div class="kpi"${tip ? ` title="${esc(tip)}"` : ''}><span class="kpi-label">${label} · ${span}</span><b>${big}${values.length > 1 ? sparkline(values, fromZero) : ''}</b><span class="kpi-note">${note}</span></div>`).join('');
 }
 
-function costTiles(d, span, series) {
+function renderApiLine(d) {
   const k = d.cost;
-  if (!k || !k.models.length) return [];
-  const priced = k.models.filter(m => m.priced);
-  const names = priced.map(m => m.model.replace(/^claude-/, '').replace(/-\d{8}$/, '')).join(', ');
-  const unpriced = k.unpriced_tokens ? ` · ${fmtM(k.unpriced_tokens)} tokens on models without a known price are left out` : '';
-  const measured = 'Measured: every cache-read token in your transcripts, priced at its model\'s cache-read rate against the input rate it would have cost fresh. Public API prices per model; on a subscription, read it as how much lighter the cache makes your usage against the limit.';
-  const api = 'Fresh input, cache writes, cache reads and output, each at its model\'s public API rate. On the API this is the bill. On a Pro or Max subscription it is not a charge: the limits are consumption-based and heavier models use them up faster, so this is the best available weight of your usage against them.';
-  return [
-    ...paceTile(d, span),
-    ['Usage at API rates', fmtUsd(k.cost), series('cost_usd'), true, `${esc(names)} · the weight of your usage against a subscription limit, not a charge`, api],
-    ['Cache saving at API rates', fmtUsd(k.saved), series('cache_saved_usd'), true,
-      `cache reads priced against fresh input${k.saved_share == null ? '' : ` · <em class="good">${pct(k.saved_share)} off</em> what the same usage would weigh uncached`}${unpriced}`, measured],
-  ];
+  const host = $('#api-line');
+  const show = (d.settings || {}).plan === 'api' && k && k.models.some(m => m.priced);
+  host.hidden = !show;
+  if (!show) return;
+  const span = `${d.days || d.per_day.length} days`;
+  const perModel = k.models.filter(m => m.priced).map(m => `${esc(m.model.replace(/^claude-/, '').replace(/-\d{8}$/, ''))} ${fmtUsd(m.cost)}`).join(', ');
+  const unpriced = k.unpriced_tokens ? ` ${fmtM(k.unpriced_tokens)} tokens on models without a known price are left out.` : '';
+  const saved = k.saved_share == null ? '' : ` The cache saved <b>${fmtUsd(k.saved)}</b>, <em class="good">${pct(k.saved_share)} off</em> what the same tokens would cost uncached.`;
+  host.title = 'Fresh input, cache writes, cache reads and output, each at its model\'s public API rate. The saving is measured: every cache-read token at its model\'s read rate against the input rate it would have cost fresh.';
+  host.innerHTML = `<b>${fmtUsd(k.cost)}</b> at API rates over ${span}: ${perModel}.${saved}${unpriced}`;
+}
+
+function stepsVersus(row) {
+  if (!row.mean) return 'no earlier day to compare with';
+  if (row.today == null) return `${esc(row.day.slice(5))}: no prompt yet to compare`;
+  return `${esc(row.day.slice(5))}: ${row.today}, <em class="${row.today > row.mean ? 'bad' : 'good'}">${change(row.mean, row.today)}</em> against the ${row.mean.toFixed(1)} mean of earlier days`;
 }
 
 function paceTile(d) {
@@ -352,6 +357,6 @@ function renderFloor(d) {
   $('#floor').innerHTML = lines.join('') + table;
 }
 
-registerView('overview', d => { renderStats(d); renderBill(d); renderStartupHint(d); renderSince(d); renderDid(d); renderFloor(d); renderStorage(d); });
+registerView('overview', d => { renderStats(d); renderApiLine(d); renderBill(d); renderStartupHint(d); renderSince(d); renderDid(d); renderFloor(d); renderStorage(d); });
 window.renderTuning = d => { renderMisses(d); renderRecall(d); };
 })();

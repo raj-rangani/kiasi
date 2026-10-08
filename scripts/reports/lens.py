@@ -304,6 +304,7 @@ class Sessions(dict):
         self.agent_steps = {}
         self.agent_starts = defaultdict(list)
         self.usage = defaultdict(lambda: defaultdict(Counter))  # day -> model -> read, write, input, output tokens of main and subagent steps
+        self.day_steps = Counter()  # main-session steps a day
 
 
 USAGE_KEYS = {"read": "cache_read_input_tokens", "write": "cache_creation_input_tokens", "input": "input_tokens", "output": "output_tokens"}
@@ -351,7 +352,7 @@ def cost_report(usage):
     return {"cost": round(cost, 2), "saved": round(saved, 2), "saved_share": round(saved / (cost + saved), 4) if cost + saved else None,
             "models": rows, "unpriced_tokens": sum(unpriced.values()),
             "per_day": {day: {k: round(v, 2) for k, v in row.items()} for day, row in sorted(per_day.items())},
-            "note": "public API rates per model; a subscription pays a flat fee, so this is what the same usage would cost on the API"}
+            "note": "public API rates per model; shown on the dashboard only when the account is billed through the API"}
 
 
 def scan_sessions(days):
@@ -395,6 +396,7 @@ def scan_sessions(days):
                 info["reread"] += usage.get("cache_read_input_tokens", 0)
                 bill[day] += usage.get("cache_read_input_tokens", 0)
                 main_bill[day] += usage.get("cache_read_input_tokens", 0)
+                sessions.day_steps[day] += 1
                 add_usage(sessions, day, message, usage)
             elif entry.get("type") == "user" and is_prompt(entry.get("message") or {}) and first_ask(entry, asked) and day >= first_day:
                 info["prompts"].append(t)
@@ -806,6 +808,22 @@ def period_metrics(rows):
         "median_context": step_weighted(rows, "median"), "p90_context": step_weighted(rows, "p90"),
         "high_share": round(sum(r.get("high_share", 0) * r.get("turns", 0) for r in rows) / main_turns, 3) if main_turns else None,
     }
+
+
+def billing_plan():
+    """"api" when Claude Code is billed per token, "subscription" for a Pro, Max, Team or Enterprise seat, else "unknown".
+
+    From the key variables Claude Code honours and the account record it keeps in ~/.claude.json; no token is read."""
+    if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"):
+        return "api"
+    try:
+        config = json.loads(constants.CLAUDE_CONFIG_FILE.read_text())
+    except (OSError, ValueError):
+        return "unknown"
+    if config.get("primaryApiKey"):
+        return "api"
+    billing = (config.get("oauthAccount") or {}).get("billingType") or ""
+    return "subscription" if "subscription" in billing or config.get("hasAvailableSubscription") else "unknown"
 
 
 def pace_report(today_tokens):
@@ -1226,6 +1244,7 @@ def build(days):
         "cost": cost,
         "pace": pace_report(bill.get(local_day(time.time()), 0)),
         "per_day": [{"day": day, "paid": bill.get(day, 0), "prompts": prompts.get(day, 0), "reread_per_prompt": int(main_bill.get(day, 0) / prompts[day]) if prompts.get(day) else None,
+                     "steps": sessions.day_steps.get(day, 0), "steps_per_prompt": round(sessions.day_steps.get(day, 0) / prompts[day], 1) if prompts.get(day) else None,
                      "sessions": len(startups.get(day, [])), "startup": int(sum(startups[day]) / len(startups[day])) if startups.get(day) else None,
                      "kinds": dict(kind_counts.get(day, {})),
                      "cache_misses": dict(misses.get(day, {})), "cache_miss_tokens": miss_tokens.get(day, 0),
@@ -1246,7 +1265,7 @@ def build(days):
         "pastes": list(reversed(pastes)),
         "budget_rows": list(reversed(budget_rows)),
         "actions": list(reversed(actions))[: constants.LENS_MAX_ACTIONS],
-        "settings": {"warn_tokens": constants.CONTEXT_WARN_TOKENS, "hard_tokens": constants.CONTEXT_HARD_TOKENS, "turn_warn_steps": constants.turn_warn_steps(),
+        "settings": {"plan": billing_plan(), "warn_tokens": constants.CONTEXT_WARN_TOKENS, "hard_tokens": constants.CONTEXT_HARD_TOKENS, "turn_warn_steps": constants.turn_warn_steps(),
                      "turn_stop_steps": constants.TURN_STOP_STEPS, "turn_budget_mode": constants.TURN_BUDGET_MODE, "comply_steps": constants.LENS_COMPLY_STEPS, "saving_kinds": SAVING_KINDS,
                      "holdout": constants.HOLDOUT, "holdout_rules": list(constants.HOLDOUT_RULES), "experiment_min_sessions": constants.LENS_EXPERIMENT_MIN_SESSIONS,
                      "delegation_credit": "only when an Agent call is logged as allowed or a subagent transcript starts after it: the log records no outcome"},

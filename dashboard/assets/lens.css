@@ -344,9 +344,14 @@ abbr.est { margin-left: 5px; font-family: var(--mono); font-size: 10px; letter-s
 .sheet .since { margin-top: 0; padding: 0; border-bottom: 0; }
 .sheet .measured { padding: 0 0 26px; border-bottom: 0; }
 .block-head { margin: 0 0 6px; font-family: var(--mono); font-size: 11px; font-weight: 400; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 32px; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); margin-bottom: 28px; }
+.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 32px; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); margin-bottom: 28px; }
 .kpi { position: relative; padding: 14px 0; display: grid; grid-row: span 3; grid-template-rows: subgrid; row-gap: 5px; }
 .kpi + .kpi::before { content: ""; position: absolute; left: -16px; top: 0; bottom: 0; border-left: 1px solid var(--rule); }
+.kpi:nth-child(3n+1)::before { display: none; }
+.kpi:nth-child(n+4) { border-top: 1px solid var(--rule); }
+.api-line { font-size: 13px; line-height: 1.5; color: var(--muted); margin: -12px 0 28px; }
+.api-line b { color: var(--ink); font-weight: 500; }
+.api-line em { font-style: normal; color: var(--ok); }
 .kpi-label { font-family: var(--mono); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .kpi b { font-family: var(--serif); font-weight: 400; font-size: 34px; line-height: 1.1; display: flex; align-items: center; justify-content: space-between; gap: 10px; white-space: nowrap; }
 .kpi .spark { flex: 0 1 96px; min-width: 0; }
@@ -379,8 +384,9 @@ abbr.est { margin-left: 5px; font-family: var(--mono); font-size: 10px; letter-s
 @media (max-width: 720px) {
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
   .kpi + .kpi::before { left: -12px; }
+  .kpi:nth-child(3n+1)::before { display: block; }
   .kpi:nth-child(odd)::before { display: none; }
-  .kpi:nth-child(3)::after { content: ""; position: absolute; left: 0; top: 0; width: calc(200% + 24px); border-top: 1px solid var(--rule); }
+  .kpi:nth-child(n+3) { border-top: 1px solid var(--rule); }
   .trend { grid-template-columns: 1fr; }
   .trend-card + .trend-card::before { display: none; }
   .trend-card + .trend-card { border-top: 1px solid var(--rule); }

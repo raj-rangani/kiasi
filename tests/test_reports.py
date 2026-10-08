@@ -580,6 +580,22 @@ class TestCostReport(ReportTestCase):
         self.assertEqual((day["cost_usd"], day["cache_saved_usd"]), (1.35, 13.55))
         self.assertEqual(report["settings"]["holdout_rules"], list(constants.HOLDOUT_RULES))
 
+    def test_billing_plan_comes_from_the_key_variables_and_the_account_record(self):
+        write = lambda d: constants.CLAUDE_CONFIG_FILE.write_text(json.dumps(d))
+        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "", "ANTHROPIC_AUTH_TOKEN": ""}):
+            self.assertEqual(self.lens.billing_plan(), "unknown", "no config file")
+            write({"oauthAccount": {"billingType": "stripe_subscription"}})
+            self.assertEqual(self.lens.billing_plan(), "subscription")
+            write({"hasAvailableSubscription": True})
+            self.assertEqual(self.lens.billing_plan(), "subscription")
+            write({"primaryApiKey": "sk-ant-x", "oauthAccount": {"billingType": "stripe_subscription"}})
+            self.assertEqual(self.lens.billing_plan(), "api", "a stored key means per-token billing")
+            write({"oauthAccount": {}})
+            self.assertEqual(self.lens.billing_plan(), "unknown")
+            self.assertEqual(self.lens.build(7)["settings"]["plan"], "unknown")
+        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-x"}):
+            self.assertEqual(self.lens.billing_plan(), "api")
+
     def test_subagent_steps_are_priced_too(self):
         self.write(self.project / "s1.jsonl", [self.prompt(0), self.step("a", 1, 1000)])
         sub = self.step("x", 2, 2_000_000)
@@ -603,6 +619,13 @@ class TestPaceReport(ReportTestCase):
         self.assertIsNone(self.lens.pace_report(0)["prior_week"], "no row in the week before means no comparison")
         constants.BUDGET_FILE.write_text(json.dumps({"per_day": [row(day(0), 100)]}))
         self.assertIsNone(self.lens.pace_report(100), "today alone is not a full day")
+
+
+    def test_per_day_rows_carry_main_session_steps_per_prompt(self):
+        self.write(self.project / "s1.jsonl", [self.prompt(0), self.step("a", 1, 1000), self.step("b", 2, 1000), self.prompt(3), self.step("c", 4, 1000)])
+        self.write(self.project / "s1" / "subagents" / "agent-1.jsonl", [self.step("x", 5, 1000)])
+        [day] = self.lens.build(7)["per_day"]
+        self.assertEqual((day["prompts"], day["steps"], day["steps_per_prompt"]), (2, 3, 1.5), "subagent steps are not main-session steps")
 
 
 class TestRuleOutcomes(ReportTestCase):

@@ -15,6 +15,7 @@ PLUGIN_ROOT = Path(__file__).resolve().parents[2]
 # if the pointer is stale, they fall back to ~/.claude/kiasi.
 PLUGIN_NAME = "kiasi"
 HOME_DIR = Path.home() / ".claude" / PLUGIN_NAME
+CLAUDE_CONFIG_FILE = Path.home() / ".claude.json"  # Claude Code's own config; reports/lens.py reads the account's billing type from it
 DATA_DIR_POINTER = HOME_DIR / "data-dir"
 PLUGIN_ROOT_POINTER = HOME_DIR / "plugin-root"
 DASHBOARD_LAUNCHER = HOME_DIR / "dashboard-launcher.py"
