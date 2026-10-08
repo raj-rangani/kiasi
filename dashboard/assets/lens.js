@@ -373,17 +373,44 @@ const ATTRIB_ADVICE = {
   'subagent results': 'Subagent replies land in the main context; brief them to return a short answer.',
 };
 
+const ATTRIB_ROWS = 5;
+let allAttrib = false;
+
 function renderAttribution(d) {
-  const a = d.attribution || {}, rows = a.kinds || [];
+  const a = d.attribution || {}, all = a.kinds || [];
   const sheet = $('#attribution-sheet');
-  sheet.hidden = !rows.length;
-  if (!rows.length) return;
-  const max = rows[0].tokens;
+  sheet.hidden = !all.length;
+  if (!all.length) return;
+  const rows = allAttrib ? all : all.slice(0, ATTRIB_ROWS);
+  const rest = all.slice(ATTRIB_ROWS).reduce((t, r) => t + r.share, 0);
+  const max = all[0].tokens;
   $('#attribution').innerHTML = `<table class="since-table attrib"><thead><tr><th>what sat in the context</th><th class="num">re-read</th><th>share</th><th>what to do</th></tr></thead><tbody>${rows.map(r =>
     `<tr><td>${esc(r.kind)}</td><td class="num">${fmtM(r.tokens)}</td><td class="share"><div class="hbar"><i style="width:${Math.max(1, 100 * r.tokens / max)}%"></i></div><span class="mono">${Math.round(r.share * 100)}%</span></td><td class="hist-note">${esc(ATTRIB_ADVICE[r.kind] || '')}</td></tr>`).join('')}</tbody></table>
-    <p class="hist-note">${esc(a.note || '')}. Total ${fmtM(a.total)} over ${d.days} days.</p>`;
+    <p class="hist-note">Total ${fmtM(a.total)} over ${d.days} days; subagent steps are not included.${all.length > ATTRIB_ROWS ? ` <a href="#overview" id="toggle-attrib">${allAttrib ? `show the top ${ATTRIB_ROWS}` : `show the other ${all.length - ATTRIB_ROWS} kinds (${Math.round(rest * 100)}%)`}</a>` : ''}</p>`;
+  const toggle = $('#toggle-attrib');
+  if (toggle) toggle.addEventListener('click', e => { e.preventDefault(); allAttrib = !allAttrib; renderAttribution(d); });
 }
 
-registerView('overview', d => { renderStats(d); renderApiLine(d); renderBill(d); renderStartupHint(d); renderSince(d); renderDid(d); renderFloor(d); renderAttribution(d); renderStorage(d); });
+function renderVerdict(d) {
+  const s = d.since || {}, b = s.before, a = s.after, t = d.totals, p = d.pace || {};
+  const top = ((d.attribution || {}).kinds || [])[0];
+  const spikes = ((d.spikes || {}).rows || []).length;
+  let head, sub;
+  if (b && a && a.reread_per_turn != null && b.reread_per_turn != null) {
+    const f = s.factor;
+    head = `<b>${fmtK(a.reread_per_turn)}</b> re-sent per step since Kiasi, ${fmtK(b.reread_per_turn)} before.`;
+    sub = f == null ? `The factor appears once each side has ${(s.factor_min_steps || 0).toLocaleString()} steps.` : f >= 1 ? `<em class="good">${f}× less</em> per step.` : `<em class="bad">${(1 / f).toFixed(1)}× more</em> per step.`;
+  } else {
+    head = `<b>${fmtK(t.reread_per_prompt)}</b> re-sent for each prompt over the last ${d.days} days.`;
+    sub = 'The before-and-after comparison appears after the first full day with Kiasi on.';
+  }
+  const parts = [];
+  if (p.rate != null && p.prior_rate) parts.push(`This week ${fmtM(p.rate)} a day, <em class="${p.rate <= p.prior_rate ? 'good' : 'bad'}">${change(p.prior_rate, p.rate)}</em> against the week before.`);
+  if (top) parts.push(`The biggest cost is <b>${esc(top.kind)}</b> at ${Math.round(top.share * 100)}% of the re-read.`);
+  if (spikes) parts.push(`<a href="#sessions">${spikes} spike session${spikes > 1 ? 's' : ''}</a> ran far above the median.`);
+  $('#verdict').innerHTML = `<h2>${head}</h2><p>${sub} ${parts.join(' ')}</p>`;
+}
+
+registerView('overview', d => { renderVerdict(d); renderStats(d); renderApiLine(d); renderBill(d); renderStartupHint(d); renderAttribution(d); renderDid(d); renderSince(d); renderFloor(d); renderStorage(d); });
 window.renderTuning = d => { renderMisses(d); renderRecall(d); };
 })();

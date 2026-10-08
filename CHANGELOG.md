@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- Overview reads top down: a verdict first (tokens re-sent per step since Kiasi against before, this week's pace against last, the biggest cost, spike sessions), a one-line glossary for step, re-read and floor, then the tiles and the daily chart, "Where it went" with the top 5 kinds and the rest behind a toggle, and "What Kiasi did". The before-and-after detail and the context floor sheet are folded shut until opened.
 - "Where the re-read went": an Overview sheet that splits the window's main-session re-read by what sat in the context, the floor first, then everything added since the last compaction by size (file reads, shell output, system reminders, tool calls, subagent results, web pages, pastes, the compaction summary). Each kind carries what to do about it.
 - Spikes: the Sessions tab lists sessions whose re-read per prompt ran at least 4× the range's median and 5 M in total, with the factor and the peak context. The report carries them under `spikes`.
 - The plan limits fall back to Claude Code's own cached reading of the 5-hour and 7-day windows when no status line has written one, so the limit bars show before `/kiasi:limits setup` is run; a status line reading wins when newer.
