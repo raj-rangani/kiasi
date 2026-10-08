@@ -24,7 +24,7 @@ function sessionSvg(s, settings, W, H, detailed) {
   if (detailed) svg += gridY(f, y, max, fmtK);
   svg += limitLines(f, y, settings, detailed);
   points.filter(p => p.prompt).forEach(p => { svg += `<line class="ctx-prompt" x1="${x(p.i).toFixed(1)}" x2="${x(p.i).toFixed(1)}" y1="${f.pad.top}" y2="${f.bottom}"/>`; });
-  svg += `<path class="ctx" d="${points.map((p, k) => `${k ? 'L' : 'M'}${x(p.i).toFixed(1)},${y(p.context).toFixed(1)}`).join(' ')}"/>`;
+  svg += `<path class="ctx" pathLength="1" d="${points.map((p, k) => `${k ? 'L' : 'M'}${x(p.i).toFixed(1)},${y(p.context).toFixed(1)}`).join(' ')}"/>`;
   points.forEach(p => {
     const marks = p.marks || [];
     const cls = marks.includes('stop') ? 'ctx-stop' : marks.includes('check') ? 'ctx-check' : marks.includes('pruned') ? 'ctx-pruned' : marks.includes('compaction') ? 'ctx-ring' : detailed ? 'ctx-dot' : '';

@@ -104,7 +104,7 @@ function limitColumn(item, now, first, stale, updated) {
     : pace == null ? '' : paceText(used, pace);
   const runOut = item.run_out_at && !expired ? new Date(item.run_out_at * 1000) : null;
   const runOutLine = runOut && resets && runOut < resets && runOut > now && !stale
-    ? ` · at this pace runs out <strong>${esc(runOut.toLocaleString([], WHEN_OPTS))}</strong>, before the reset` : '';
+    ? `<br>at this pace runs out <strong>${esc(runOut.toLocaleString([], WHEN_OPTS))}</strong>, before the reset` : '';
   return `<div class="lim ${tone}${item === first ? ' first' : ''}${stale ? ' old' : ''}" role="group" aria-label="${esc(item.label)}">`
     + `<div class="lim-head"><span>${esc(item.label)}</span>${item === first ? '<span class="lim-first">runs out first</span>' : ''}</div>`
     + `<div class="lim-value">${expired ? 'new' : `${used}%`}<small>used</small></div>`
@@ -116,8 +116,7 @@ function renderLimits(l) {
   window.limitsReading = l;
   if (typeof renderRunway === 'function') renderRunway(l);
   const el = $('#limits');
-  // The Overview owns the weekly runway; Budget shows only the windows the Overview does not.
-  const items = (l && l.limits || []).filter(item => item.used != null && item.group !== 'weekly');
+  const items = (l && l.limits || []).filter(item => item.used != null);
   if (!items.length) {
     const hint = LIMITS_HINTS[l && l.setup];
     el.hidden = !hint;
@@ -207,7 +206,7 @@ function dayLine(counts, days, install) {
   const dots = values.map((v, i) => `<circle cx="${x(i)}" cy="${y(v)}" r="${v && i === peak ? peakDot : dot}"><title>${esc(md(days[i]))}: ${v} fired</title></circle>`).join('');
   const on = install ? days.indexOf(install) : -1;
   const marker = on > 0 ? `<line class="marker" x1="${(on * slot).toFixed(1)}" x2="${(on * slot).toFixed(1)}" y1="0" y2="${floor}"><title>Kiasi switched on ${esc(md(install))}</title></line>` : '';
-  const svg = `<svg class="day-line" viewBox="0 0 ${width} ${height}" role="img" aria-label="Fires per day, ${esc(md(days[0]))} to ${esc(md(days[days.length - 1]))}"><line class="base" x1="0" x2="${width}" y1="${floor}" y2="${floor}"/>${marker}<polygon points="${x(0)},${floor} ${points} ${x(values.length - 1)},${floor}"/><polyline points="${points}"/>${dots}</svg>`;
+  const svg = `<svg class="day-line" viewBox="0 0 ${width} ${height}" role="img" aria-label="Fires per day, ${esc(md(days[0]))} to ${esc(md(days[days.length - 1]))}"><line class="base" x1="0" x2="${width}" y1="${floor}" y2="${floor}"/>${marker}<polygon points="${x(0)},${floor} ${points} ${x(values.length - 1)},${floor}"/><polyline pathLength="1" points="${points}"/>${dots}</svg>`;
   return `${svg}<span class="cells counts" style="--n:${days.length}">${values.map((v, i) => `<i class="${v ? '' : 'nil'}" data-day="${esc(days[i].slice(8))}" title="${esc(md(days[i]))}: ${v} fired">${v}</i>`).join('')}</span>`;
 }
 

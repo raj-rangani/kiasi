@@ -81,10 +81,10 @@ const KIND_HELP = {
 };
 const MARK_LABELS = { compaction: 'compaction', pruned: 'pruned compaction', check: 're-read check', stop: 'turn stopped' };
 const VIEWS = [
-  ['overview', 'Overview', 'Is Kiasi cutting what your Claude Code sessions send, and what to fix next.'],
-  ['sessions', 'Sessions', ''],   // the sheet heads below carry the one-line intro, so the tagline stays empty
-  ['rules', 'Rules', ''],
-  ['budget', 'Budget', ''],
+  ['overview', 'Overview', 'Whether your weekly limit lasts to its reset, and what Kiasi kept out of it. One line to read, one chart of the burn, and the three fixes that matter most.'],
+  ['sessions', 'Sessions', 'Every session this week, costliest first, drawn as the context at each step. Open one for its full trajectory and every Kiasi action inside it.'],
+  ['rules', 'Rules', 'The rules Kiasi applies to your sessions: what each one fired on and how many tokens it cut. Open a rule for its day-by-day detail and its log.'],
+  ['budget', 'Budget', 'Your 5-hour and weekly windows, and where the limit goes: every turn re-reads the whole conversation. The largest tool results are where to cut.'],
   ['storage', 'Storage', 'What Kiasi keeps on disk and for how long. A saved file follows its session: once both are unused for a week it goes to trash, and the trash is emptied a week later.']
 ];
 // Page-level empty states, one per view. `missing` is shown when no report exists yet,
