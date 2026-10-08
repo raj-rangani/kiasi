@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- Overview: one week on one axis. The runway is a sentence, then the weekly limit track and the context sent per day share one Mon-to-Sun axis, so used, pace, run-out and the days that caused it line up. Three facts under it: bought back, this week against last, and the next fix. The four cards and the separate daily chart are gone.
 - One parser for every stamp: event-log stamps are local time with no zone and transcript stamps are UTC, and the report, the budget cutoff and the session receipt now read both through `core.events.event_epoch`. Before, a stamp read in the wrong zone would have shifted a cut against its session's steps by the local offset.
 - Runway: the Overview leads with whether the weekly limit lasts to its reset at the current burn (runs out at a time, clear with a share to spare, or on or off pace before a forecast exists). It is the weekly window's forecast from the status line readings, served under `runway` at `/limits`.
 - Bought back: the days of the weekly limit the avoided re-reads amount to at this week's daily rate, in place of the kept-out token count; the report carries it under `bought_back`.

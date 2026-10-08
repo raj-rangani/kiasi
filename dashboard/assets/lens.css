@@ -407,21 +407,7 @@ abbr.est { margin-left: 5px; font-family: var(--mono); font-size: 10px; letter-s
 details.fold summary .num { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-right: 10px; vertical-align: middle; }
 
 /* overview: hero, blocks, fix list, counters */
-.hero { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 32px; padding: 30px 0 26px; border-bottom: 1px solid var(--rule); }
-.hero-caption { grid-column: 1 / -1; margin: 22px 0 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
-.hero-card { position: relative; display: grid; row-gap: 6px; align-content: start; }
-.hero-card + .hero-card::before { content: ""; position: absolute; left: -16px; top: 0; bottom: 0; border-left: 1px solid var(--rule); }
 .hero-label { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-.hero-card b { font-family: var(--serif); font-weight: 400; font-size: 44px; line-height: 1.05; letter-spacing: -.01em; color: var(--ink); display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.hero-card b small { font-family: var(--mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-.hero-card b .hero-text { font-size: 30px; line-height: 1.15; }
-.hero-sub em { font-style: normal; }
-.hero-sub em.good { color: var(--ok); }
-.hero-sub em.bad { color: var(--bad); }
-.hero-card b.good { color: var(--ok); }
-.hero-card b.bad { color: var(--bad); }
-.hero-sub { font-size: 15px; color: var(--ink); }
-.hero-note { font-size: 13px; line-height: 1.45; color: var(--muted); }
 .block { padding: 30px 0 26px; border-bottom: 1px solid var(--rule); }
 .block-title { font-family: var(--serif); font-weight: 400; font-size: 24px; line-height: 1.2; margin: 0 0 16px; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
 .block-title small { font-family: var(--mono); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
@@ -443,21 +429,10 @@ details.fold .block-head:first-of-type { margin-top: 4px; }
 .fix .hbar i { display: block; height: 100%; background: var(--ink); border-radius: 4px; }
 .sheet .block-head, #attribution .block-head { margin-top: 26px; }
 @media (max-width: 760px) {
-  .hero { grid-template-columns: 1fr; row-gap: 18px; }
-  .hero-caption { margin-top: 4px; }
-  .hero-card + .hero-card::before { display: none; }
-  .hero-card + .hero-card { border-top: 1px solid var(--rule); padding-top: 16px; }
-  .hero-card b { font-size: 40px; }
   .fix { grid-template-columns: 24px minmax(0, 1fr); }
   .fix .share { grid-column: 2; grid-row: auto; justify-items: start; padding-top: 2px; }
 }
 
-/* Hero at four cards: two by two between phone and desktop. */
-@media (max-width: 1060px) and (min-width: 761px) {
-  .hero { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 26px; }
-  .hero-card:nth-child(odd)::before { display: none; }
-  .hero-card b { font-size: 40px; }
-}
 
 /* Month card */
 .wrap { padding: 30px 0 26px; display: grid; row-gap: 16px; }
@@ -478,4 +453,45 @@ details.fold .block-head:first-of-type { margin-top: 4px; }
   .wrap-card { padding: 22px 18px; border-radius: 14px; }
   .wrap-big b { font-size: 44px; }
   .wrap-grid { grid-template-columns: 1fr 1fr; gap: 18px; }
+}
+
+/* Overview: the week on one axis */
+.week { padding: 30px 0 26px; border-bottom: 1px solid var(--rule); display: grid; row-gap: 6px; }
+.lead { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 30px; line-height: 1.22; letter-spacing: -.01em; color: var(--ink); max-width: 30ch; }
+.lead em { font-style: normal; }
+.lead em.bad { color: var(--bad); }
+.lead em.good { color: var(--ok); }
+.lead-sub { margin: 0 0 18px; font-size: 14px; color: var(--muted); }
+.week-chart svg { width: 100%; height: auto; display: block; }
+.week-chart .wk-row { font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; fill: var(--muted); }
+.week-chart .wk-day { font-family: var(--mono); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; fill: var(--muted); }
+.week-chart .wk-day.today { fill: var(--ink); }
+.week-chart .wk-tick { stroke: var(--rule); stroke-dasharray: 2 4; }
+.week-chart .wk-track { fill: var(--card); stroke: var(--rule); }
+.week-chart .wk-used { fill: var(--ink); }
+.week-chart .wk-proj { fill: url(#wk-hatch); }
+.week-chart .wk-hatch { stroke: var(--muted); stroke-width: 1.5; }
+.week-chart .wk-sub { font-family: var(--mono); font-size: 11px; fill: var(--muted); }
+.week-chart .wk-sub.good { fill: var(--ok); }
+.week-chart .wk-runout { stroke: var(--bad); stroke-width: 2; }
+.week-chart .wk-runout-lbl { font-family: var(--mono); font-size: 11px; fill: var(--bad); }
+.week-chart .wk-reset { stroke: var(--ink); stroke-width: 1; }
+.week-chart .wk-now { stroke: var(--accent-ink); stroke-width: 1; stroke-dasharray: 3 4; }
+.week-chart .wk-base { stroke: var(--rule); }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 32px; padding-top: 22px; margin-top: 10px; border-top: 1px solid var(--rule); }
+.facts > div { display: grid; row-gap: 4px; align-content: start; position: relative; }
+.facts > div + div::before { content: ""; position: absolute; left: -16px; top: 0; bottom: 0; border-left: 1px solid var(--rule); }
+.facts b { font-family: var(--serif); font-weight: 400; font-size: 32px; line-height: 1.05; color: var(--ink); display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.facts b small { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.facts b .fact-text { font-size: 24px; line-height: 1.15; }
+.fact-sub { font-size: 13.5px; line-height: 1.45; color: var(--muted); }
+.fact-sub em { font-style: normal; }
+.fact-sub em.good { color: var(--ok); }
+.fact-sub em.bad { color: var(--bad); }
+.fact-sub a { color: var(--ink); }
+@media (max-width: 760px) {
+  .lead { font-size: 24px; }
+  .facts { grid-template-columns: 1fr; row-gap: 16px; }
+  .facts > div + div::before { display: none; }
+  .facts > div + div { border-top: 1px solid var(--rule); padding-top: 14px; }
 }

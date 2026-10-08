@@ -6,7 +6,7 @@
 <meta name="description" content="What the context kiasi did and how many re-read tokens each action kept off the weekly limit.">
 <title>Kiasi</title>
 <link rel="stylesheet" href="assets/budget.css?v=2026100701">
-<link rel="stylesheet" href="assets/lens.css?v=2026100812">
+<link rel="stylesheet" href="assets/lens.css?v=2026100813">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cstyle%3E.s{fill:none;stroke:%231d1a16}@media (prefers-color-scheme:dark){.s{stroke:%23f6f2ea}}%3C/style%3E%3Cpath class='s' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' d='M8 3H4v18h4M16 3h4v18h-4'/%3E%3Ccircle fill='%23f2b632' cx='12' cy='12' r='3.6'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -29,12 +29,13 @@
 
   <main class="view" data-view="overview" hidden>
   <section class="view-empty" hidden></section>
-  <section class="hero" id="hero"></section>
-  <div class="notices" id="notices"><p class="notice" id="spike-note" hidden></p></div>
-  <section class="block">
-    <h2 class="block-title">Context sent, per day<small id="chart-sub"></small></h2>
-    <div class="chart" id="bill-chart"></div>
+  <section class="week" id="week">
+    <p class="lead" id="lead"></p>
+    <p class="lead-sub" id="lead-sub"></p>
+    <div class="chart week-chart" id="week-chart"></div>
+    <div class="facts" id="facts"></div>
   </section>
+  <div class="notices" id="notices"><p class="notice" id="spike-note" hidden></p></div>
   <section class="block" id="fix-block" hidden>
     <h2 class="block-title">What to fix<small id="fix-sub"></small></h2>
     <ol class="fixes-list" id="fixes-list"></ol>
@@ -118,9 +119,9 @@
       <div class="panel-content" id="panel-content" tabindex="-1"></div>
     </div>
   </aside>
-  <script src="assets/lens-constants.js?v=2026100812"></script>
-<script src="assets/lens-common.js?v=2026100812"></script>
-<script src="assets/lens.js?v=2026100812"></script>
+  <script src="assets/lens-constants.js?v=2026100813"></script>
+<script src="assets/lens-common.js?v=2026100813"></script>
+<script src="assets/lens.js?v=2026100813"></script>
 <script src="assets/sessions.js?v=2026100811"></script>
 <script src="assets/rules.js?v=2026100811"></script>
 <script src="assets/budget.js?v=2026100811"></script>
