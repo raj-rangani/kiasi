@@ -17,6 +17,7 @@ function renderSince(d) {
   }
   const count = n => n == null ? '–' : n.toLocaleString();
   const high = fmtK(d.settings.warn_tokens);
+  const lead = sinceLead(s, day);
   const rows = [
     ['Re-read tokens per day', fmtM(b.reread_per_day), a.reread_per_day == null ? '–' : fmtM(a.reread_per_day), change(b.reread_per_day, a.reread_per_day), true],
     ['Steps per day', count(stepsPerDay(b)), count(stepsPerDay(a)), change(stepsPerDay(b), stepsPerDay(a)), false],
@@ -26,8 +27,19 @@ function renderSince(d) {
     [`Main-session steps over ${high}`, pct(b.high_share), pct(a.high_share), change(b.high_share, a.high_share), true],
     ['Steps counted', count(b.turns), count(a.turns), '', false],
   ].slice(inPanels ? 3 : 0);
-  host.innerHTML = `<table class="since-table"><thead><tr><th>Kiasi on since ${day}</th><th class="num">before · ${b.days} days</th><th class="num">after · ${a.days} days + today</th><th class="num">change</th></tr></thead>
+  host.innerHTML = `${lead}<table class="since-table"><thead><tr><th>Kiasi on since ${day}</th><th class="num">before · ${b.days} days</th><th class="num">after · ${a.days} days + today</th><th class="num">change</th></tr></thead>
       <tbody>${rows.map(([k, x, y, c, judged]) => `<tr><td>${k}</td><td class="num">${x}</td><td class="num"><b>${y}</b></td><td class="num ${judged && c !== '–' ? (c.startsWith('−') ? 'good' : 'bad') : ''}">${c}</td></tr>`).join('')}</tbody></table>`;
+}
+
+function sinceLead(s, day) {
+  const b = s.before, a = s.after;
+  if (b.reread_per_turn == null || a.reread_per_turn == null) return '';
+  const f = s.factor;
+  const verdict = f == null ? `The per-step factor appears once each side has ${(s.factor_min_steps || 0).toLocaleString()} steps.`
+    : f >= 1 ? `<b>${f}×</b> less context re-sent per step since ${day}.` : `<b>${(1 / f).toFixed(1)}×</b> more context re-sent per step since ${day}.`;
+  return `<div class="since-lead"><small>measured per main-session step</small>
+    <h3>${fmtK(b.reread_per_turn)} before, <b>${fmtK(a.reread_per_turn)}</b> since</h3>
+    <p>${verdict} Re-read tokens per step, before the install against since; the work in the two periods differs, so read it as an observation.</p></div>`;
 }
 
 function fillDays(series) {
@@ -121,8 +133,24 @@ function renderStats(d) {
     ['Re-read tokens per prompt', fmtK(t.reread_per_prompt), series('reread_per_prompt'), true, versus(todayVersus(d, 'reread_per_prompt'))],
     ['First-request context per new session', fmtK(t.startup_mean), series('startup'), true, versus(todayVersus(d, 'startup'))],
     ['Cache hit rate', c && c.hit_rate != null ? share(c.hit_rate) : '–', rates, false, c ? `${range}${c.avoidable} avoidable misses of ${c.misses}${c.prior_avoidable == null ? '' : ` · ${c.prior_avoidable} the week before`}` : ''],
+    ...costTiles(d, span, series),
   ];
-  $('#stats').innerHTML = tiles.map(([label, big, values, fromZero, note]) => `<div class="kpi"><span class="kpi-label">${label} · ${span}</span><b>${big}${values.length > 1 ? sparkline(values, fromZero) : ''}</b><span class="kpi-note">${note}</span></div>`).join('');
+  $('#stats').innerHTML = tiles.map(([label, big, values, fromZero, note, tip]) => `<div class="kpi"${tip ? ` title="${esc(tip)}"` : ''}><span class="kpi-label">${label} · ${span}</span><b>${big}${values.length > 1 ? sparkline(values, fromZero) : ''}</b><span class="kpi-note">${note}</span></div>`).join('');
+}
+
+function costTiles(d, span, series) {
+  const k = d.cost;
+  if (!k || !k.models.length) return [];
+  const priced = k.models.filter(m => m.priced);
+  const names = priced.map(m => m.model.replace(/^claude-/, '').replace(/-\d{8}$/, '')).join(', ');
+  const unpriced = k.unpriced_tokens ? ` · ${fmtM(k.unpriced_tokens)} tokens on models without a known price are left out` : '';
+  const measured = 'Measured: every cache-read token in your transcripts, priced at its model\'s cache-read rate against the input rate it would have cost fresh. Public API prices per model.';
+  const api = 'What this usage would cost at public API rates: fresh input, cache writes, cache reads and output, each at its model\'s rate. A subscription pays a flat fee instead.';
+  return [
+    ['Cache saving, measured', fmtUsd(k.saved), series('cache_saved_usd'), true,
+      `cache reads priced against fresh input${k.saved_share == null ? '' : ` · <em class="good">${pct(k.saved_share)} off</em> the API-equivalent bill`}${unpriced}`, measured],
+    ['API-equivalent cost', fmtUsd(k.cost), series('cost_usd'), true, `at public API rates for ${esc(names)} · not your subscription fee`, api],
+  ];
 }
 
 function renderDid(d) {
@@ -140,9 +168,20 @@ function renderDid(d) {
     ['Calls routed to the sandbox', span, String(kind('routed').count), `${kind('route_retry').count} repeated and let through`],
     ['Unchanged re-reads skipped', span, String(t.reads_skipped || 0), `${t.reads_retried || 0} repeated and let through`],
     ['Tokens cut or pruned', `since ${esc((all.first_day || '').slice(5) || 'today')}`, fmtM(all.kept_out), `${all.caps} caps and every pruned compaction over ${all.days} days`],
+    ...complianceRow(d, span),
   ];
   $('#did').innerHTML = `<table class="since-table"><thead><tr><th>counted</th><th>period</th><th class="num">count</th><th>detail</th></tr></thead>
     <tbody>${rows.map(([k, when, v, note]) => `<tr><td>${k}</td><td class="when">${when}</td><td class="num"><b>${v}</b></td><td class="note">${note}</td></tr>`).join('')}</tbody></table>`;
+}
+
+function complianceRow(d, span) {
+  const names = { turn: 'turn pause', handoff: 'handoff notice', task_switch: 'task switch', read_nudge: 'read nudge', route: 'routing', reread: 're-read check', reads: 'read skip', nudge: 'compact nudge' };
+  const rows = Object.entries(d.outcomes || {}).filter(([, o]) => o && o.fired).sort((x, y) => y[1].fired - x[1].fired);
+  if (!rows.length) return [];
+  const fired = rows.reduce((sum, [, o]) => sum + o.fired, 0);
+  const followed = rows.reduce((sum, [, o]) => sum + (o.followed || 0), 0);
+  const detail = rows.map(([k, o]) => `<span title="${esc(o.note || '')}">${esc(names[k] || k)} ${o.followed}/${o.fired}</span>`).join(' · ');
+  return [['Rule notices followed', span, `${followed} of ${fired}`, `${pct(fired ? followed / fired : null)} overall · ${detail} · <a href="#rules">how each is measured →</a>`]];
 }
 
 function sparkline(values, fromZero) {

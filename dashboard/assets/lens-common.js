@@ -4,6 +4,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const fmtM = n => n >= 1e6 ? `${(n / 1e6).toFixed(n >= 1e8 ? 0 : 1)} M` : n >= 1000 ? `${Math.round(n / 1000)} k` : String(Math.round(n || 0));
 const fmtK = n => n == null ? '–' : `${Math.round(n / 1000)} k`;
 const pct = x => x == null ? '–' : `${Math.round(x * 100)}%`;
+const fmtUsd = n => n == null ? '–' : n >= 1000 ? `$${Math.round(n).toLocaleString()}` : n >= 100 ? `$${n.toFixed(0)}` : n >= 10 ? `$${n.toFixed(1)}` : `$${n.toFixed(2)}`;
 const label = k => KIND_LABELS[k] || k;
 const stamp = ts => String(ts || '').replace('T', ' ');
 const read = k => { try { return localStorage.getItem(k); } catch { return null; } };

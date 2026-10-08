@@ -64,8 +64,13 @@ function outcomeLines(d, rule) {
 
 function renderExperiment(d) {
   const e = d.experiment;
-  $('#experiment-sheet').hidden = !e;
-  if (!e) return;
+  const s = d.settings || {};
+  $('#experiment-sheet').hidden = false;
+  if (!e) {
+    const rules = (s.holdout_rules || []).map(r => `<code>${esc(r)}</code>`).join(', ');
+    $('#experiment').innerHTML = `<p class="hist-note">No holdout is running${s.holdout ? ` in this report's window` : ''}. To run one, set the plugin option <code>holdout</code> (or the environment variable <code>CLAUDE_PLUGIN_OPTION_HOLDOUT</code>) to one of ${rules || 'the holdout rules'}. Sessions whose id hashes odd then run with that rule off, and this sheet compares the two halves on context, re-read and steps per prompt once each side has ${s.experiment_min_sessions || 10} sessions. It is the one controlled measurement Kiasi can make of its own effect.</p>`;
+    return;
+  }
   const v = (side, key, f) => side[key] == null ? '–' : f(side[key]);
   const rows = [['sessions', 'sessions', String], ['prompts', 'prompts', String], ['median context', 'median_context', fmtK], ['re-read per prompt', 'reread_per_prompt', fmtM], ['steps per prompt', 'steps_per_prompt', String]]
     .map(([name, key, f]) => [name, num(v(e.on, key, f)), num(v(e.off, key, f))]);

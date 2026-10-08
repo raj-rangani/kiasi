@@ -6,7 +6,7 @@
 <meta name="description" content="What the context kiasi did and how many re-read tokens each action kept off the weekly limit.">
 <title>Kiasi</title>
 <link rel="stylesheet" href="assets/budget.css?v=2026100701">
-<link rel="stylesheet" href="assets/lens.css?v=2026100638">
+<link rel="stylesheet" href="assets/lens.css?v=2026100801">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cstyle%3E.s{fill:none;stroke:%231d1a16}@media (prefers-color-scheme:dark){.s{stroke:%23f6f2ea}}%3C/style%3E%3Cpath class='s' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' d='M8 3H4v18h4M16 3h4v18h-4'/%3E%3Ccircle fill='%23f2b632' cx='12' cy='12' r='3.6'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -32,7 +32,7 @@
   <section class="sheet">
     <div class="sheet-head">
       <h2><span class="num">01</span>What you paid</h2>
-      <p>Measured from your transcripts. Re-read tokens are the cache reads of main sessions and subagents; the Budget tab splits the same bill by subagents and by project.</p>
+      <p>Measured from your transcripts. Re-read tokens are the cache reads of main sessions and subagents; the Budget tab splits the same bill by subagents and by project. The dollar figures price the same tokens at public API rates per model: what the cache saved against fresh input, and what the usage would cost on the API.</p>
     </div>
     <div class="kpis" id="stats"></div>
     <h3 class="block-head">Re-read tokens paid per day</h3>
@@ -98,7 +98,7 @@
   <section class="sheet" id="experiment-sheet" hidden>
     <div class="sheet-head">
       <h2>Experiment</h2>
-      <p>Sessions started with a rule held out (off) against sessions with it on, same window. Read it once both sides have enough sessions.</p>
+      <p>Sessions started with a rule held out (off) against sessions with it on, same window. Read it once both sides have enough sessions. When no holdout is running, this explains how to start one.</p>
     </div>
     <div id="experiment"></div>
   </section>
@@ -182,10 +182,10 @@
     </div>
   </aside>
   <script src="assets/lens-constants.js?v=2026100701"></script>
-<script src="assets/lens-common.js?v=2026100701"></script>
-<script src="assets/lens.js?v=2026100703"></script>
+<script src="assets/lens-common.js?v=2026100801"></script>
+<script src="assets/lens.js?v=2026100801"></script>
 <script src="assets/sessions.js?v=2026100705"></script>
-<script src="assets/rules.js?v=2026100703"></script>
+<script src="assets/rules.js?v=2026100801"></script>
 <script src="assets/budget.js?v=2026100705"></script>
 <script src="assets/storage.js?v=2026100701"></script>
 <script src="assets/sync.js?v=2026100201"></script>

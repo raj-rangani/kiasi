@@ -1,5 +1,13 @@
 # Changelog
 
+### Unreleased
+
+- Overview shows two dollar figures, both measured from the transcripts and priced at public API rates per model: what the prompt cache saved (every cache-read token at its model's read rate against the input rate it would have cost fresh) and what the usage would cost on the API. Each day's row in the report carries the same two figures. The tile notes say they are not the subscription fee; tokens on a model without a known price are left out and said so.
+- "Before and after Kiasi" leads with the headline it was missing: re-read tokens per main-session step before the install against since, and the factor between them once each side has enough steps.
+- "What Kiasi did" has a row for rule notices followed: how many of the turn pauses, routing refusals, handoff and task-switch notices and read nudges Claude acted on, with the per-rule split and a link to how each is measured.
+- The Experiment sheet on the Rules tab is no longer blank when no holdout is running: it says how to start one and when the comparison will appear.
+- The report settings carry the holdout option, the holdout rules and the sessions a comparison needs.
+
 ## 0.6.0 - 2026-10-07
 
 - Rules tab shows an outcome per rule: how often it fired, how often Claude followed it, and the measured effect (re-read paid against the estimate for delegated turns, steps after a warning, the restored session's first context after a handoff notice). Each figure carries a note on how it was measured.

@@ -545,6 +545,51 @@ class TestLensReport(ReportTestCase):
         self.assertEqual(self.lens.since_install(), {"install_day": None, "before": None, "after": None})
 
 
+class TestCostReport(ReportTestCase):
+    def test_model_price_matches_the_longest_prefix_and_dated_ids(self):
+        lens = self.lens
+        self.assertEqual(lens.model_price("claude-haiku-4-5-20251001"), constants.MODEL_PRICES["claude-haiku-4-5"])
+        self.assertEqual(lens.model_price("claude-opus-5-5"), constants.MODEL_PRICES["claude-opus-5-5"], "opus-5-5 is not priced as opus-5")
+        self.assertEqual(lens.model_price("claude-opus-5"), constants.MODEL_PRICES["claude-opus-5"])
+        self.assertEqual(lens.model_price("claude-opus-5-5-20260401"), constants.MODEL_PRICES["claude-opus-5-5"], "a dated suffix matches")
+        self.assertIsNone(lens.model_price("claude-opus-55"), "a prefix match needs a dash boundary")
+        self.assertIsNone(lens.model_price("claude-opus-6"), "an unknown family is unpriced, not guessed")
+        self.assertIsNone(lens.model_price("unknown"))
+
+    def test_cost_report_prices_each_model_and_measures_the_cache_saving(self):
+        def step(request, second, model, read, create=0, inp=0, out=0):
+            entry = self.step(request, second, read, create)
+            entry["message"]["model"] = model
+            entry["message"]["usage"].update({"input_tokens": inp, "output_tokens": out})
+            return entry
+        # 1M cache reads on opus-5-5 ($0.20 read, $4 input) and 1M on fable-5-1 ($0.25 read, $10 input), plus a priced write and output
+        self.write(self.project / "s1.jsonl", [self.prompt(0), step("a", 1, "claude-opus-5-5", 1_000_000, create=100_000, inp=50_000, out=10_000),
+                                               step("b", 2, "claude-fable-5-1", 1_000_000), step("c", 3, "made-up-model", 500_000)])
+        report = self.lens.build(7)
+        cost = report["cost"]
+        by_model = {row["model"]: row for row in cost["models"]}
+        self.assertAlmostEqual(by_model["claude-opus-5-5"]["cost"], 0.2 + 0.5 + 0.2 + 0.2, places=2)
+        self.assertAlmostEqual(by_model["claude-opus-5-5"]["saved"], 3.8, places=2, msg="1M reads at $0.20 against $4 fresh")
+        self.assertAlmostEqual(by_model["claude-fable-5-1"]["saved"], 9.75, places=2)
+        self.assertEqual((by_model["made-up-model"]["priced"], by_model["made-up-model"].get("cost")), (False, None))
+        self.assertEqual(cost["unpriced_tokens"], 500_000)
+        self.assertAlmostEqual(cost["cost"], 1.1 + 0.25, places=2)
+        self.assertAlmostEqual(cost["saved"], 13.55, places=2)
+        self.assertEqual(cost["models"][0]["model"], "claude-opus-5-5", "ranked by cost")
+        [day] = report["per_day"]
+        self.assertEqual((day["cost_usd"], day["cache_saved_usd"]), (1.35, 13.55))
+        self.assertEqual(report["settings"]["holdout_rules"], list(constants.HOLDOUT_RULES))
+
+    def test_subagent_steps_are_priced_too(self):
+        self.write(self.project / "s1.jsonl", [self.prompt(0), self.step("a", 1, 1000)])
+        sub = self.step("x", 2, 2_000_000)
+        sub["message"]["model"] = "claude-haiku-5-5"
+        self.write(self.project / "s1" / "subagents" / "agent-1.jsonl", [sub])
+        cost = self.lens.cost_report(self.lens.scan_sessions(7)[0].usage)
+        self.assertAlmostEqual(cost["saved"], 2 * (0.1 - 0.01), places=3)
+        self.assertEqual(cost["unpriced_tokens"], 1000 + 10 + 90 + 5, "the main step carries no model in this fixture")
+
+
 class TestRuleOutcomes(ReportTestCase):
     def session(self, name, prompts, steps, agents=(), read=100_000):
         """A transcript with typed prompts at the given seconds, steps (one request each) and Agent calls."""

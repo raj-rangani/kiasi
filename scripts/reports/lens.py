@@ -303,6 +303,55 @@ class Sessions(dict):
         super().__init__()
         self.agent_steps = {}
         self.agent_starts = defaultdict(list)
+        self.usage = defaultdict(lambda: defaultdict(Counter))  # day -> model -> read, write, input, output tokens of main and subagent steps
+
+
+USAGE_KEYS = {"read": "cache_read_input_tokens", "write": "cache_creation_input_tokens", "input": "input_tokens", "output": "output_tokens"}
+
+
+def add_usage(sessions, day, message, usage):
+    counter = sessions.usage[day][message.get("model") or "unknown"]
+    for key, field in USAGE_KEYS.items():
+        counter[key] += usage.get(field, 0) or 0
+
+
+def model_price(model):
+    """The price row of a model id, matched by its longest known prefix; None for a model not in the table."""
+    best = max((prefix for prefix in constants.MODEL_PRICES if model == prefix or model.startswith(prefix + "-")), key=len, default=None)
+    return constants.MODEL_PRICES[best] if best else None
+
+
+def cost_report(usage):
+    """What the window's usage would cost at public API rates, per model and per day, and what the cache saved.
+
+    The saving is measured: every cache-read token is priced at its model's read rate against the input rate
+    it would have cost fresh. It is not the estimate the dashboard once showed for tokens kept out of context."""
+    models, per_day = defaultdict(Counter), defaultdict(lambda: Counter())
+    unpriced = Counter()
+    for day, by_model in usage.items():
+        for model, tokens in by_model.items():
+            price = model_price(model)
+            if price is None:
+                unpriced.update(tokens)
+                models[model].update(tokens)
+                continue
+            in_price, out_price, write_price, read_price = price
+            cost = (tokens["input"] * in_price + tokens["write"] * write_price + tokens["read"] * read_price + tokens["output"] * out_price) / 1e6
+            saved = tokens["read"] * (in_price - read_price) / 1e6
+            models[model].update(tokens)
+            models[model]["cost"] += cost
+            models[model]["saved"] += saved
+            per_day[day]["cost"] += cost
+            per_day[day]["saved"] += saved
+    rows = [{"model": model, "priced": model_price(model) is not None, **{k: int(v) if k in USAGE_KEYS else round(v, 2) for k, v in tokens.items()}}
+            for model, tokens in models.items()]
+    rows.sort(key=lambda r: (-r.get("cost", 0), -r["read"]))
+    cost = sum(r.get("cost", 0) for r in rows)
+    saved = sum(r.get("saved", 0) for r in rows)
+    return {"cost": round(cost, 2), "saved": round(saved, 2), "saved_share": round(saved / (cost + saved), 4) if cost + saved else None,
+            "models": rows, "unpriced_tokens": sum(unpriced.values()),
+            "per_day": {day: {k: round(v, 2) for k, v in row.items()} for day, row in sorted(per_day.items())},
+            "note": "public API rates per model; a subscription pays a flat fee, so this is what the same usage would cost on the API"}
 
 
 def scan_sessions(days):
@@ -346,6 +395,7 @@ def scan_sessions(days):
                 info["reread"] += usage.get("cache_read_input_tokens", 0)
                 bill[day] += usage.get("cache_read_input_tokens", 0)
                 main_bill[day] += usage.get("cache_read_input_tokens", 0)
+                add_usage(sessions, day, message, usage)
             elif entry.get("type") == "user" and is_prompt(entry.get("message") or {}) and first_ask(entry, asked) and day >= first_day:
                 info["prompts"].append(t)
                 prompts[day] += 1
@@ -363,6 +413,7 @@ def scan_sessions(days):
                 if local_day(t) < first_day:
                     continue
                 bill[local_day(t)] += usage.get("cache_read_input_tokens", 0)
+                add_usage(sessions, local_day(t), entry.get("message") or {}, usage)
                 sessions.agent_steps.setdefault(agent, []).append(t)
         if agent in sessions.agent_steps:
             sessions.agent_steps[agent].sort()
@@ -1130,6 +1181,7 @@ def build(days):
         miss_tokens[local_day(miss["t"])] += miss["tokens"]
     constants.LOG_DIR.mkdir(parents=True, exist_ok=True)
     all_time = merge_savings(actions, days)
+    cost = cost_report(sessions.usage)
     report = {
         "generated": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "days": days,
@@ -1152,11 +1204,13 @@ def build(days):
         **({"experiment": experiment} if experiment else {}),
         "since": since_install(),
         "all_time": all_time,
+        "cost": cost,
         "per_day": [{"day": day, "paid": bill.get(day, 0), "prompts": prompts.get(day, 0), "reread_per_prompt": int(main_bill.get(day, 0) / prompts[day]) if prompts.get(day) else None,
                      "sessions": len(startups.get(day, [])), "startup": int(sum(startups[day]) / len(startups[day])) if startups.get(day) else None,
                      "kinds": dict(kind_counts.get(day, {})),
                      "cache_misses": dict(misses.get(day, {})), "cache_miss_tokens": miss_tokens.get(day, 0),
                      "hit_rate": round(cache_days[day]["read"] / cache_days[day]["input"], 4) if cache_days.get(day, {}).get("input") else None,
+                     "cost_usd": cost["per_day"].get(day, {}).get("cost"), "cache_saved_usd": cost["per_day"].get(day, {}).get("saved"),
                      **{k: v for k, v in per_day[day].items() if v}} for day in days_seen],
         "sessions": session_rows,
         "window": window_in_effect(),
@@ -1174,6 +1228,7 @@ def build(days):
         "actions": list(reversed(actions))[: constants.LENS_MAX_ACTIONS],
         "settings": {"warn_tokens": constants.CONTEXT_WARN_TOKENS, "hard_tokens": constants.CONTEXT_HARD_TOKENS, "turn_warn_steps": constants.turn_warn_steps(),
                      "turn_stop_steps": constants.TURN_STOP_STEPS, "turn_budget_mode": constants.TURN_BUDGET_MODE, "comply_steps": constants.LENS_COMPLY_STEPS, "saving_kinds": SAVING_KINDS,
+                     "holdout": constants.HOLDOUT, "holdout_rules": list(constants.HOLDOUT_RULES), "experiment_min_sessions": constants.LENS_EXPERIMENT_MIN_SESSIONS,
                      "delegation_credit": "only when an Agent call is logged as allowed or a subagent transcript starts after it: the log records no outcome"},
     }
     report["skipped"] = dict(SKIPPED)
