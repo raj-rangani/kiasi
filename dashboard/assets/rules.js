@@ -107,8 +107,8 @@ function renderRules(d) {
       <div class="rl-days">${days.length ? dayLine(counts, days, install) : ''}</div>
       <div class="rl-facts"><p class="facts">${esc(facts(d, rule))}</p>${outcomeLines(d, rule)}</div><span class="chev">›</span></div>`;
   };
-  $('#rules').innerHTML = `<div class="rl-head"><span>rule</span><span class="num">fired · ${d.days || d.per_day.length} days</span><span class="num">tokens cut</span><span class="rl-dayhead"><em>fired per day${span}</em>${dayCellLabels(days)}</span><span>breakdown</span><span></span></div>${RULES.map(row).join('')}`;
-  $('#rules').querySelectorAll('.rl-row').forEach(el => {
+  $('#rule-list').innerHTML = `<div class="rl-head"><span>rule</span><span class="num">fired · ${d.days || d.per_day.length} days</span><span class="num">tokens cut</span><span class="rl-dayhead"><em>fired per day${span}</em>${dayCellLabels(days)}</span><span>breakdown</span><span></span></div>${RULES.map(row).join('')}`;
+  $('#rule-list').querySelectorAll('.rl-row').forEach(el => {
     el.addEventListener('click', () => select(el.dataset.rule));
     el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(el.dataset.rule); } });
   });

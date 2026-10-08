@@ -5,109 +5,114 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="What the context kiasi did and how many re-read tokens each action kept off the weekly limit.">
 <title>Kiasi</title>
-<link rel="stylesheet" href="assets/budget.css?v=2026100701">
-<link rel="stylesheet" href="assets/lens.css?v=2026100809">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cstyle%3E.s{fill:none;stroke:%231d1a16}@media (prefers-color-scheme:dark){.s{stroke:%23f6f2ea}}%3C/style%3E%3Cpath class='s' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' d='M8 3H4v18h4M16 3h4v18h-4'/%3E%3Ccircle fill='%23f2b632' cx='12' cy='12' r='3.6'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="assets/app.css?v=2026100810">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cstyle%3E.s{fill:none;stroke:%23111827}@media (prefers-color-scheme:dark){.s{stroke:%23e5e7eb}}%3C/style%3E%3Cpath class='s' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' d='M8 3H4v18h4M16 3h4v18h-4'/%3E%3Ccircle fill='%23f59e0b' cx='12' cy='12' r='3.6'/%3E%3C/svg%3E">
 </head>
 <body>
-<div class="wrap">
-  <header class="masthead">
-    <div>
-      <h1 class="brand"><svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H4v18h4M16 3h4v18h-4"/><circle cx="12" cy="12" r="3.6"/></svg>Kiasi</h1>
-      <p id="tagline"></p>
-    </div>
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="brand" href="#overview"><svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H4v18h4M16 3h4v18h-4"/><circle cx="12" cy="12" r="3.6"/></svg><span>Kiasi</span></a>
+    <nav class="tabs" id="nav"></nav>
+    <div class="status" id="status"><i></i>loading</div>
     <div class="controls">
       <button class="iconbtn sync" id="sync" title="Rebuild the reports from the transcripts now" aria-label="Sync reports"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg></button>
       <button class="iconbtn" id="theme" title="Switch light and dark" aria-label="Switch theme"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg></button>
     </div>
-    <div class="tabrow">
-      <nav class="tabs" id="nav"></nav>
-      <div class="status" id="status"><i></i>loading</div>
-    </div>
-  </header>
+  </div>
+</header>
+<div class="wrap">
+  <div class="page-head">
+    <h1 id="page-title">Overview</h1>
+    <p id="tagline"></p>
+  </div>
   <div class="banner hidden" id="banner"></div>
 
   <main class="view" data-view="overview" hidden>
   <section class="view-empty" hidden></section>
-  <section class="hero" id="hero"></section>
   <div class="notices" id="notices"><p class="notice" id="spike-note" hidden></p><p class="notice" id="startup-hint" hidden></p></div>
-  <section class="block">
-    <h2 class="block-title">Context sent, per day<small id="chart-sub"></small></h2>
+  <section class="metrics" id="hero"></section>
+  <section class="card">
+    <div class="card-head"><h2>Context sent per day</h2><small id="chart-sub"></small></div>
     <div class="chart" id="bill-chart"></div>
   </section>
-  <section class="block" id="fix-block" hidden>
-    <h2 class="block-title">What to fix<small id="fix-sub"></small></h2>
-    <ol class="fixes-list" id="fixes-list"></ol>
+  <div class="grid-2">
+    <section class="card" id="fix-block" hidden>
+      <div class="card-head"><h2>What to fix</h2><small id="fix-sub"></small></div>
+      <ol class="fixes-list" id="fixes-list"></ol>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>What Kiasi did</h2><small id="did-sub"></small></div>
+      <div class="counters" id="counters"></div>
+    </section>
+  </div>
+  <section class="card">
+    <details class="fold" id="more-fold">
+      <summary>All the detail<small>weekly totals, the full split, each rule, before and after Kiasi, startup floor</small></summary>
+      <h3 class="block-head">This week</h3>
+      <div class="kpis" id="stats"></div>
+      <p class="api-line" id="api-line" hidden></p>
+      <div id="attribution"></div>
+      <h3 class="block-head">What Kiasi did, in full</h3>
+      <div class="measured" id="did"></div>
+      <h3 class="block-head">Before and after Kiasi</h3>
+      <p class="hist-note">The days before the install against since. An observation, not a controlled test: the work in the two periods differs.</p>
+      <div id="trend" hidden></div>
+      <div class="since" id="since"></div>
+      <h3 class="block-head">Context window and startup floor</h3>
+      <div id="floor"></div>
+    </details>
   </section>
-  <section class="block">
-    <h2 class="block-title">What Kiasi did<small id="did-sub"></small></h2>
-    <div class="counters" id="counters"></div>
-  </section>
-  <details class="fold" id="more-fold">
-    <summary>All the detail<small>Weekly totals, the full split, each rule's count, before and after Kiasi, and what each project loads at startup.</small></summary>
-    <h3 class="block-head">This week</h3>
-    <div class="kpis" id="stats"></div>
-    <p class="api-line" id="api-line" hidden></p>
-    <div id="attribution"></div>
-    <h3 class="block-head">What Kiasi did, in full</h3>
-    <div class="measured" id="did"></div>
-    <h3 class="block-head">Before and after Kiasi</h3>
-    <p class="hist-note">The days before the install against since. An observation, not a controlled test: the work in the two periods differs.</p>
-    <div id="trend" hidden></div>
-    <div class="since" id="since"></div>
-    <h3 class="block-head">Context window and startup floor</h3>
-    <div id="floor"></div>
-  </details>
   </main>
 
   <main class="view" data-view="sessions" hidden>
   <section class="view-empty" hidden></section>
   <section class="sheet">
     <div class="sheet-head">
-      <h2><span class="num">01</span>The costliest sessions</h2>
-      <p>Small multiples, sorted by re-read bill. Click one to open it. The dashed and solid lines are the warning and hard limits.</p>
+      <h2>The costliest sessions</h2>
+      <p>Sorted by what they re-sent. Click one to open it. The dashed and solid lines are the warning and hard limits.</p>
     </div>
     <div class="multiples" id="multiples"></div>
     <div class="legend"><span><i class="tick"></i>prompt</span><span><i class="ring"></i>compaction</span><span><i class="ring pruned"></i>pruned compaction</span><span><i class="amber"></i>re-read check</span><span><i class="red"></i>turn stopped</span><span><i class="line"></i>warning</span><span><i class="line warn"></i>hard limit</span></div>
   </section>
   <section class="sheet" id="spikes-sheet" hidden>
     <div class="sheet-head">
-      <h2><span class="num">02</span>Spikes</h2>
+      <h2>Spikes</h2>
       <p>Sessions whose re-read per prompt ran far above the median for this range. One of these can use up more of a limit than a week of ordinary work.</p>
     </div>
     <div id="spikes"></div>
   </section>
   <section class="sheet">
     <div class="sheet-head">
-      <h2><span class="num">03</span>All sessions</h2>
+      <h2>All sessions</h2>
       <p>Every main session in range. Click a row to open it.</p>
     </div>
     <div id="sessions"></div>
     <p class="more" id="sessions-more"></p>
   </section>
-  
   </main>
 
   <main class="view" data-view="rules" hidden>
   <section class="view-empty" hidden></section>
   <section class="sheet">
     <div class="sheet-head">
-      <h2><span class="num">01</span>Each rule</h2>
-      <p>How often each rule fired, how many tokens it cut, and its fires per day. The line is the rule's fires per day, with the count under each day; each line has its own scale, and the larger dot is its peak day. Click a rule for its detail and log.</p>
+      <h2>Each rule</h2>
+      <p>How often each rule fired, how many tokens it cut, and its fires per day. Click a rule for its detail and log.</p>
     </div>
-    <div class="rule-list" id="rules"></div>
+    <div class="rule-list" id="rule-list"></div>
   </section>
   <section class="sheet" id="experiment-sheet" hidden>
     <div class="sheet-head">
       <h2>Experiment</h2>
-      <p>Sessions started with a rule held out (off) against sessions with it on, same window. Read it once both sides have enough sessions. When no holdout is running, this explains how to start one.</p>
+      <p>Sessions started with a rule held out against sessions with it on, same window. Read it once both sides have enough sessions.</p>
     </div>
     <div id="experiment"></div>
   </section>
   <section class="sheet">
     <div class="sheet-head">
-      <h2><span class="num">02</span>Steps per prompt</h2>
-      <p>For each step band, its share of the prompts next to its share of the re-read tokens, and what one prompt of that length cost. This is what the turn budget shapes.</p>
+      <h2>Steps per prompt</h2>
+      <p>For each step band, its share of the prompts next to its share of the re-read tokens. This is what the turn budget shapes.</p>
     </div>
     <div class="steps-bars" id="steps-chart"></div>
     <div class="legend" id="steps-legend"></div>
@@ -115,7 +120,7 @@
   </section>
   <section class="sheet">
     <div class="sheet-head">
-      <h2><span class="num">03</span>Cache</h2>
+      <h2>Cache</h2>
       <p>A miss writes the conversation to the cache again at a higher price. The causes worth fixing, by what they cost.</p>
     </div>
     <div class="cache-tiles" id="cache-tiles"></div>
@@ -123,14 +128,14 @@
   </section>
   <section class="sheet">
     <div class="sheet-head">
-      <h2><span class="num">04</span>Recall</h2>
+      <h2>Recall</h2>
       <p>How often Claude went back to the full text of a cut output. Rarely means the cap could be tighter; often means it cuts too much.</p>
     </div>
     <div id="recall"></div>
   </section>
   <section class="sheet" id="problems-sheet" hidden>
     <div class="sheet-head">
-      <h2><span class="num">05</span>Problems</h2>
+      <h2>Problems</h2>
       <p>Failures Kiasi worked around instead of stopping. Each one is also on stderr when it happens.</p>
     </div>
     <div id="problems"></div>
@@ -142,14 +147,14 @@
   <section class="view-empty" hidden></section>
   <section class="sheet">
     <div class="sheet-head">
-      <h2><span class="num">01</span>Re-read per day</h2>
+      <h2>Re-read per day</h2>
       <p>Every step re-sends the whole conversation. This is how many tokens were sent again each day, main sessions and subagents stacked.</p>
     </div>
     <div id="levers"></div>
   </section>
   <section class="sheet">
     <div class="sheet-head">
-      <h2><span class="num">02</span>What to cut next</h2>
+      <h2>What to cut next</h2>
       <p>The single tool results that cost the most this week, repeats grouped. Click one to open its session.</p>
     </div>
     <div class="fixes" id="fixes"></div>
@@ -162,11 +167,11 @@
     <div id="store-meter"></div>
   </section>
   <section class="sheet">
-    <div class="sheet-head"><h2><span class="num">01</span>Recommendations</h2></div>
+    <div class="sheet-head"><h2>Recommendations</h2></div>
     <div id="store-recs"></div>
   </section>
   <section class="sheet">
-    <div class="sheet-head"><h2><span class="num">02</span>What is using space</h2></div>
+    <div class="sheet-head"><h2>What is using space</h2></div>
     <div id="store-list"></div>
   </section>
   </main>
@@ -183,12 +188,12 @@
       <div class="panel-content" id="panel-content" tabindex="-1"></div>
     </div>
   </aside>
-  <script src="assets/lens-constants.js?v=2026100802"></script>
-<script src="assets/lens-common.js?v=2026100801"></script>
-<script src="assets/lens.js?v=2026100808"></script>
+  <script src="assets/lens-constants.js?v=2026100810"></script>
+<script src="assets/lens-common.js?v=2026100810"></script>
+<script src="assets/lens.js?v=2026100810"></script>
 <script src="assets/sessions.js?v=2026100805"></script>
-<script src="assets/rules.js?v=2026100801"></script>
-<script src="assets/budget.js?v=2026100705"></script>
+<script src="assets/rules.js?v=2026100810"></script>
+<script src="assets/budget.js?v=2026100810"></script>
 <script src="assets/storage.js?v=2026100701"></script>
 <script src="assets/sync.js?v=2026100201"></script>
 <script>startApp();</script>
