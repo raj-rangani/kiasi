@@ -83,7 +83,7 @@ const MARK_LABELS = { compaction: 'compaction', pruned: 'pruned compaction', che
 const VIEWS = [
   ['overview', 'Overview', 'Is Kiasi cutting what your Claude Code sessions send, and what to fix next.'],
   ['sessions', 'Sessions', 'One chart per session: context at every step, prompts as ticks, compactions as rings. Click a session for its full trajectory and every Kiasi action inside it.'],
-  ['rules', 'Rules', 'Each rule of Kiasi: how often it fired, how many tokens it cut, and its log. The chart shows where the steps go, which is what the turn budget shapes. Cache misses and the cut outputs read back follow the rules.'],
+  ['rules', 'Rules', 'Each rule of Kiasi: how often it fired, how many tokens it cut, and its log. Click a rule for its detail.'],
   ['budget', 'Budget', 'Where the weekly limit goes: every turn re-reads the whole conversation, so the cost is context size times turns.'],
   ['storage', 'Storage', 'What Kiasi keeps on disk and for how long. A saved file follows its session: once both are unused for a week it goes to trash, and the trash is emptied a week later.']
 ];

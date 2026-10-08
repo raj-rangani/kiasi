@@ -6,7 +6,7 @@
 <meta name="description" content="What the context kiasi did and how many re-read tokens each action kept off the weekly limit.">
 <title>Kiasi</title>
 <link rel="stylesheet" href="assets/budget.css?v=2026100701">
-<link rel="stylesheet" href="assets/lens.css?v=2026100809">
+<link rel="stylesheet" href="assets/lens.css?v=2026100811">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cstyle%3E.s{fill:none;stroke:%231d1a16}@media (prefers-color-scheme:dark){.s{stroke:%23f6f2ea}}%3C/style%3E%3Cpath class='s' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' d='M8 3H4v18h4M16 3h4v18h-4'/%3E%3Ccircle fill='%23f2b632' cx='12' cy='12' r='3.6'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -30,7 +30,7 @@
   <main class="view" data-view="overview" hidden>
   <section class="view-empty" hidden></section>
   <section class="hero" id="hero"></section>
-  <div class="notices" id="notices"><p class="notice" id="spike-note" hidden></p><p class="notice" id="startup-hint" hidden></p></div>
+  <div class="notices" id="notices"><p class="notice" id="spike-note" hidden></p></div>
   <section class="block">
     <h2 class="block-title">Context sent, per day<small id="chart-sub"></small></h2>
     <div class="chart" id="bill-chart"></div>
@@ -39,25 +39,6 @@
     <h2 class="block-title">What to fix<small id="fix-sub"></small></h2>
     <ol class="fixes-list" id="fixes-list"></ol>
   </section>
-  <section class="block">
-    <h2 class="block-title">What Kiasi did<small id="did-sub"></small></h2>
-    <div class="counters" id="counters"></div>
-  </section>
-  <details class="fold" id="more-fold">
-    <summary>All the detail<small>Weekly totals, the full split, each rule's count, before and after Kiasi, and what each project loads at startup.</small></summary>
-    <h3 class="block-head">This week</h3>
-    <div class="kpis" id="stats"></div>
-    <p class="api-line" id="api-line" hidden></p>
-    <div id="attribution"></div>
-    <h3 class="block-head">What Kiasi did, in full</h3>
-    <div class="measured" id="did"></div>
-    <h3 class="block-head">Before and after Kiasi</h3>
-    <p class="hist-note">The days before the install against since. An observation, not a controlled test: the work in the two periods differs.</p>
-    <div id="trend" hidden></div>
-    <div class="since" id="since"></div>
-    <h3 class="block-head">Context window and startup floor</h3>
-    <div id="floor"></div>
-  </details>
   </main>
 
   <main class="view" data-view="sessions" hidden>
@@ -65,27 +46,11 @@
   <section class="sheet">
     <div class="sheet-head">
       <h2><span class="num">01</span>The costliest sessions</h2>
-      <p>Small multiples, sorted by re-read bill. Click one to open it. The dashed and solid lines are the warning and hard limits.</p>
+      <p>Sorted by what they re-sent. Click one to open it. The dashed and solid lines are the warning and hard limits.</p>
     </div>
     <div class="multiples" id="multiples"></div>
     <div class="legend"><span><i class="tick"></i>prompt</span><span><i class="ring"></i>compaction</span><span><i class="ring pruned"></i>pruned compaction</span><span><i class="amber"></i>re-read check</span><span><i class="red"></i>turn stopped</span><span><i class="line"></i>warning</span><span><i class="line warn"></i>hard limit</span></div>
   </section>
-  <section class="sheet" id="spikes-sheet" hidden>
-    <div class="sheet-head">
-      <h2><span class="num">02</span>Spikes</h2>
-      <p>Sessions whose re-read per prompt ran far above the median for this range. One of these can use up more of a limit than a week of ordinary work.</p>
-    </div>
-    <div id="spikes"></div>
-  </section>
-  <section class="sheet">
-    <div class="sheet-head">
-      <h2><span class="num">03</span>All sessions</h2>
-      <p>Every main session in range. Click a row to open it.</p>
-    </div>
-    <div id="sessions"></div>
-    <p class="more" id="sessions-more"></p>
-  </section>
-  
   </main>
 
   <main class="view" data-view="rules" hidden>
@@ -96,44 +61,6 @@
       <p>How often each rule fired, how many tokens it cut, and its fires per day. The line is the rule's fires per day, with the count under each day; each line has its own scale, and the larger dot is its peak day. Click a rule for its detail and log.</p>
     </div>
     <div class="rule-list" id="rules"></div>
-  </section>
-  <section class="sheet" id="experiment-sheet" hidden>
-    <div class="sheet-head">
-      <h2>Experiment</h2>
-      <p>Sessions started with a rule held out (off) against sessions with it on, same window. Read it once both sides have enough sessions. When no holdout is running, this explains how to start one.</p>
-    </div>
-    <div id="experiment"></div>
-  </section>
-  <section class="sheet">
-    <div class="sheet-head">
-      <h2><span class="num">02</span>Steps per prompt</h2>
-      <p>For each step band, its share of the prompts next to its share of the re-read tokens, and what one prompt of that length cost. This is what the turn budget shapes.</p>
-    </div>
-    <div class="steps-bars" id="steps-chart"></div>
-    <div class="legend" id="steps-legend"></div>
-    <p class="hist-note" id="steps-note"></p>
-  </section>
-  <section class="sheet">
-    <div class="sheet-head">
-      <h2><span class="num">03</span>Cache</h2>
-      <p>A miss writes the conversation to the cache again at a higher price. The causes worth fixing, by what they cost.</p>
-    </div>
-    <div class="cache-tiles" id="cache-tiles"></div>
-    <div id="cache-causes"></div>
-  </section>
-  <section class="sheet">
-    <div class="sheet-head">
-      <h2><span class="num">04</span>Recall</h2>
-      <p>How often Claude went back to the full text of a cut output. Rarely means the cap could be tighter; often means it cuts too much.</p>
-    </div>
-    <div id="recall"></div>
-  </section>
-  <section class="sheet" id="problems-sheet" hidden>
-    <div class="sheet-head">
-      <h2><span class="num">05</span>Problems</h2>
-      <p>Failures Kiasi worked around instead of stopping. Each one is also on stderr when it happens.</p>
-    </div>
-    <div id="problems"></div>
   </section>
   </main>
 
@@ -183,12 +110,12 @@
       <div class="panel-content" id="panel-content" tabindex="-1"></div>
     </div>
   </aside>
-  <script src="assets/lens-constants.js?v=2026100802"></script>
+  <script src="assets/lens-constants.js?v=2026100811"></script>
 <script src="assets/lens-common.js?v=2026100801"></script>
-<script src="assets/lens.js?v=2026100808"></script>
-<script src="assets/sessions.js?v=2026100805"></script>
-<script src="assets/rules.js?v=2026100801"></script>
-<script src="assets/budget.js?v=2026100705"></script>
+<script src="assets/lens.js?v=2026100811"></script>
+<script src="assets/sessions.js?v=2026100811"></script>
+<script src="assets/rules.js?v=2026100811"></script>
+<script src="assets/budget.js?v=2026100811"></script>
 <script src="assets/storage.js?v=2026100701"></script>
 <script src="assets/sync.js?v=2026100201"></script>
 <script>startApp();</script>

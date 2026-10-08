@@ -37,7 +37,6 @@ function sessionSvg(s, settings, W, H, detailed) {
   return svg + '</svg>';
 }
 
-
 function renderMultiples(d) {
   const host = $('#multiples');
   const W = 300;
@@ -110,24 +109,6 @@ function renderDetail(d) {
   finishPanelContent();
 }
 
-let showAll = false;
-function renderTable(d) {
-  const all = d.sessions.filter(s => s.steps >= SMALL_SESSION_STEPS || s.session === selected);
-  const rows = showAll ? d.sessions : all.slice(0, SESSION_ROWS);
-  const hit = d.sessions.find(s => s.session === selected);
-  if (hit && !rows.includes(hit)) rows.push(hit);
-  const skipped = (d.totals || {}).synthetic_skipped;
-  $('#sessions-more').innerHTML = (d.sessions.length > rows.length || showAll ? `<a href="#sessions" id="toggle-all">${showAll ? `show the first ${SESSION_ROWS}` : `show all ${d.sessions.length} sessions`}</a>` : '')
-    + (skipped ? `<span class="hist-note"> ${syntheticNote(skipped, (d.totals || {}).synthetic_kinds)}</span>` : '');
-  const toggle = $('#toggle-all');
-  if (toggle) toggle.addEventListener('click', e => { e.preventDefault(); showAll = !showAll; renderTable(d); });
-  const maxBill = Math.max(...rows.map(s => s.bill)) || 1;
-  $('#sessions').innerHTML = `<table><thead><tr><th>session</th><th>project</th><th>day</th><th class="num">steps</th><th class="num">mean ctx</th><th class="num">compactions</th><th class="num">tokens cut</th><th>bill</th></tr></thead><tbody>${rows.map(s => `
-    <tr class="click ${s.session === selected ? 'selected' : ''}" data-session="${esc(s.session)}"><td class="mono">${esc(s.short)}${s.runaway ? ` <span class="badge-runaway" title="peak context ${fmtK(s.peak)}">past 200k · ${fmtK(s.peak)}</span>` : ''}</td><td>${esc(s.project.slice(0, 40))}</td><td class="mono">${esc(s.day)}${s.partial ? `<br><span class="hist-note" title="Counted from ${esc(s.first_day || s.day)}">resumed, earlier part not shown</span>` : ''}</td><td class="num">${s.steps}</td><td class="num${s.mean_context >= d.settings.warn_tokens ? ' warn' : ''}">${fmtK(s.mean_context)}<br><span class="hist-note">med ${fmtK(s.median_context)} · p90 ${fmtK(s.p90_context)}</span></td><td class="num">${s.compactions}</td><td class="num">${s.kept_out ? fmtM(s.kept_out) : ''}</td>
-    <td><div class="fillbar" title="${fmtM(s.bill)}"><i class="${s.mean_context >= d.settings.warn_tokens ? 'warn' : ''}" style="width:${(s.bill / maxBill * 100).toFixed(1)}%"></i></div></td></tr>`).join('')}</tbody></table>`;
-  $('#sessions').querySelectorAll('tr.click').forEach(el => el.addEventListener('click', () => select(el.dataset.session)));
-}
-
 function select(session, keep) {
   selected = selected === session && !keep ? '' : session;
   openAction = null;
@@ -135,18 +116,6 @@ function select(session, keep) {
   setViewParam(selected ? selected.slice(0, 8) : '');
   renderMultiples(data);
   renderDetail(data);
-  renderTable(data);
-}
-
-function renderSpikes(d) {
-  const sp = d.spikes || {}, rows = sp.rows || [];
-  const sheet = $('#spikes-sheet');
-  sheet.hidden = !rows.length;
-  if (!rows.length) return;
-  $('#spikes').innerHTML = `<table class="since-table"><thead><tr><th>session</th><th>project</th><th>day</th><th class="num">prompts</th><th class="num">steps</th><th class="num">re-read</th><th class="num">per prompt</th><th class="num">× median</th><th class="num">peak context</th></tr></thead><tbody>${rows.map(s =>
-    `<tr class="click ${s.session === selected ? 'selected' : ''}" data-session="${esc(s.session)}"><td class="mono">${esc(s.session.slice(0, 8))}</td><td>${esc(s.project.slice(0, 40))}</td><td class="mono">${esc(s.day)}</td><td class="num">${s.prompts}</td><td class="num">${s.steps}</td><td class="num"><b>${fmtM(s.reread)}</b></td><td class="num">${fmtM(s.per_prompt)}</td><td class="num warn">${s.factor}×</td><td class="num">${fmtK(s.peak)}</td></tr>`).join('')}</tbody></table>
-    <p class="hist-note">Median re-read per prompt in this range: ${fmtM(sp.median_per_prompt)}. A spike is at least ${sp.factor}× that and ${fmtM(sp.min_tokens)} in total. Click a row to open the session.</p>`;
-  $('#spikes').querySelectorAll('tr.click').forEach(el => el.addEventListener('click', () => select(el.dataset.session)));
 }
 
 registerView('sessions', d => {
@@ -155,7 +124,5 @@ registerView('sessions', d => {
   if (wanted && !(selected || '').startsWith(wanted)) selected = (d.sessions.find(s => s.session.startsWith(wanted)) || {}).session || selected;
   renderMultiples(d);
   renderDetail(d);
-  renderSpikes(d);
-  renderTable(d);
 });
 })();
