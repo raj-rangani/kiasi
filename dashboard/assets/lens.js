@@ -271,7 +271,8 @@ function renderStartupHint(d) {
   const host = $('#startup-hint');
   host.hidden = !(startup.mean && startup.today > startup.mean * STARTUP_HINT_RATIO);
   if (host.hidden) return;
-  host.innerHTML = `Startup cost is ${change(startup.mean, startup.today).slice(1)} above its mean since Kiasi was on. Run <code>/skill-doctor</code> in Claude Code to see unused skills and plugins, then set them to <code>off</code> or <code>user-invocable-only</code> in <code>/skills</code>, or turn plugins off for a project with <code>enabledPlugins</code> in its <code>.claude/settings.json</code>.`;
+  host.innerHTML = `Today's sessions start ${change(startup.mean, startup.today).slice(1)} heavier than usual. Run <code>/skill-doctor</code> in Claude Code to find skills and plugins you do not use, and turn them off. <a href="#overview" id="floor-link">What each project loads →</a>`;
+  $('#floor-link').addEventListener('click', e => { e.preventDefault(); $('#floor-sheet').open = true; $('#floor-sheet').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
 }
 
 function mb(bytes) {
@@ -373,44 +374,107 @@ const ATTRIB_ADVICE = {
   'subagent results': 'Subagent replies land in the main context; brief them to return a short answer.',
 };
 
-const ATTRIB_ROWS = 5;
-let allAttrib = false;
+const PLAIN_KIND = {
+  'floor': ['Startup floor', 'what a session loads before its first reply'],
+  'system reminders': ['System reminders', 'context that hooks and plugins attach'],
+  'file reads': ['File reads', 'whole files read into the conversation'],
+  'shell output': ['Shell output', 'what commands printed'],
+  'tool calls': ['Tool calls', 'edits, writes and their arguments'],
+  'subagent results': ['Subagent results', 'what subagents reported back'],
+  'web pages': ['Web pages', 'pages fetched into the conversation'],
+  'pastes': ['Pastes', 'text pasted into prompts'],
+  'compaction summary': ['Compaction summary', 'the summary left after a compaction'],
+};
+const plainKind = kind => PLAIN_KIND[kind] || [kind.charAt(0).toUpperCase() + kind.slice(1), ''];
+const FIX_ROWS = 3;
 
 function renderAttribution(d) {
   const a = d.attribution || {}, all = a.kinds || [];
-  const sheet = $('#attribution-sheet');
-  sheet.hidden = !all.length;
-  if (!all.length) return;
-  const rows = allAttrib ? all : all.slice(0, ATTRIB_ROWS);
-  const rest = all.slice(ATTRIB_ROWS).reduce((t, r) => t + r.share, 0);
+  const host = $('#attribution');
+  if (!all.length) { host.innerHTML = ''; return; }
   const max = all[0].tokens;
-  $('#attribution').innerHTML = `<table class="since-table attrib"><thead><tr><th>what sat in the context</th><th class="num">re-read</th><th>share</th><th>what to do</th></tr></thead><tbody>${rows.map(r =>
-    `<tr><td>${esc(r.kind)}</td><td class="num">${fmtM(r.tokens)}</td><td class="share"><div class="hbar"><i style="width:${Math.max(1, 100 * r.tokens / max)}%"></i></div><span class="mono">${Math.round(r.share * 100)}%</span></td><td class="hist-note">${esc(ATTRIB_ADVICE[r.kind] || '')}</td></tr>`).join('')}</tbody></table>
-    <p class="hist-note">Total ${fmtM(a.total)} over ${d.days} days; subagent steps are not included.${all.length > ATTRIB_ROWS ? ` <a href="#overview" id="toggle-attrib">${allAttrib ? `show the top ${ATTRIB_ROWS}` : `show the other ${all.length - ATTRIB_ROWS} kinds (${Math.round(rest * 100)}%)`}</a>` : ''}</p>`;
-  const toggle = $('#toggle-attrib');
-  if (toggle) toggle.addEventListener('click', e => { e.preventDefault(); allAttrib = !allAttrib; renderAttribution(d); });
+  host.innerHTML = `<h3 class="block-head">What sat in the context · ${d.days} days</h3><table class="since-table attrib"><thead><tr><th>kind</th><th class="num">context sent</th><th>share</th><th>what to do</th></tr></thead><tbody>${all.map(r =>
+    `<tr><td>${esc(plainKind(r.kind)[0])}</td><td class="num">${fmtM(r.tokens)}</td><td class="share"><div class="hbar"><i style="width:${Math.max(1, 100 * r.tokens / max)}%"></i></div><span class="mono">${Math.round(r.share * 100)}%</span></td><td class="hist-note">${esc(ATTRIB_ADVICE[r.kind] || '')}</td></tr>`).join('')}</tbody></table>
+    <p class="hist-note">Total ${fmtM(a.total)} over ${d.days} days; subagent steps are not included.</p>`;
 }
 
-function renderVerdict(d) {
+function renderFixes(d) {
+  const all = ((d.attribution || {}).kinds || []);
+  const block = $('#fix-block');
+  block.hidden = !all.length;
+  if (!all.length) return;
+  const rows = all.slice(0, FIX_ROWS);
+  const max = all[0].tokens;
+  $('#fixes-list').innerHTML = rows.map((r, i) => {
+    const [name, what] = plainKind(r.kind);
+    return `<li class="fix"><span class="rank">${i + 1}</span><span class="name">${esc(name)}${what ? `<small>${esc(what)}</small>` : ''}</span>
+      <span class="share"><span class="hbar"><i style="width:${Math.max(1, 100 * r.tokens / max)}%"></i></span><span>${Math.round(r.share * 100)}% · ${fmtM(r.tokens)}</span></span>
+      <span class="what">${esc(ATTRIB_ADVICE[r.kind] || '')}</span></li>`;
+  }).join('');
+  const rest = all.slice(FIX_ROWS).reduce((t, r) => t + r.share, 0);
+  $('#fix-foot').innerHTML = `Share of all context sent over ${d.days} days.${all.length > FIX_ROWS ? ` <a href="#overview" id="fix-all">The other ${all.length - FIX_ROWS} kinds (${Math.round(rest * 100)}%) →</a>` : ''}`;
+  const link = $('#fix-all');
+  if (link) link.addEventListener('click', e => { e.preventDefault(); $('#numbers-fold').open = true; $('#attribution').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+}
+
+function renderCounters(d) {
+  const t = d.totals;
+  const kind = key => (d.by_kind || {})[key] || { count: 0, kept_out: 0 };
+  $('#did-sub').textContent = `${d.days || d.per_day.length} days`;
+  const tiles = [
+    [String(kind('cap').count), 'tool outputs capped', `${fmtM(kind('cap').kept_out)} tokens cut from them`],
+    [`${t.pruned}`, 'compactions pruned', `of ${t.pruned + t.summaries}; ${fmtM(kind('pruned').kept_out)} tokens removed`],
+    [String(t.stops), 'turns paused', t.stops ? `${t.stops_complied} wrapped up within a few steps` : 'none needed'],
+    [fmtM(kind('cap').kept_out + kind('pruned').kept_out), 'tokens kept out', 'cut or pruned this week'],
+  ];
+  $('#counters').innerHTML = tiles.map(([big, label, note]) => `<div class="counter"><b>${big}</b><span>${esc(label)}</span><small>${esc(note)}</small></div>`).join('');
+  const rows = Object.entries(d.outcomes || {}).filter(([, o]) => o && o.fired);
+  const fired = rows.reduce((sum, [, o]) => sum + o.fired, 0);
+  const followed = rows.reduce((sum, [, o]) => sum + (o.followed || 0), 0);
+  $('#followed').innerHTML = fired ? `Claude followed <b>${followed} of ${fired}</b> Kiasi notices (${pct(followed / fired)}). <a href="#rules">Each rule, with its log →</a>` : `<a href="#rules">Each rule, with its log →</a>`;
+}
+
+function renderSpikeNote(d) {
+  const rows = (d.spikes || {}).rows || [];
+  const host = $('#spike-note');
+  host.hidden = !rows.length;
+  if (host.hidden) return;
+  const top = rows[0];
+  const more = rows.length > 1 ? ` and ${rows.length - 1} more` : '';
+  host.innerHTML = `One session on ${esc(String(top.day || '').slice(5, 10))} sent ${fmtM(top.reread)} of context across ${top.prompts} prompt${top.prompts === 1 ? '' : 's'}, ${top.factor}× the usual${more}. <a href="#sessions">See it in Sessions →</a>`;
+}
+
+function heroCard(label, big, tone, sub, note, tip) {
+  return `<div class="hero-card"${tip ? ` title="${esc(tip)}"` : ''}><span class="hero-label">${esc(label)}</span><b class="${tone}">${big}</b><span class="hero-sub">${sub}</span><span class="hero-note">${note}</span></div>`;
+}
+
+function renderHero(d) {
   const s = d.since || {}, b = s.before, a = s.after, t = d.totals, p = d.pace || {};
-  const top = ((d.attribution || {}).kinds || [])[0];
-  const spikes = ((d.spikes || {}).rows || []).length;
-  let head, sub;
-  if (b && a && a.reread_per_turn != null && b.reread_per_turn != null) {
+  const cards = [];
+  if (b && a && a.reread_per_turn != null && b.reread_per_turn != null && s.factor != null) {
     const f = s.factor;
-    head = `<b>${fmtK(a.reread_per_turn)}</b> re-sent per step since Kiasi, ${fmtK(b.reread_per_turn)} before.`;
-    sub = f == null ? `The factor appears once each side has ${(s.factor_min_steps || 0).toLocaleString()} steps.` : f >= 1 ? `<em class="good">${f}× less</em> per step.` : `<em class="bad">${(1 / f).toFixed(1)}× more</em> per step.`;
+    cards.push(heroCard('Since Kiasi', f >= 1 ? `${f}× less` : `${(1 / f).toFixed(1)}× more`, f >= 1 ? 'good' : 'bad', 'context sent per request',
+      `${fmtK(a.reread_per_turn)} now · ${fmtK(b.reread_per_turn)} before`, 'Tokens re-sent per main-session step, the days before the install against since. The work differs between the two periods, so read it as an observation.'));
+  } else if (b && a) {
+    cards.push(heroCard('Since Kiasi', fmtK(a.reread_per_turn), '', 'context sent per request', `${fmtK(b.reread_per_turn)} before · the factor appears once each side has ${(s.factor_min_steps || 0).toLocaleString()} steps`, ''));
   } else {
-    head = `<b>${fmtK(t.reread_per_prompt)}</b> re-sent for each prompt over the last ${d.days} days.`;
-    sub = 'The before-and-after comparison appears after the first full day with Kiasi on.';
+    cards.push(heroCard('Per prompt', fmtK(t.reread_per_prompt), '', 'context sent for each thing you asked', 'the before-and-after comparison appears after the first full day with Kiasi on', ''));
   }
-  const parts = [];
-  if (p.rate != null && p.prior_rate) parts.push(`This week ${fmtM(p.rate)} a day, <em class="${p.rate <= p.prior_rate ? 'good' : 'bad'}">${change(p.prior_rate, p.rate)}</em> against the week before.`);
-  if (top) parts.push(`The biggest cost is <b>${esc(top.kind)}</b> at ${Math.round(top.share * 100)}% of the re-read.`);
-  if (spikes) parts.push(`<a href="#sessions">${spikes} spike session${spikes > 1 ? 's' : ''}</a> ran far above the median.`);
-  $('#verdict').innerHTML = `<h2>${head}</h2><p>${sub} ${parts.join(' ')}</p>`;
+  if (p.rate != null && p.prior_rate) {
+    cards.push(heroCard('This week', change(p.prior_rate, p.rate), p.rate <= p.prior_rate ? 'good' : 'bad', 'against the week before',
+      `${fmtM(p.rate)} a day · ${fmtM(p.prior_rate)} before · today ${fmtM(p.today)} so far`, p.note || ''));
+  } else if (p.rate != null) {
+    cards.push(heroCard('This week', `${fmtM(p.rate)}`, '', 'context sent a day', `today ${fmtM(p.today)} so far · no earlier week to compare`, p.note || ''));
+  }
+  const top = ((d.attribution || {}).kinds || [])[0];
+  if (top) {
+    const [name, what] = plainKind(top.kind);
+    cards.push(heroCard('Biggest cost', esc(name), '', `${Math.round(top.share * 100)}% of all context sent`, what || '', ''));
+  }
+  $('#hero').innerHTML = `<p class="hero-caption">Every request sends the whole conversation back to the model. That is what uses a limit up, and what Kiasi cuts.</p>${cards.join('')}`;
+  $('#chart-sub').textContent = `${d.days || d.per_day.length} days · main sessions and subagents`;
 }
 
-registerView('overview', d => { renderVerdict(d); renderStats(d); renderApiLine(d); renderBill(d); renderStartupHint(d); renderAttribution(d); renderDid(d); renderSince(d); renderFloor(d); renderStorage(d); });
+registerView('overview', d => { renderHero(d); renderSpikeNote(d); renderStartupHint(d); renderBill(d); renderFixes(d); renderCounters(d); renderStats(d); renderApiLine(d); renderDid(d); renderAttribution(d); renderSince(d); renderFloor(d); renderStorage(d); });
 window.renderTuning = d => { renderMisses(d); renderRecall(d); };
 })();

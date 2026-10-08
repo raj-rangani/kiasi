@@ -6,7 +6,7 @@
 <meta name="description" content="What the context kiasi did and how many re-read tokens each action kept off the weekly limit.">
 <title>Kiasi</title>
 <link rel="stylesheet" href="assets/budget.css?v=2026100701">
-<link rel="stylesheet" href="assets/lens.css?v=2026100807">
+<link rel="stylesheet" href="assets/lens.css?v=2026100808">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cstyle%3E.s{fill:none;stroke:%231d1a16}@media (prefers-color-scheme:dark){.s{stroke:%23f6f2ea}}%3C/style%3E%3Cpath class='s' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' d='M8 3H4v18h4M16 3h4v18h-4'/%3E%3Ccircle fill='%23f2b632' cx='12' cy='12' r='3.6'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -29,41 +29,36 @@
 
   <main class="view" data-view="overview" hidden>
   <section class="view-empty" hidden></section>
-  <section class="verdict" id="verdict"></section>
-  <p class="glossary"><b>Step</b> one request to the model. <b>Re-read</b> the whole conversation sent again on each step; that is what uses a limit up. <b>Floor</b> what a session loads before its first reply, paid on every step.</p>
-  <section class="sheet">
-    <div class="sheet-head">
-      <h2><span class="num">01</span>What you paid</h2>
-      <p>Measured from your transcripts, main sessions and subagents together. The Budget tab splits the same bill by subagent and by project.</p>
-    </div>
+  <section class="hero" id="hero"></section>
+  <div class="notices" id="notices"><p class="notice" id="spike-note" hidden></p><p class="notice" id="startup-hint" hidden></p></div>
+  <section class="block">
+    <h2 class="block-title">Context sent per day<small id="chart-sub"></small></h2>
+    <div class="chart" id="bill-chart"></div>
+  </section>
+  <section class="block" id="fix-block" hidden>
+    <h2 class="block-title">What is using it, and what to do</h2>
+    <ol class="fixes-list" id="fixes-list"></ol>
+    <p class="block-foot" id="fix-foot"></p>
+  </section>
+  <section class="block">
+    <h2 class="block-title">What Kiasi did<small id="did-sub"></small></h2>
+    <div class="counters" id="counters"></div>
+    <p class="block-foot" id="followed"></p>
+  </section>
+  <details class="fold" id="numbers-fold">
+    <summary>All the numbers<small>Weekly totals, per prompt, startup, cache, pace, every rule's count, and the full split of what sat in the context.</small></summary>
     <div class="kpis" id="stats"></div>
     <p class="api-line" id="api-line" hidden></p>
-    <h3 class="block-head">Re-read tokens paid per day</h3>
-    <div class="chart" id="bill-chart"></div>
-    <p class="startup-hint" id="startup-hint" hidden></p>
-  </section>
-  <section class="sheet" id="attribution-sheet" hidden>
-    <div class="sheet-head">
-      <h2><span class="num">02</span>Where it went</h2>
-      <p>The re-read split by what sat in the context: the floor first, then everything added since the last compaction, by size. The biggest rows are where to act.</p>
-    </div>
-    <div id="attribution"></div>
-  </section>
-  <section class="sheet">
-    <div class="sheet-head">
-      <h2><span class="num">03</span>What Kiasi did</h2>
-      <p>Counts from Kiasi's own log: how often each rule acted and how many tokens it cut. No token saving is credited to a rule here.</p>
-    </div>
     <div class="measured" id="did"></div>
-    <p class="more-link"><a href="#rules">Each rule day by day, with its log →</a></p>
-  </section>
+    <div id="attribution"></div>
+  </details>
   <details class="fold">
-    <summary><span class="num">04</span>Before and after Kiasi, in detail<small>The days before the install against since. An observation, not a controlled test: the work in the two periods differs.</small></summary>
+    <summary>Before and after Kiasi<small>The days before the install against since. An observation, not a controlled test: the work in the two periods differs.</small></summary>
     <div id="trend" hidden></div>
     <div class="since" id="since"></div>
   </details>
   <details class="fold" id="floor-sheet">
-    <summary><span class="num">05</span>Context window and floor<small>The window in effect, sessions past 200k, and what each project loads before its first reply.</small></summary>
+    <summary>Context window and startup floor<small>The window in effect, sessions past 200k, and what each project loads before its first reply.</small></summary>
     <div id="floor"></div>
   </details>
   <p class="storage-line" id="storage"></p>
@@ -192,9 +187,9 @@
       <div class="panel-content" id="panel-content" tabindex="-1"></div>
     </div>
   </aside>
-  <script src="assets/lens-constants.js?v=2026100701"></script>
+  <script src="assets/lens-constants.js?v=2026100801"></script>
 <script src="assets/lens-common.js?v=2026100801"></script>
-<script src="assets/lens.js?v=2026100806"></script>
+<script src="assets/lens.js?v=2026100807"></script>
 <script src="assets/sessions.js?v=2026100805"></script>
 <script src="assets/rules.js?v=2026100801"></script>
 <script src="assets/budget.js?v=2026100705"></script>
