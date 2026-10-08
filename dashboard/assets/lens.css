@@ -233,7 +233,7 @@ html.panel-open .panel-body, html.panel-open .panel-content { touch-action: auto
 }
 .notices { display: grid; row-gap: 10px; }
 .notices:has(.notice:not([hidden])) { padding: 18px 0 0; }
-.notice { margin: 0; padding: 10px 14px; border-left: 2px solid var(--accent-ink); color: var(--muted); font-size: 14px; line-height: 1.5; }
+.notice { margin: 0; padding: 10px 14px; border-left: 2px solid var(--accent-ink); border-radius: 0 8px 8px 0; background: var(--wash-accent); color: var(--muted); font-size: 14px; line-height: 1.5; }
 .notice a { color: var(--ink); }
 .notice code { font-family: var(--mono); font-size: 12.5px; color: var(--ink, inherit); }
 .store-table td.mono { overflow-wrap: anywhere; white-space: normal; }
@@ -420,13 +420,17 @@ details.fold .block-head:first-of-type { margin-top: 4px; }
 .fixes-list { list-style: none; margin: 0; padding: 0; }
 .fix { display: grid; grid-template-columns: 28px minmax(0, 1fr) 140px; column-gap: 16px; row-gap: 4px; padding: 14px 0; border-top: 1px solid var(--rule); align-items: start; }
 .fix:first-child { border-top: 0; padding-top: 4px; }
-.fix .rank { font-family: var(--mono); font-size: 13px; color: var(--muted); padding-top: 3px; }
+.fix .rank { font-family: var(--mono); font-size: 12px; color: var(--fixc); background: var(--fixw); width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; }
+.fix:nth-child(1) { --fixc: var(--c1); --fixw: var(--wash-sub); }
+.fix:nth-child(2) { --fixc: var(--c2); --fixw: rgba(107, 70, 193, .09); }
+.fix:nth-child(3) { --fixc: var(--c3); --fixw: rgba(11, 127, 134, .09); }
+.fix .share { color: var(--fixc); }
 .fix .name { font-size: 17px; line-height: 1.3; }
 .fix .name small { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
 .fix .what { grid-column: 2; font-size: 14px; line-height: 1.5; color: var(--muted); }
 .fix .share { grid-column: 3; grid-row: 1 / span 2; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; align-items: center; font-family: var(--mono); font-size: 13px; padding-top: 8px; }
 .fix .hbar { width: 100%; height: 8px; background: var(--rule); border-radius: 4px; overflow: hidden; }
-.fix .hbar i { display: block; height: 100%; background: var(--ink); border-radius: 4px; }
+.fix .hbar i { display: block; height: 100%; background: var(--fixc, var(--ink)); border-radius: 4px; }
 .sheet .block-head, #attribution .block-head { margin-top: 26px; }
 @media (max-width: 760px) {
   .fix { grid-template-columns: 24px minmax(0, 1fr); }
@@ -467,6 +471,10 @@ details.fold .block-head:first-of-type { margin-top: 4px; }
 .facts > div { display: contents; }
 .facts > div > * { padding: 9px 18px 9px 0; border-top: 1px solid var(--rule); }
 .facts > div > .hero-label { padding-top: 16px; }
+.facts .hero-label::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 8px; vertical-align: 1px; background: var(--factc); }
+.facts > div:nth-child(1) { --factc: var(--ok); }
+.facts > div:nth-child(2) { --factc: var(--sub); }
+.facts > div:nth-child(3) { --factc: var(--accent); }
 .facts > div > .fact-sub { padding-top: 15px; padding-right: 0; }
 .facts > div:first-child > * { border-top: 0; padding-top: 0; }
 .facts > div:first-child > .hero-label { padding-top: 7px; }
@@ -491,11 +499,15 @@ details.fold .block-head:first-of-type { margin-top: 4px; }
 .week-chart .wk-ceiling { stroke: var(--ink); stroke-width: 1; stroke-dasharray: 2 3; }
 .week-chart .wk-floor { stroke: var(--rule); }
 .week-chart .wk-before { fill: var(--rule); opacity: .35; }
-.week-chart .wk-area { fill: var(--ink); fill-opacity: .07; }
-.week-chart .wk-line { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; }
-.week-chart .wk-proj-line { fill: none; stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 4 4; opacity: .55; }
-.week-chart .wk-now-dot { fill: var(--paper); stroke: var(--ink); stroke-width: 2; }
-.week-chart .wk-now-lbl { font-family: var(--mono); font-size: 11px; fill: var(--ink); }
+.week-chart .wk-area { fill: var(--sub); fill-opacity: .12; }
+.week-chart .wk-line { fill: none; stroke: var(--sub); stroke-width: 2; stroke-linejoin: round; }
+.week-chart .wk-proj-line { fill: none; stroke: var(--sub); stroke-width: 1.5; stroke-dasharray: 4 4; opacity: .7; }
+.week-chart .wk-now-dot { fill: var(--paper); stroke: var(--sub); stroke-width: 2; }
+.week-chart .wk-today { fill: var(--wash-accent); opacity: .7; }
+.week-chart .wk-over { fill: var(--wash-bad); }
+.week-chart .hist { fill: var(--sub); fill-opacity: .8; }
+.week-chart .hist.today { fill: var(--accent); fill-opacity: 1; }
+.week-chart .wk-now-lbl { font-family: var(--mono); font-size: 11px; fill: var(--sub); }
 .week-chart .wk-end-dot { fill: var(--ok); }
 .week-chart .wk-runout-dot { fill: var(--bad); }
 .week-chart .wk-sub { font-family: var(--mono); font-size: 11px; fill: var(--muted); }

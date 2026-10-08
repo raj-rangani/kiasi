@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- Dashboard colour: four low-saturation washes join the palette, with dark-mode values. The burn line and the daily bars take the blue, today's bar and column take the amber, the band past run-out takes a faint red, and the spike notice sits on an amber wash. Each fact in the ledger carries a coloured dot, and the three fixes take blue, violet and teal on their rank, bar and share.
 - Dashboard motion: short ease-out entrances on render. The runway sentence and the facts rise in with a stagger, the bought-back number counts up, the burn line draws, the daily bars grow from the baseline and the fix bars fill. Transform and opacity only, 300 to 700 ms, and every one of them is off under `prefers-reduced-motion`. The trailing rule under the last block of each view is gone.
 - Overview chart: the limit row is a cumulative burn line. The readings of the current window draw solid to today, the forecast continues dashed at the current burn to the run-out or the reset, and the run-out drops a mark through the daily bars. The runway now carries the window's readings as `points` (`RUNWAY_POINTS_MAX` of them at most).
 - Overview: one week on one axis. The runway is a sentence, then the weekly limit track and the context sent per day share one Mon-to-Sun axis, so used, pace, run-out and the days that caused it line up. Three facts under it: bought back, this week against last, and the next fix. The four cards and the separate daily chart are gone.

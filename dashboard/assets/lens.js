@@ -46,6 +46,8 @@ function renderWeek(d, l) {
   const rowLabel = (y, text, cls = 'wk-row') => `<text class="${cls}" x="${pad.left - 12}" y="${y}" text-anchor="end">${text}</text>`;
   let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="The week: limit used and context sent per day">`;
   // day columns and labels
+  const todayStart = midnight(now);
+  if (todayStart >= t0 && todayStart < t1) svg += `<rect class="wk-today" x="${x(Math.max(todayStart, t0))}" y="${r ? bandBottom + 20 : pad.top}" width="${x(Math.min(todayStart + DAY_MS, t1)) - x(Math.max(todayStart, t0))}" height="${barBottom - (r ? bandBottom + 20 : pad.top)}"/>`;
   for (let t = midnight(t0 + DAY_MS); t < t1; t += DAY_MS) svg += `<line class="wk-tick" x1="${x(t)}" x2="${x(t)}" y1="${pad.top}" y2="${barBottom}"/>`;
   for (let t = midnight(t0); t < t1; t += DAY_MS) {
     const a = Math.max(t, t0), b = Math.min(t + DAY_MS, t1);
@@ -77,7 +79,8 @@ function renderWeek(d, l) {
       if (r.state === 'runs_out') {
         const rx = x(end[0]);
         const nearReset = rx > x(t1) - 130, inside = nearReset || W < 640;   // keep clear of the reset label
-        svg += `<line class="wk-runout after" x1="${rx}" x2="${rx}" y1="${bandTop - 6}" y2="${barBottom}"/>`
+        svg += `<rect class="wk-over after" x="${rx}" y="${bandTop}" width="${Math.max(0, x(t1) - rx)}" height="${bandH}"/>`
+          + `<line class="wk-runout after" x1="${rx}" x2="${rx}" y1="${bandTop - 6}" y2="${barBottom}"/>`
           + `<circle class="wk-runout-dot pop" cx="${rx}" cy="${bandTop}" r="4"/>`
           + `<text class="wk-runout-lbl" x="${rx + (nearReset ? -8 : 8)}" y="${inside ? bandTop + 16 : bandTop - 10}" text-anchor="${nearReset ? 'end' : 'start'}">runs out ${esc(whenText(r.run_out_at))}</text>`;
       } else if (r.state === 'clear') {
@@ -99,7 +102,7 @@ function renderWeek(d, l) {
     const bx = x(a) + 6, bw = Math.max(4, x(b) - x(a) - 12), top = yBar(day.paid);
     const delay = `style="animation-delay:${i * 45}ms"`;
     const tip = `${day.day} · ${fmtM(day.paid)} sent · ${day.prompts || 0} prompts · ${fmtK(day.reread_per_prompt || 0)} per prompt · ${day.sessions || 0} sessions`;
-    svg += `<g data-tip="${esc(tip)}"><rect class="hist grow" ${delay} x="${bx}" y="${top}" width="${bw}" height="${Math.max(0, barBottom - top)}" rx="2"/><text class="lbl rise" ${delay} x="${bx + bw / 2}" y="${top - 6}" text-anchor="middle">${fmtM(day.paid)}</text></g>`;
+    svg += `<g data-tip="${esc(tip)}"><rect class="hist grow${dayStart(day.day) === todayStart ? ' today' : ''}" ${delay} x="${bx}" y="${top}" width="${bw}" height="${Math.max(0, barBottom - top)}" rx="2"/><text class="lbl rise" ${delay} x="${bx + bw / 2}" y="${top - 6}" text-anchor="middle">${fmtM(day.paid)}</text></g>`;
   });
   // now
   if (now > t0 && now < t1) svg += `<line class="wk-now" x1="${x(now)}" x2="${x(now)}" y1="${pad.top}" y2="${barBottom}"/>`;
