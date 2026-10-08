@@ -135,3 +135,29 @@ class LimitsLockTest(KiasiTestCase):
             self.assertIsNone(self.statusline.lock_backend())
             with self.statusline.limits_lock(self.tmp):
                 pass
+
+
+class TestClaudeConfigFallback(KiasiTestCase):
+    def setUp(self):
+        super().setUp()
+        import limits_data
+        self.limits_data = limits_data
+
+    def test_claude_code_cached_windows_feed_the_limits_when_no_status_line_wrote(self):
+        constants.CLAUDE_CONFIG_FILE.write_text(json.dumps({"cachedUsageUtilization": {
+            "fetchedAtMs": int(time.time() * 1000) - 60_000,
+            "utilization": {"five_hour": {"utilization": 12, "resets_at": "2026-10-07T09:20:00+00:00"},
+                            "seven_day": {"utilization": 40, "resets_at": "2026-10-12T09:20:00+00:00"},
+                            "seven_day_opus": {"utilization": None}}}}))
+        reading = self.limits_data.get_limits()
+        self.assertEqual((reading["source"], reading["setup"]), ("claude_code", "ready"))
+        self.assertEqual([(item["key"], item["used"]) for item in reading["limits"]], [("five_hour", 12), ("seven_day", 40)])
+
+    def test_a_newer_status_line_reading_wins_over_the_cached_one(self):
+        constants.CLAUDE_CONFIG_FILE.write_text(json.dumps({"cachedUsageUtilization": {
+            "fetchedAtMs": int(time.time() * 1000) - 3_600_000, "utilization": {"seven_day": {"utilization": 40, "resets_at": None}}}}))
+        (constants.DATA_DIR / constants.RATE_LIMITS_NAME).write_text(json.dumps(
+            {"updated": int(time.time()), "rate_limits": {"seven_day": {"used_percentage": 55, "resets_at": None}}}))
+        reading = self.limits_data.get_limits()
+        self.assertEqual(reading["source"], "statusline")
+        self.assertEqual([item["used"] for item in reading["limits"]], [55])

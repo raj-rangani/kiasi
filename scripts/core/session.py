@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shutil
 import sys
 import time
 
@@ -265,10 +266,28 @@ def state_block(payload):
     return "kiasi state after compaction (read from the transcript, not summarised):\n" + "\n".join(f"- {line}" for line in lines)
 
 
+def refresh_statusline(session_id):
+    """After a plugin update, bring the installed status line copy up to date: setup copied it once and nothing else touches it."""
+    installed = constants.HOME_DIR / constants.STATUSLINE_SCRIPT_NAME
+    source = constants.PLUGIN_ROOT / "scripts" / constants.STATUSLINE_SCRIPT_NAME
+    if not (constants.HOME_DIR / constants.STATUSLINE_CHAIN_NAME).is_file() or not installed.is_file():
+        return False
+    try:
+        if installed.read_bytes() == source.read_bytes():
+            return False
+        shutil.copy2(source, installed)
+    except OSError as exc:
+        sys.stderr.write(f"kiasi: status line copy not refreshed: {exc}\n")
+        return False
+    log_event({"event": "statusline_refreshed", "session_id": session_id, "path": str(installed)})
+    return True
+
+
 def handle_session_start(payload):
     migrate_legacy_data()
     record_data_dir()
     record_plugin_root()
+    refresh_statusline(payload.get("session_id", ""))
     launch_cleanup(payload.get("session_id", ""))
     dashboard_line = ensure_dashboard(payload.get("session_id", ""))
     note = last_note(payload.get("cwd") or "")

@@ -337,12 +337,16 @@ const KIND_ADVICE = {
   'agents list': chars => `the agents list is ${Math.round(chars / 4000)} k; remove agents this project does not use`,
 };
 
+const FLOOR_ROWS = 8;
+let allFloor = false;
+
 function renderFloor(d) {
   const t = d.totals, w = d.window || {}, lines = [];
   if (t.context_median != null) lines.push(`<p>Context per main-session step: mean ${fmtK(t.context_mean)} · median ${fmtK(t.context_median)} · p90 ${fmtK(t.context_p90)}.</p>`);
   lines.push(`<p>Auto-compact window in effect: ${w.tokens ? fmtK(w.tokens) : `not set (the model's own window; 200 k assumed)`}.${t.runaway_sessions ? ` <b class="warn">${t.runaway_sessions} session${t.runaway_sessions > 1 ? 's' : ''} past 200 k in the last ${d.days} days.</b>` : ''}</p>`);
   if (w.recommend) lines.push(`<p class="hist-note">Recommended: set <code>${esc(w.env)}=200000</code> under <code>env</code> in team settings to cap runaway contexts.</p>`);
-  const projects = Object.entries(d.prefix || {}).sort((a, b) => b[1].floor_tokens - a[1].floor_tokens);
+  const all = Object.entries(d.prefix || {}).sort((a, b) => b[1].sessions - a[1].sessions || b[1].floor_tokens - a[1].floor_tokens);
+  const projects = allFloor ? all : all.slice(0, FLOOR_ROWS);
   const table = projects.length ? `<table class="since-table"><thead><tr><th>project</th><th class="num">floor</th><th>largest pieces</th><th>suggestion</th></tr></thead><tbody>${projects.map(([name, p]) => {
     const sums = {};
     p.pieces.filter(x => x.kind !== 'other').forEach(x => { sums[x.kind] = (sums[x.kind] || 0) + x.chars; });
@@ -353,10 +357,33 @@ function renderFloor(d) {
     shown.sort((a, b) => b[1] - a[1]);
     const tip = top.filter(([k]) => KIND_ADVICE[k] && sums[k] >= 8000).map(([k, c]) => KIND_ADVICE[k](c))[0] || '';
     return `<tr><td>${esc(name.slice(0, 40))}</td><td class="num">${fmtK(p.floor_tokens)}<br><span class="hist-note">${p.sessions} session${p.sessions > 1 ? 's' : ''}</span></td><td>${shown.slice(0, 4).map(([k, c]) => `${esc(k)} ${Math.round(c / CHARS_PER_TOKEN / 1000 * 10) / 10} k`).join('<br>') || '–'}</td><td>${esc(tip)}</td></tr>`;
-  }).join('')}</tbody></table><p class="hist-note">Piece sizes are the visible attachments of a project's latest session, in tokens at 4 chars per token; other is the floor minus the measured pieces.</p>` : '';
+  }).join('')}</tbody></table><p class="hist-note">Piece sizes are the visible attachments of a project's latest session, in tokens at 4 chars per token; other is the floor minus the measured pieces.${all.length > FLOOR_ROWS ? ` <a href="#overview" id="toggle-floor">${allFloor ? `show the ${FLOOR_ROWS} most used` : `show all ${all.length} projects`}</a>` : ''}</p>` : '';
   $('#floor').innerHTML = lines.join('') + table;
+  const toggle = $('#toggle-floor');
+  if (toggle) toggle.addEventListener('click', e => { e.preventDefault(); allFloor = !allFloor; renderFloor(d); });
 }
 
-registerView('overview', d => { renderStats(d); renderApiLine(d); renderBill(d); renderStartupHint(d); renderSince(d); renderDid(d); renderFloor(d); renderStorage(d); });
+const ATTRIB_ADVICE = {
+  'floor': 'Trim CLAUDE.md, memory and MCP servers you do not use; the floor is paid on every step.',
+  'system reminders': 'Hooks and plugins that attach context on every prompt; each attachment stays for the rest of the session.',
+  'file reads': 'Read files by section, or distill them; a whole file read stays in the context until compaction.',
+  'shell output': 'Route long commands through mcp__kiasi__run so only the useful lines stay.',
+  'web pages': 'Fetch pages through mcp__kiasi__fetch so the page is summarised, not pasted.',
+  'tool calls': 'Large edits and writes carry their whole text; many small ones add up.',
+  'subagent results': 'Subagent replies land in the main context; brief them to return a short answer.',
+};
+
+function renderAttribution(d) {
+  const a = d.attribution || {}, rows = a.kinds || [];
+  const sheet = $('#attribution-sheet');
+  sheet.hidden = !rows.length;
+  if (!rows.length) return;
+  const max = rows[0].tokens;
+  $('#attribution').innerHTML = `<table class="since-table attrib"><thead><tr><th>what sat in the context</th><th class="num">re-read</th><th>share</th><th>what to do</th></tr></thead><tbody>${rows.map(r =>
+    `<tr><td>${esc(r.kind)}</td><td class="num">${fmtM(r.tokens)}</td><td class="share"><div class="hbar"><i style="width:${Math.max(1, 100 * r.tokens / max)}%"></i></div><span class="mono">${Math.round(r.share * 100)}%</span></td><td class="hist-note">${esc(ATTRIB_ADVICE[r.kind] || '')}</td></tr>`).join('')}</tbody></table>
+    <p class="hist-note">${esc(a.note || '')}. Total ${fmtM(a.total)} over ${d.days} days.</p>`;
+}
+
+registerView('overview', d => { renderStats(d); renderApiLine(d); renderBill(d); renderStartupHint(d); renderSince(d); renderDid(d); renderFloor(d); renderAttribution(d); renderStorage(d); });
 window.renderTuning = d => { renderMisses(d); renderRecall(d); };
 })();

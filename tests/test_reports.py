@@ -646,6 +646,22 @@ class TestRuleOutcomes(ReportTestCase):
     def prompts(self, sid, seconds):
         return [(s, {"event": "prompt", "session_id": sid}) for s in seconds]
 
+    def test_reread_is_attributed_to_the_floor_then_to_what_sat_in_the_context(self):
+        path = constants.TRANSCRIPT_ROOT / "-proj" / "attr.jsonl"
+        self.write(path, [self.prompt(0), self.step("attr-1", 1, 0), self.tool_result(2), self.step("attr-2", 3, 300)])
+        kinds = {row["kind"]: row["tokens"] for row in self.lens.build(7)["attribution"]["kinds"]}
+        self.assertEqual(kinds["floor"], 100, "the first request's context is the floor, paid first on every later step")
+        self.assertEqual(sum(kinds.values()), 300, "the whole re-read of the later step is accounted for")
+        self.assertGreater(kinds["other tool results"], kinds["assistant text"], "the rest is split by the size of what each kind left in the context")
+
+    def test_spikes_are_sessions_far_above_the_median_reread_per_prompt(self):
+        self.session("a", [1, 5], [2, 6])
+        self.session("b", [1, 5], [2, 6])
+        self.session("c", [1, 5], [2, 6], read=3_000_000)
+        spikes = self.lens.build(7)["spikes"]
+        self.assertEqual([row["session"] for row in spikes["rows"]], ["c"])
+        self.assertEqual((spikes["rows"][0]["factor"], spikes["median_per_prompt"]), (30.0, 100_000))
+
     def test_delegation_followed_and_paid_against_the_prediction_split_by_brief(self):
         self.session("a", [1], [2, 3], agents=[4])
         self.session("b", [20], [21, 22])
@@ -697,12 +713,12 @@ class TestRuleOutcomes(ReportTestCase):
     def test_skips_nudges_and_routing_report_what_held(self):
         at = lambda second, event, **rest: (second, {"event": event, "session_id": "r", **rest})  # noqa: E731
         events = [at(1, "read_skipped", path="a", chars=8000), at(2, "read_skipped", path="b", chars=8000), at(3, "read_retry", path="a"),
-                  at(1, "read_nudge", path="a"), at(5, "read_nudge", path="b"),
+                  at(1, "read_nudge", path="a"), at(2, "read_nudge_repeat", path="a"), at(5, "read_nudge", path="b"),
                   at(1, "routed", tool_name="Bash"), at(2, "routed", tool_name="Bash"), at(4, "route_retry", tool_name="Bash")]
         out = self.outcomes(events, sessions=False)
         self.assertEqual((out["reads"]["fired"], out["reads"]["followed"]), (2, 1))
         self.assertEqual(out["reads"]["effect"], "2k tokens not re-sent; 1 repeated and let through")
-        self.assertEqual((out["read_nudge"]["fired"], out["read_nudge"]["followed"]), (2, 1))
+        self.assertEqual((out["read_nudge"]["fired"], out["read_nudge"]["followed"], out["read_nudge"]["effect"]), (2, 1, "1 read in full anyway"))
         self.assertEqual((out["route"]["fired"], out["route"]["followed"]), (2, 1))
         self.assertNotIn("reread", out)
 

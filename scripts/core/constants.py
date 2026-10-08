@@ -624,3 +624,5 @@ TASKFILE_START_SOURCES = ("startup", "clear", "resume")
 LENS_HANDOFF_WINDOW_MINUTES = 60  # a handoff notice is followed by a restored session in the project within this
 LENS_NUDGE_PROMPTS = 3  # a compact or clear nudge is followed by a compaction or a new session within this many prompts
 LENS_EXPERIMENT_MIN_SESSIONS = 10  # sessions needed on each side of a holdout before the comparison counts
+LENS_SPIKE_FACTOR = 4  # a session whose re-read per prompt is this many times the window's median is a spike
+LENS_SPIKE_MIN_TOKENS = 5_000_000  # and only when it re-read at least this much in total

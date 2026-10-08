@@ -168,3 +168,20 @@ class TestStateBlock(KiasiTestCase):
         self.assertIn("abcdef12-4.md", text)
         startup = session.handle_session_start({**payload, "source": "startup"})["hookSpecificOutput"]["additionalContext"]
         self.assertNotIn("kiasi state after compaction", startup)
+
+
+class TestStatuslineRefresh(KiasiTestCase):
+    def test_installed_copy_is_refreshed_only_when_set_up_and_stale(self):
+        installed = constants.HOME_DIR / constants.STATUSLINE_SCRIPT_NAME
+        source = constants.PLUGIN_ROOT / "scripts" / constants.STATUSLINE_SCRIPT_NAME
+        constants.HOME_DIR.mkdir(parents=True, exist_ok=True)
+        installed.write_text("old copy")
+        self.assertFalse(session.refresh_statusline("s"), "without the chain file the status line was never set up; nothing is touched")
+        self.assertEqual(installed.read_text(), "old copy")
+        (constants.HOME_DIR / constants.STATUSLINE_CHAIN_NAME).write_text("{}")
+        self.assertTrue(session.refresh_statusline("s"))
+        self.assertEqual(installed.read_bytes(), source.read_bytes())
+        self.assertEqual(json.loads(constants.EVENT_LOG.read_text().splitlines()[-1])["event"], "statusline_refreshed")
+        self.assertFalse(session.refresh_statusline("s"), "an up-to-date copy is left alone")
+        installed.unlink()
+        self.assertFalse(session.refresh_statusline("s"), "a removed copy is not reinstalled behind the user's back")

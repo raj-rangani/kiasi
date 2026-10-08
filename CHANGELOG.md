@@ -2,6 +2,13 @@
 
 ### Unreleased
 
+- "Where the re-read went": an Overview sheet that splits the window's main-session re-read by what sat in the context, the floor first, then everything added since the last compaction by size (file reads, shell output, system reminders, tool calls, subagent results, web pages, pastes, the compaction summary). Each kind carries what to do about it.
+- Spikes: the Sessions tab lists sessions whose re-read per prompt ran at least 4× the range's median and 5 M in total, with the factor and the peak context. The report carries them under `spikes`.
+- The plan limits fall back to Claude Code's own cached reading of the 5-hour and 7-day windows when no status line has written one, so the limit bars show before `/kiasi:limits setup` is run; a status line reading wins when newer.
+- The installed status line copy is refreshed at session start when the plugin's version differs, so updates reach it without rerunning setup; it is never installed or reinstalled on its own.
+- The read-nudge outcome counts a nudge as followed unless the same file was then read whole; the earlier measure looked for a different event and could not count a success. Rule firings before this change show as followed.
+- The handoff outcome says how many of the unfollowed notices were compacted within the hour instead.
+- The floor table shows the 8 most used projects with a toggle for the rest.
 - Accounts billed through the API see a line under the Overview tiles with the window's cost at public API rates per model and what the prompt cache saved, measured: every cache-read token at its model's read rate against the input rate it would have cost fresh. The report carries both per day and per model. Subscription accounts do not see it: the figures are not what they pay. The plan is read from the key variables Claude Code honours and the billing type in its account record; no token is read.
 - A steps-per-prompt tile: main-session requests per prompt over the window, with today against the mean of earlier days. Each day's row in the report carries the steps and the ratio.
 - Overview tiles sit in even rows of three with a rule between rows.

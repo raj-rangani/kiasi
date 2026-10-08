@@ -316,6 +316,86 @@ def add_usage(sessions, day, message, usage):
         counter[key] += usage.get(field, 0) or 0
 
 
+RESULT_KINDS = {"Read": "file reads", "Bash": "shell output", "Grep": "search results", "Glob": "search results", "Agent": "subagent results", "Task": "subagent results",
+                "WebFetch": "web pages", "WebSearch": "web pages", "Edit": "edits", "Write": "edits", "MultiEdit": "edits", "NotebookEdit": "edits"}
+
+
+def result_kind(name):
+    if name.startswith("mcp__kiasi__"):
+        return "kiasi tool results"
+    if name.startswith("mcp__"):
+        return "MCP tool results"
+    return RESULT_KINDS.get(name, "other tool results")
+
+
+def add_live(live, names, entry, message):
+    """Size what this entry leaves in the context for every later step, by kind, in chars."""
+    content = message.get("content")
+    blocks = content if isinstance(content, list) else [{"type": "text", "text": content}] if isinstance(content, str) else []
+    if entry.get("type") == "assistant" and message.get("model") != SYNTHETIC_MODEL:
+        for b in blocks:
+            if not isinstance(b, dict):
+                continue
+            if b.get("type") == "tool_use":
+                names[b.get("id")] = str(b.get("name", ""))
+                live["tool calls"] += text_size(b.get("input"))
+            elif b.get("type") == "text":
+                live["assistant text"] += len(b.get("text") or "")
+    elif entry.get("type") == "user":
+        for b in blocks:
+            if not isinstance(b, dict):
+                continue
+            if b.get("type") == "tool_result":
+                live[result_kind(names.get(b.get("tool_use_id"), ""))] += text_size(b.get("content"))
+            elif b.get("type") == "text":
+                text = b.get("text") or ""
+                live["system reminders" if text.lstrip().startswith("<system-reminder>") else "prompts and pastes"] += len(text)
+    elif entry.get("type") == "attachment":
+        a = entry.get("attachment") or {}
+        live["system reminders"] += text_size(a.get("content") or a.get("context") or {k: v for k, v in a.items() if k != "type"})
+
+
+def attribute(info, live, reread):
+    """Split one step's re-read across what sat in the context: the floor first, then the pieces since the last compaction by size."""
+    if not reread:
+        return
+    floor = min(info["floor"] or 0, reread)
+    info["attrib"]["floor"] += floor
+    rest = reread - floor
+    total = sum(live.values())
+    if rest <= 0:
+        return
+    if not total:
+        info["attrib"]["other"] += rest
+        return
+    for kind, chars in live.items():
+        info["attrib"][kind] += rest * chars / total
+
+
+def attribution_report(sessions):
+    """Where the window's main-session re-read went, by what sat in the context: sized per step, scaled to the measured bill."""
+    total = Counter()
+    for info in sessions.values():
+        total.update(info.get("attrib") or {})
+    whole = sum(total.values())
+    rows = [{"kind": kind, "tokens": round(v), "share": round(v / whole, 4)} for kind, v in total.most_common() if v >= 1]
+    return {"kinds": rows, "total": round(whole),
+            "note": "Each step's re-read split across what sat in the context: the floor (the first request's context) first, then everything added since the last compaction, by size; subagent steps are not included"}
+
+
+def spike_report(sessions):
+    """Sessions whose re-read per prompt ran far above the window's median: the runaway runs that use a limit up."""
+    rated = [(info, info["reread"] / len(info["prompts"])) for info in sessions.values() if len(info["prompts"]) >= 2]
+    median = percentile([rate for _, rate in rated], 0.5) if len(rated) >= 3 else None
+    rows = []
+    for info, rate in rated:
+        if median and rate >= constants.LENS_SPIKE_FACTOR * median and info["reread"] >= constants.LENS_SPIKE_MIN_TOKENS:
+            rows.append({"session": info["session"], "project": info["project"], "day": local_day(info["steps"][0]), "prompts": len(info["prompts"]), "steps": len(info["steps"]),
+                         "reread": info["reread"], "per_prompt": int(rate), "factor": round(rate / median, 1), "peak": max(info["contexts"])})
+    return {"rows": sorted(rows, key=lambda r: -r["reread"]), "median_per_prompt": int(median) if median else None, "factor": constants.LENS_SPIKE_FACTOR,
+            "min_tokens": constants.LENS_SPIKE_MIN_TOKENS, "note": "sessions with two or more prompts whose re-read per prompt is at least the factor times the window's median"}
+
+
 def model_price(model):
     """The price row of a model id, matched by its longest known prefix; None for a model not in the table."""
     best = max((prefix for prefix in constants.MODEL_PRICES if model == prefix or model.startswith(prefix + "-")), key=len, default=None)
@@ -363,11 +443,22 @@ def scan_sessions(days):
     bill = Counter()
     main_bill, prompts = Counter(), Counter()
     for path in main:
-        info = {"session": Path(path).stem, "project": project_of(path), "steps": [], "contexts": [], "prompts": [], "reread": 0, "recalls": [], "new": None, "pieces": [], "partial": False, "first_day": None, "agents": [], "synthetic": 0, "synthetic_kinds": Counter()}
+        info = {"session": Path(path).stem, "project": project_of(path), "steps": [], "contexts": [], "prompts": [], "reread": 0, "recalls": [], "new": None, "pieces": [], "partial": False, "first_day": None, "agents": [], "synthetic": 0, "synthetic_kinds": Counter(),
+                "floor": None, "attrib": Counter()}
         asked, searches = set(), set()
+        names, live = {}, Counter()
         for entry, usage in usage_entries(path):
             t = epoch_iso(entry["timestamp"])
             message = entry.get("message") or {}
+            if entry.get("isCompactSummary"):
+                live = Counter({"compaction summary": text_size(message.get("content"))})
+            elif usage:
+                if info["floor"] is None:
+                    info["floor"] = sum(usage.get(k, 0) for k in CONTEXT_KEYS)
+                elif local_day(t) >= first_day:
+                    attribute(info, live, usage.get("cache_read_input_tokens", 0))
+            if info["floor"] is not None and not entry.get("isCompactSummary"):
+                add_live(live, names, entry, message)
             if entry.get("type") == "assistant":
                 info["recalls"].extend((t, text) for text in recall_texts(message))
                 searches |= search_ids(message)
@@ -1085,17 +1176,23 @@ def rule_outcomes(events, sessions, logged=None):
         out["turn"] = outcome(len(warns), ok, f"mean {mean_of(warns):.1f} steps after the warning", f"the turn ended within {constants.LENS_COMPLY_STEPS} steps after the warning, the rule used for pauses")
     restores = [(t, record.get("session_id", "")) for t, record in events if record.get("event") == "session_start" and record.get("taskfile")]
     if handoffs:
-        done, first, notice = 0, [], []
+        done, instead, first, notice = 0, 0, [], []
         for t, sid, record in handoffs:
             project = (sessions.get(sid) or {}).get("project")
+            hit = False
             for w, other in restores:
                 info = sessions.get(other)
                 if t < w <= t + window and other != sid and info and project and info["project"] == project:
                     done += 1
+                    hit = True
                     first.append(info["contexts"][0])
                     notice.append(record.get("context_tokens", 0))
                     break
+            if not hit and any(t < w <= t + window for w, _ in by[sid]["compact"]):
+                instead += 1
         effect = f"restored sessions started at a median {figure(percentile(first, 0.5))} against {figure(percentile(notice, 0.5))} at the notice" if first else "no restored session yet"
+        if instead:
+            effect += f"; {instead} compacted within the hour instead"
         out["handoff"] = outcome(len(handoffs), done, effect, f"a session_start that restored the task file in the same project within {constants.LENS_HANDOFF_WINDOW_MINUTES} minutes")
 
     def moved_on(t, sid):
@@ -1121,8 +1218,9 @@ def rule_outcomes(events, sessions, logged=None):
         out["reads"] = outcome(len(skips), len(held), f"{figure(cut)} tokens not re-sent; {len(skips) - len(held)} repeated and let through", "a skipped read counts as followed unless the same path was read again")
     nudged = [(t, r) for t, r in events if r.get("event") == "read_nudge"]
     if nudged:
-        yes = sum(1 for t, r in nudged if any(w > t for w, _ in by[r.get("session_id", "")]["read_retry"]))
-        out["read_nudge"] = outcome(len(nudged), yes, f"{yes} followed by a repeated read of a skipped file", "a read_retry later in the same session")
+        repeats = [(t, r) for t, r in events if r.get("event") == "read_nudge_repeat"]
+        ignored = sum(1 for t, r in nudged if any(w > t and rr.get("path") == r.get("path") and rr.get("session_id") == r.get("session_id") for w, rr in repeats))
+        out["read_nudge"] = outcome(len(nudged), len(nudged) - ignored, f"{ignored} read in full anyway", "a nudged read counts as followed unless the same file was then read whole")
     routed = [(t, r) for t, r in events if r.get("event") == "route_retry"]
     sent = [(t, r) for t, r in events if r.get("event") == "routed"]
     if sent:
@@ -1243,6 +1341,8 @@ def build(days):
         "all_time": all_time,
         "cost": cost,
         "pace": pace_report(bill.get(local_day(time.time()), 0)),
+        "attribution": attribution_report(sessions),
+        "spikes": spike_report(sessions),
         "per_day": [{"day": day, "paid": bill.get(day, 0), "prompts": prompts.get(day, 0), "reread_per_prompt": int(main_bill.get(day, 0) / prompts[day]) if prompts.get(day) else None,
                      "steps": sessions.day_steps.get(day, 0), "steps_per_prompt": round(sessions.day_steps.get(day, 0) / prompts[day], 1) if prompts.get(day) else None,
                      "sessions": len(startups.get(day, [])), "startup": int(sum(startups[day]) / len(startups[day])) if startups.get(day) else None,

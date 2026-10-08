@@ -138,12 +138,24 @@ function select(session, keep) {
   renderTable(data);
 }
 
+function renderSpikes(d) {
+  const sp = d.spikes || {}, rows = sp.rows || [];
+  const sheet = $('#spikes-sheet');
+  sheet.hidden = !rows.length;
+  if (!rows.length) return;
+  $('#spikes').innerHTML = `<table class="since-table"><thead><tr><th>session</th><th>project</th><th>day</th><th class="num">prompts</th><th class="num">steps</th><th class="num">re-read</th><th class="num">per prompt</th><th class="num">× median</th><th class="num">peak context</th></tr></thead><tbody>${rows.map(s =>
+    `<tr class="click ${s.session === selected ? 'selected' : ''}" data-session="${esc(s.session)}"><td class="mono">${esc(s.session.slice(0, 8))}</td><td>${esc(s.project.slice(0, 40))}</td><td class="mono">${esc(s.day)}</td><td class="num">${s.prompts}</td><td class="num">${s.steps}</td><td class="num"><b>${fmtM(s.reread)}</b></td><td class="num">${fmtM(s.per_prompt)}</td><td class="num warn">${s.factor}×</td><td class="num">${fmtK(s.peak)}</td></tr>`).join('')}</tbody></table>
+    <p class="hist-note">Median re-read per prompt in this range: ${fmtM(sp.median_per_prompt)}. A spike is at least ${sp.factor}× that and ${fmtM(sp.min_tokens)} in total. Click a row to open the session.</p>`;
+  $('#spikes').querySelectorAll('tr.click').forEach(el => el.addEventListener('click', () => select(el.dataset.session)));
+}
+
 registerView('sessions', d => {
   data = d;
   const wanted = viewParam();
   if (wanted && !(selected || '').startsWith(wanted)) selected = (d.sessions.find(s => s.session.startsWith(wanted)) || {}).session || selected;
   renderMultiples(d);
   renderDetail(d);
+  renderSpikes(d);
   renderTable(d);
 });
 })();

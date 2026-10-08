@@ -481,3 +481,9 @@ abbr.est { margin-left: 5px; font-family: var(--mono); font-size: 10px; letter-s
 }
 
 .badge-runaway { margin-left: 6px; padding: 1px 6px; border-radius: 8px; font-size: 11px; background: color-mix(in srgb, var(--warn, #c4551a) 18%, transparent); color: var(--warn, #c4551a); white-space: nowrap; }
+
+/* attribution bars */
+.attrib td.share { min-width: 160px; }
+.attrib .hbar { display: inline-block; vertical-align: middle; width: 100px; height: 8px; background: var(--rule); border-radius: 4px; overflow: hidden; margin-right: 8px; }
+.attrib .hbar i { display: block; height: 100%; background: var(--ink); border-radius: 4px; }
+.attrib .mono { font-family: var(--mono); font-size: 13px; }
