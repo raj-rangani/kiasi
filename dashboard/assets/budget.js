@@ -129,7 +129,7 @@ function renderNotes(b) {
   const out = rows.length ? table([e.known ? 'effort' : 'model', 'output per prompt', 'output per step', 'steps per prompt', 'prompts'], rows.map(r => [esc(r.name), String(r.per_prompt), String(r.per_step), String(r.steps_per_prompt), String(r.prompts)])) : '';
   const thinking = t.thinking_per_prompt >= THINKING_MIN_CHARS ? `<p>Thinking text: about ${fmtK(t.thinking_per_prompt)} characters per prompt.</p>`
     : '<p>Thinking text is not kept in transcripts (signature only), so it is not measured here.</p>';
-  host.innerHTML = '<div class="sheet-head"><h2>Cache and output</h2>'
+  host.innerHTML = '<div class="sheet-head"><h2><span class="num">03</span>Cache and output</h2>'
     + `<p>Output is ${fmtM(t.output_tokens)} tokens, ${t.output_per_prompt} per prompt.</p></div>` + lines.join('') + renderContext(b) + out + effortLine(e.comparison) + thinking;
   bindTips(host);
 }

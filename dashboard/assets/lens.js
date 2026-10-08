@@ -271,7 +271,7 @@ function renderStartupHint(d) {
   const host = $('#startup-hint');
   host.hidden = !(startup.mean && startup.today > startup.mean * STARTUP_HINT_RATIO);
   if (host.hidden) return;
-  host.innerHTML = `Today's sessions start ${change(startup.mean, startup.today).slice(1)} heavier than usual. Run <code>/skill-doctor</code> in Claude Code and turn off what you do not use. <a href="#overview" id="floor-link">What each project loads</a>`;
+  host.innerHTML = `Today's sessions start ${change(startup.mean, startup.today).slice(1)} heavier than usual. Run <code>/skill-doctor</code> in Claude Code and turn off what you do not use. <a href="#overview" id="floor-link">What each project loads →</a>`;
   $('#floor-link').addEventListener('click', e => { e.preventDefault(); $('#more-fold').open = true; $('#floor').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
 }
 
@@ -386,19 +386,19 @@ function renderFixes(d) {
     return `<li class="fix"><span class="rank">${i + 1}</span><span class="name">${esc(name)}</span>
       <span class="share"><span class="hbar"><i style="width:${Math.max(1, 100 * r.tokens / max)}%"></i></span><span>${Math.round(r.share * 100)}%</span></span>
       <span class="what">${esc(ATTRIB_ADVICE[r.kind] || what)}</span></li>`;
-  }).join('') + `<li class="fix fix-more"><span class="rank"></span><a href="#overview" id="fix-all">All ${all.length} kinds</a></li>`;
+  }).join('') + `<li class="fix fix-more"><span class="rank"></span><a href="#overview" id="fix-all">All ${all.length} kinds →</a></li>`;
   $('#fix-all').addEventListener('click', e => { e.preventDefault(); $('#more-fold').open = true; $('#attribution').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
 }
 
 function renderCounters(d) {
   const t = d.totals;
   const kind = key => (d.by_kind || {})[key] || { count: 0, kept_out: 0 };
-  $('#did-sub').innerHTML = `${d.days || d.per_day.length} days · <a href="#rules">each rule</a>`;
+  $('#did-sub').innerHTML = `${d.days || d.per_day.length} days · <a href="#rules">each rule →</a>`;
   const tiles = [
     [String(kind('cap').count), 'tool outputs capped'],
     [String(t.pruned), 'compactions pruned'],
     [String(t.stops), 'turns paused'],
-    [String(t.reads_skipped || 0), 'unchanged re-reads skipped'],
+    [fmtM(kind('cap').kept_out + kind('pruned').kept_out), 'tokens kept out'],
   ];
   $('#counters').innerHTML = tiles.map(([big, label]) => `<div class="counter"><b>${big}</b><span>${esc(label)}</span></div>`).join('');
 }
@@ -410,38 +410,33 @@ function renderSpikeNote(d) {
   if (host.hidden) return;
   const top = rows[0];
   const more = rows.length > 1 ? ` and ${rows.length - 1} more` : '';
-  host.innerHTML = `One session on ${esc(String(top.day || '').slice(5, 10))} sent ${fmtM(top.reread)} of context across ${top.prompts} prompt${top.prompts === 1 ? '' : 's'}, ${top.factor}× the usual${more}. <a href="#sessions">See it in Sessions</a>`;
+  host.innerHTML = `One session on ${esc(String(top.day || '').slice(5, 10))} sent ${fmtM(top.reread)} of context across ${top.prompts} prompt${top.prompts === 1 ? '' : 's'}, ${top.factor}× the usual${more}. <a href="#sessions">See it in Sessions →</a>`;
 }
 
-function metric(label, big, tone, sub, note, tip) {
-  return `<div class="metric"${tip ? ` title="${esc(tip)}"` : ''}><span class="metric-label">${esc(label)}</span><div class="metric-value ${tone}">${big}</div><span class="metric-sub">${sub}</span><span class="metric-note">${note}</span></div>`;
+function heroCard(label, big, tone, sub, note, tip) {
+  return `<div class="hero-card"${tip ? ` title="${esc(tip)}"` : ''}><span class="hero-label">${esc(label)}</span><b class="${tone}">${big}</b><span class="hero-sub">${sub}</span><span class="hero-note">${note}</span></div>`;
 }
 
 function renderHero(d) {
   const s = d.since || {}, b = s.before, a = s.after, t = d.totals, p = d.pace || {};
-  const span = `${d.days || d.per_day.length} days`;
-  const kind = key => (d.by_kind || {})[key] || { count: 0, kept_out: 0 };
   const cards = [];
   if (b && a && a.reread_per_turn != null && b.reread_per_turn != null && s.factor != null) {
     const f = s.factor;
-    cards.push(metric('Since Kiasi', f >= 1 ? `${f}× less` : `${(1 / f).toFixed(1)}× more`, f >= 1 ? 'good' : 'bad', 'context sent per request',
-      `${fmtK(a.reread_per_turn)} now · ${fmtK(b.reread_per_turn)} before`, 'Tokens re-sent per main-session step, the days before the install against since. The work differs between the two periods, so read it as an observation.'));
+    cards.push(heroCard('Since Kiasi', f >= 1 ? `${f}× less` : `${(1 / f).toFixed(1)}× more`, f >= 1 ? 'good' : 'bad', 'context sent per request',
+      `${fmtK(a.reread_per_turn)} now, ${fmtK(b.reread_per_turn)} before`, 'Tokens re-sent per main-session step, the days before the install against since. The work differs between the two periods, so read it as an observation.'));
   } else if (b && a) {
-    cards.push(metric('Since Kiasi', fmtK(a.reread_per_turn), '', 'context sent per request', `${fmtK(b.reread_per_turn)} before · the factor appears once each side has ${(s.factor_min_steps || 0).toLocaleString()} steps`, ''));
+    cards.push(heroCard('Since Kiasi', fmtK(a.reread_per_turn), '', 'context sent per request', `${fmtK(b.reread_per_turn)} before; the factor appears once each side has ${(s.factor_min_steps || 0).toLocaleString()} steps`, ''));
   } else {
-    cards.push(metric('Per prompt', fmtK(t.reread_per_prompt), '', 'context sent for each thing you asked', 'the comparison with before Kiasi appears after its first full day', ''));
+    cards.push(heroCard('Per prompt', fmtK(t.reread_per_prompt), '', 'context sent for each thing you asked', 'the comparison with before Kiasi appears after its first full day', ''));
   }
   if (p.rate != null && p.prior_rate) {
-    cards.push(metric('This week', change(p.prior_rate, p.rate), p.rate <= p.prior_rate ? 'good' : 'bad', 'against last week',
-      `${fmtM(p.rate)} a day · ${fmtM(p.prior_rate)} last week`, p.note || ''));
+    cards.push(heroCard('This week', change(p.prior_rate, p.rate), p.rate <= p.prior_rate ? 'good' : 'bad', 'against last week',
+      `${fmtM(p.rate)} a day, ${fmtM(p.prior_rate)} last week`, p.note || ''));
   } else if (p.rate != null) {
-    cards.push(metric('This week', fmtM(p.rate), '', 'context sent a day', 'no earlier week to compare', p.note || ''));
+    cards.push(heroCard('This week', `${fmtM(p.rate)}`, '', 'context sent a day', 'no earlier week to compare', p.note || ''));
   }
-  const kept = kind('cap').kept_out + kind('pruned').kept_out;
-  cards.push(metric('Kiasi kept out', `${fmtM(kept)}<small>tokens</small>`, '', `over ${span}`,
-    `${kind('cap').count} outputs capped · ${t.pruned} compactions pruned`, 'Tokens that would have sat in the context on every later request: tool output past the cap, and transcript removed at compaction.'));
-  $('#hero').innerHTML = cards.join('');
-  $('#chart-sub').textContent = span;
+  $('#hero').innerHTML = `${cards.join('')}<p class="hero-caption">Every request re-sends the whole conversation to the model. That is what uses up a limit.</p>`;
+  $('#chart-sub').textContent = `${d.days || d.per_day.length} days`;
 }
 
 registerView('overview', d => { renderHero(d); renderSpikeNote(d); renderStartupHint(d); renderBill(d); renderFixes(d); renderCounters(d); renderStats(d); renderApiLine(d); renderDid(d); renderAttribution(d); renderSince(d); renderFloor(d); });

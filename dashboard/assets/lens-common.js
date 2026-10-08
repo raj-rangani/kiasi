@@ -371,7 +371,6 @@ function renderNav() {
   const here = currentView();
   $('#nav').innerHTML = VIEWS.map(([name, title]) => `<a href="#${name}" class="${name === here ? 'active' : ''}">${title}</a>`).join('');
   $('#tagline').innerHTML = (VIEWS.find(([name]) => name === here) || [])[2] || '';
-  $('#page-title').textContent = (VIEWS.find(([name]) => name === here) || [])[1] || '';
   document.title = `Kiasi · ${(VIEWS.find(([name]) => name === here) || [])[1] || ''}`;
 }
 
