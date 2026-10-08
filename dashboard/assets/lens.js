@@ -96,7 +96,7 @@ function renderFacts(d) {
   const kind = key => (d.by_kind || {})[key] || { count: 0, kept_out: 0 };
   const out = [];
   let since = '';
-  if (b && a && s.factor != null) since = s.factor >= 1 ? `<em class="good">${s.factor}× less</em> context per request since Kiasi` : `<em class="bad">${(1 / s.factor).toFixed(1)}× more</em> context per request since Kiasi`;
+  if (b && a && s.factor != null) since = s.factor >= 1 ? `<em class="good">${s.factor}× less</em> per request since Kiasi` : `<em class="bad">${(1 / s.factor).toFixed(1)}× more</em> per request since Kiasi`;
   else if (b && a) since = `${fmtK(a.reread_per_turn)} per request now, ${fmtK(b.reread_per_turn)} before Kiasi`;
   else since = `${fmtK(t.reread_per_prompt)} of context per prompt`;
   if (bb && bb.days != null) {

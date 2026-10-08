@@ -457,18 +457,24 @@ details.fold .block-head:first-of-type { margin-top: 4px; }
 
 /* Overview: the week on one axis */
 .week { padding: 30px 0 26px; border-bottom: 1px solid var(--rule); }
-.week-head { display: grid; grid-template-columns: minmax(0, 34ch) minmax(0, 1fr); column-gap: 48px; align-items: start; margin-bottom: 26px; }
-.lead { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 30px; line-height: 1.22; letter-spacing: -.01em; color: var(--ink); }
+.week-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 56px; align-items: start; margin-bottom: 28px; }
+.lead { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 28px; line-height: 1.25; letter-spacing: -.01em; color: var(--ink); }
 .lead em { font-style: normal; white-space: nowrap; }
 .lead em.bad { color: var(--bad); }
 .lead em.good { color: var(--ok); }
-.lead-sub { margin: 6px 0 0; font-size: 14px; color: var(--muted); }
-.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 28px; padding-top: 8px; }
-.facts > div { display: grid; row-gap: 4px; align-content: start; position: relative; }
-.facts > div + div::before { content: ""; position: absolute; left: -14px; top: 0; bottom: 0; border-left: 1px solid var(--rule); }
-.facts b { font-family: var(--serif); font-weight: 400; font-size: 30px; line-height: 1.05; color: var(--ink); display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.lead-sub { margin: 8px 0 0; font-size: 14px; color: var(--muted); }
+.facts { display: grid; grid-template-columns: max-content max-content minmax(0, 1fr); align-items: start; padding-top: 4px; }
+.facts > div { display: contents; }
+.facts > div > * { padding: 9px 18px 9px 0; border-top: 1px solid var(--rule); }
+.facts > div > .hero-label { padding-top: 16px; }
+.facts > div > .fact-sub { padding-top: 15px; padding-right: 0; }
+.facts > div:first-child > * { border-top: 0; padding-top: 0; }
+.facts > div:first-child > .hero-label { padding-top: 7px; }
+.facts > div:first-child > .fact-sub { padding-top: 6px; }
+.facts > div:last-child > * { padding-bottom: 0; }
+.facts b { font-family: var(--serif); font-weight: 400; font-size: 24px; line-height: 1.1; color: var(--ink); display: flex; align-items: baseline; gap: 7px; white-space: nowrap; }
 .facts b small { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-.facts b .fact-text { font-size: 22px; line-height: 1.15; }
+.facts b .fact-text { font-size: 20px; }
 .fact-sub { font-size: 13px; line-height: 1.45; color: var(--muted); }
 .fact-sub em { font-style: normal; }
 .fact-sub em.good { color: var(--ok); }
@@ -491,12 +497,14 @@ details.fold .block-head:first-of-type { margin-top: 4px; }
 .week-chart .wk-now { stroke: var(--accent-ink); stroke-width: 1; stroke-dasharray: 3 4; }
 .week-chart .wk-base { stroke: var(--rule); }
 @media (max-width: 1060px) {
-  .week-head { grid-template-columns: 1fr; row-gap: 22px; }
-  .facts { padding-top: 18px; border-top: 1px solid var(--rule); }
+  .week-head { grid-template-columns: 1fr; row-gap: 20px; }
+  .facts { padding-top: 16px; border-top: 1px solid var(--rule); }
 }
 @media (max-width: 760px) {
   .lead { font-size: 24px; }
-  .facts { grid-template-columns: 1fr; row-gap: 16px; }
-  .facts > div + div::before { display: none; }
-  .facts > div + div { border-top: 1px solid var(--rule); padding-top: 14px; }
+  .facts { grid-template-columns: 1fr; row-gap: 0; }
+  .facts > div > * { border-top: 0; padding: 0; }
+  .facts > div > .hero-label { padding-top: 12px; }
+  .facts > div:not(:first-child) > .hero-label { border-top: 1px solid var(--rule); margin-top: 12px; }
+  .facts > div > b { padding: 4px 0 2px; }
 }
