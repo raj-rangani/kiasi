@@ -99,6 +99,20 @@ class TestLimits(KiasiTestCase):
         backup = json.loads((self.tmp / ("settings.json" + constants.SETTINGS_BACKUP_SUFFIX)).read_text())
         self.assertEqual(backup["statusLine"], self.MINE)
 
+    def test_setup_writes_the_two_env_settings_and_keeps_the_rest(self):
+        constants.CLAUDE_SETTINGS_FILE.write_text(json.dumps({"env": {"FOO": "1", "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "200000"}}))
+        message = self.limits.setup()
+        env = self.settings()["env"]
+        self.assertEqual(env, {"FOO": "1", **constants.REQUIRED_ENV}, "the user's own env keys stay")
+        self.assertIn("CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1", message)
+        self.assertNotIn("AUTO_COMPACT_WINDOW=200000", message, "a setting already in place is not announced")
+        self.assertIn("already set", self.limits.setup(), "a second setup finds both in place")
+
+    def test_setup_replaces_a_broken_env_block(self):
+        constants.CLAUDE_SETTINGS_FILE.write_text(json.dumps({"env": "oops"}))
+        self.limits.setup()
+        self.assertEqual(self.settings()["env"], constants.REQUIRED_ENV)
+
     def test_remove_restores_previous_line(self):
         constants.CLAUDE_SETTINGS_FILE.write_text(json.dumps({"statusLine": self.MINE}))
         self.limits.setup()
