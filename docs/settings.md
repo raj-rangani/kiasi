@@ -35,5 +35,7 @@ A `UserPromptSubmit` hook that attaches the same text on every prompt adds a cop
 
 Two Claude Code settings outside Kiasi are worth setting too:
 
+`/kiasi:limits setup` writes both of these to the `env` block of `~/.claude/settings.json`. Teams that manage settings centrally set them there instead:
+
 - `CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000` under `env` in team settings: it caps runaway contexts, and the dashboard flags sessions that went past it.
 - `CLAUDE_CODE_PROMPT_CACHE_TTL=1h` on API keys: the default 5-minute TTL rewrites the whole context after a short break. The status line's `cache warm` countdown follows this value.

@@ -2,6 +2,10 @@
 
 ### Unreleased
 
+- One-step install: `/kiasi:limits setup` writes `CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000` and `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` into the `env` block of `~/.claude/settings.json` along with the status line, keeping the user's other env keys, and says which it added. The session-start reminder for a missing setting now names that command instead of a JSON snippet to paste.
+- Overview: the Bought back line says what the avoided re-reads are worth at API rates, priced at the cache-read rate of the models used in the window weighted by their reads (`bought_back.usd` and `usd_per_m` in the report). It is left out when no model in the window has a known price.
+- `docs/launch.md`: the Show HN title and first comment, the reply for weekly-limit threads, and the awesome-list pull request text.
+
 ## 0.7.0 - 2026-10-09
 
 - What to cut next: the Overview block is a tinted bar of what the context is made of, with the share and name inside each segment and the remainder named, then three rows. Each row says what changed against the seven days before (the report keeps a day-by-day record of the shares in `share-history.json` and reads back the entry one window old), names the biggest single piece behind it (the largest piece of the busiest project's floor, the one file whose read cost most, the hook that attaches most) and links to its panel. The bar's floor and reminders segments open the same panels on click or Enter, hover and focus link a segment to its row, and the tail's tooltip lists the next three kinds. A footnote says what one step fewer per prompt is worth.

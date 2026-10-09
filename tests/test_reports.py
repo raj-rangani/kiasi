@@ -787,5 +787,16 @@ class TestBoughtBackAndMonth(KiasiTestCase):
         self.assertEqual(w["busiest"], {"day": today, "sent": 400})
         self.assertEqual(w["heaviest"]["short"], "abc12345")
         self.assertEqual(w["top_tool"]["tool"], "Bash")
-        self.assertEqual(lens.bought_back_report({"saved": 200, "kept_out": 50}, {"rate": 100}), {"days": 2.0, "saved": 200, "kept_out": 50, "rate": 100})
+        self.assertEqual(lens.bought_back_report({"saved": 200, "kept_out": 50}, {"rate": 100}),
+                         {"days": 2.0, "saved": 200, "kept_out": 50, "rate": 100, "usd": None, "usd_per_m": None})
         self.assertIsNone(lens.bought_back_report({"saved": 200}, {}))
+
+    def test_bought_back_is_priced_at_the_blended_cache_read_rate(self):
+        from reports import lens
+        cost = {"models": [{"model": "claude-fable-5-1", "priced": True, "read": 1_000_000},   # $0.25 per M read
+                           {"model": "claude-sonnet-5-5", "priced": True, "read": 1_000_000},  # $0.20 per M read
+                           {"model": "mystery-model", "priced": False, "read": 9_000_000}]}
+        self.assertEqual(lens.reread_price(cost), 0.225, "weighted by reads, unpriced models left out")
+        bb = lens.bought_back_report({"saved": 10_000_000, "kept_out": 50}, {"rate": 100}, cost)
+        self.assertEqual((bb["usd"], bb["usd_per_m"]), (2.25, 0.225))
+        self.assertIsNone(lens.reread_price({"models": [{"model": "mystery-model", "priced": False, "read": 5}]}))

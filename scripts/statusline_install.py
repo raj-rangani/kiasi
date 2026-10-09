@@ -3,7 +3,8 @@
 
 setup copies statusline.py to ~/.claude/kiasi/, records the status line the
 user had before in statusline-chain.json (it keeps running, with the Kiasi part
-appended), and points statusLine in ~/.claude/settings.json at the copy.
+appended), points statusLine in ~/.claude/settings.json at the copy, and writes the two
+env settings Kiasi needs (constants.REQUIRED_ENV) into the same file, so install is one command.
 remove puts the previous status line back. Run setup again after a plugin
 update to refresh the copy.
 """
@@ -73,9 +74,16 @@ def setup():
     backup = backup_settings(settings_file)
     settings["statusLine"] = {**(current if is_ours(current) else {}), "type": "command",
                               "command": f'"{sys.executable}" "{installed_script()}"'}
+    env = settings.get("env")
+    if not isinstance(env, dict):
+        env = {}
+    added = {k: v for k, v in constants.REQUIRED_ENV.items() if env.get(k) != v}
+    settings["env"] = {**env, **added}
     write_json(settings_file, settings)
     kept = f"; your previous status line still runs first: {previous.get('command')}" if previous else ""
-    return f"Kiasi status line set up in {settings_file} (backup at {backup}){kept}. It shows from the next status line update."
+    env_note = (f" Also set {', '.join(f'{k}={v}' for k, v in added.items())} in its env block; they apply from the next Claude Code start."
+                if added else " The two env settings were already set.")
+    return f"Kiasi status line set up in {settings_file} (backup at {backup}){kept}. It shows from the next status line update.{env_note}"
 
 
 def remove():

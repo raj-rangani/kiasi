@@ -452,14 +452,14 @@ body { overflow-x: clip; }
       </ul>
     </div>
     <div class="rgrid">
-      <div class="rule reveal"><span class="n">01</span><h3>Status line</h3><p>One command adds Kiasi to your status line, after whatever you already had. It is the only place your 5-hour and weekly limits are read from.</p><code>/kiasi:limits setup</code></div>
+      <div class="rule reveal"><span class="n">01</span><h3>Status line</h3><p>One command writes the two settings Kiasi needs and adds Kiasi to your status line, after whatever you already had. The status line is the only place your 5-hour and weekly limits are read from.</p><code>/kiasi:limits setup</code></div>
       <div class="rule reveal" style="--d:1"><span class="n">02</span><h3>Run</h3><p>A build, a test run or a long log goes through a tool that saves the full output and returns a digest. The whole text never enters the conversation.</p><code>mcp__kiasi__run</code></div>
       <div class="rule reveal" style="--d:2"><span class="n">03</span><h3>Distill</h3><p>A short Python or Node script runs over big files on disk. Only what it prints comes back, so counting and parsing cost almost nothing.</p><code>mcp__kiasi__distill</code></div>
       <div class="rule reveal"><span class="n">04</span><h3>Fetch and search</h3><p>A web page is saved and searched; only its head and the matching lines come back. Search finds a line in any saved output, paste or note.</p><code>mcp__kiasi__fetch · mcp__kiasi__search</code></div>
       <div class="rule reveal" style="--d:1"><span class="n">05</span><h3>Dashboard from login</h3><p>One command registers the dashboard with your system's login starter, so it runs with no Claude Code session open. Linux, macOS and Windows.</p><code>/kiasi:dashboard autostart on</code></div>
       <div class="rule reveal" style="--d:2"><span class="n">06</span><h3>Cleanup</h3><p>Saved outputs and pastes older than seven days are compressed, then dropped. The data folder stays small on its own, and a restore command brings a day back.</p><code>daily, at session start</code></div>
     </div>
-    <p class="slnote reveal">The run, distill, fetch and search tools need <code>CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1</code>, the second of the two settings in the install step.</p>
+    <p class="slnote reveal">The run, distill, fetch and search tools need <code>CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1</code>, which <code>/kiasi:limits setup</code> writes for you.</p>
   </section>
 
   <section id="proof">
@@ -489,17 +489,16 @@ body { overflow-x: clip; }
     <div class="inst">
       <ol class="steps reveal" style="--d:1">
         <li><b>Install the plugin</b><p>In a terminal, two lines. In the VS Code extension, one button, or <code>/plugins</code> in the prompt box. Both ways are beside this.</p></li>
-        <li><b>Add two settings</b><p>In the <code>env</code> block of <code>~/.claude/settings.json</code>. The first compacts at 200k instead of the full window. The second turns on the pruner and search.</p></li>
-        <li><b>Restart, then set up limits</b><p>Run <code>/kiasi:limits setup</code> once so the dashboard can show your plan limits. The dashboard starts itself with every session at <code>127.0.0.1:8787</code>.</p></li>
+        <li><b>Restart, then one command</b><p>Run <code>/kiasi:limits setup</code> once. It writes the two settings Kiasi needs to <code>~/.claude/settings.json</code>, the compaction window at 200k and the pruner switch, and adds your plan limits to the status line. The dashboard starts itself with every session at <code>127.0.0.1:8787</code>.</p></li>
       </ol>
       <div class="tty reveal" id="tty" style="--d:2">
         <div class="lbar"><div class="tabs" role="tablist" aria-label="Install method"><button class="tab on" role="tab" aria-selected="true" data-tab="cli">Terminal</button><button class="tab" role="tab" aria-selected="false" data-tab="vsc">VS Code</button></div><button class="copy" id="ttycopy" data-copy="/plugin marketplace add raj-rangani/kiasi&#10;/plugin install kiasi@kiasi" data-cli="/plugin marketplace add raj-rangani/kiasi&#10;/plugin install kiasi@kiasi" data-vsc="vscode://anthropic.claude-code/install-plugin?plugin=kiasi&amp;marketplace=raj-rangani/kiasi">Copy install</button></div>
 <div class="pane on" id="pane-cli">
-<pre id="ttylines"><span class="t"><span class="k"># 1 · in Claude Code</span></span><span class="t">/plugin marketplace add raj-rangani/kiasi</span><span class="t">/plugin install kiasi@kiasi</span><span class="t"><span class="k"># 2 · in ~/.claude/settings.json → "env"</span></span><span class="t">"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "200000",</span><span class="t">"CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"</span><span class="t"><span class="k"># 3 · restart Claude Code, then</span></span><span class="t">/kiasi:limits setup</span><span class="t ok">✓ dashboard at http://127.0.0.1:8787</span></pre>
+<pre id="ttylines"><span class="t"><span class="k"># 1 · in Claude Code</span></span><span class="t">/plugin marketplace add raj-rangani/kiasi</span><span class="t">/plugin install kiasi@kiasi</span><span class="t"><span class="k"># 2 · restart Claude Code, then</span></span><span class="t">/kiasi:limits setup</span><span class="t ok">✓ settings written, status line set up</span><span class="t ok">✓ dashboard at http://127.0.0.1:8787</span></pre>
 </div>
 <div class="pane" id="pane-vsc">
 <a class="vsbtn t" href="vscode://anthropic.claude-code/install-plugin?plugin=kiasi&amp;marketplace=raj-rangani/kiasi"><svg viewBox="0 0 24 24"><path d="M4 7l6 5-6 5M12 17h8"/></svg><span>Install in VS Code<small>opens the Claude Code panel on Kiasi, you pick a scope</small></span></a>
-<pre><span class="t"><span class="k"># 1 · the button above, or in the prompt box</span></span><span class="t">/plugins<span class="k">  → Marketplaces → add raj-rangani/kiasi → Plugins → Install</span></span><span class="t"><span class="k"># 2 · in ~/.claude/settings.json → "env"</span></span><span class="t">"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "200000",</span><span class="t">"CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"</span><span class="t"><span class="k"># 3 · "Restart Claude to apply plugin changes", then</span></span><span class="t">/kiasi:limits setup</span><span class="t ok">✓ dashboard at http://127.0.0.1:8787</span></pre>
+<pre><span class="t"><span class="k"># 1 · the button above, or in the prompt box</span></span><span class="t">/plugins<span class="k">  → Marketplaces → add raj-rangani/kiasi → Plugins → Install</span></span><span class="t"><span class="k"># 2 · "Restart Claude to apply plugin changes", then</span></span><span class="t">/kiasi:limits setup</span><span class="t ok">✓ settings written, status line set up</span><span class="t ok">✓ dashboard at http://127.0.0.1:8787</span></pre>
 </div>
       </div>
     </div>
