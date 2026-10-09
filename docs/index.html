@@ -347,7 +347,9 @@ body { overflow-x: clip; }
     <div class="stage">
       <div class="term" id="demo" aria-label="A recorded Claude Code session: npm ls --all returns 3,009 lines; Claude reports that a few dozen lines reached it and the rest is saved to disk">
         <div class="bar"><i></i><i></i><i></i><em class="lbl">claude · with kiasi</em> <span>recorded, not mocked</span></div>
-        <img class="rec" src="demo.gif" alt="A real Claude Code session with Kiasi: npm ls --all returns 3,009 lines, Claude reports that a few dozen lines reached it and names the file holding the rest; then the dashboard" width="1100" height="620">
+        <video class="rec" src="demo.mp4" poster="demo-poster.jpg" width="1100" height="620" autoplay loop muted playsinline preload="metadata" aria-label="A real Claude Code session with Kiasi: npm ls --all returns 3,009 lines, Claude reports that a few dozen lines reached it and names the file holding the rest; then the dashboard">
+          <img class="rec" src="demo.gif" alt="A real Claude Code session with Kiasi: npm ls --all returns 3,009 lines, Claude reports that a few dozen lines reached it and names the file holding the rest; then the dashboard" width="1100" height="620">
+        </video>
       </div>
     </div>
 
@@ -551,6 +553,8 @@ body { overflow-x: clip; }
 </main>
 
 <script>
+  // Reduced motion: leave the poster up and let the viewer press play.
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { var v = document.querySelector('.term video'); if (v) { v.removeAttribute('autoplay'); v.pause(); v.controls = true; } }
 (function () {
   var root = document.documentElement;
   var still = matchMedia('(prefers-reduced-motion: reduce)').matches;

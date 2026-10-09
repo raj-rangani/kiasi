@@ -9,7 +9,7 @@ Kiasi is a Claude Code plugin that keeps that noise out: fixed rules, on your ma
 
 [**Website**](https://raj-rangani.github.io/kiasi/) · [Results](https://raj-rangani.github.io/kiasi/#results) · [Benchmark](BENCHMARK.md) · [Settings](docs/settings.md) · [Changelog](CHANGELOG.md) · MIT
 
-<img src="docs/demo.gif" alt="A real Claude Code session with Kiasi: npm ls --all returns 3,009 lines, Claude reports that a few dozen lines reached it and names the file holding the rest; then the dashboard" width="720">
+<a href="https://raj-rangani.github.io/kiasi/#demo"><img src="docs/demo.gif" alt="A real Claude Code session with Kiasi: npm ls --all returns 3,009 lines, Claude reports that a few dozen lines reached it and names the file holding the rest; then the dashboard" width="720"></a>
 
 ## Quick start
 
