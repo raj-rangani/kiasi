@@ -1,0 +1,37 @@
+name: Results
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  add-card:
+    if: github.event.label.name == 'approved'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Append the card to docs/results.json
+        env:
+          BODY: ${{ github.event.issue.body }}
+          HANDLE: ${{ github.event.issue.user.login }}
+          NUMBER: ${{ github.event.issue.number }}
+          CREATED: ${{ github.event.issue.created_at }}
+        run: python3 .github/scripts/add_result.py
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/results.json
+          if git diff --cached --quiet; then echo "nothing to commit"; exit 0; fi
+          git commit -m "Results: card from #${{ github.event.issue.number }}"
+          git push
+      - name: Thank and close
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment "${{ github.event.issue.number }}" --repo "${{ github.repository }}" --body "Added to the results page: https://raj-rangani.github.io/kiasi/#results. Thank you."
+          gh issue close "${{ github.event.issue.number }}" --repo "${{ github.repository }}"

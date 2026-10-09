@@ -77,10 +77,13 @@ function flash(msg) {
 function openMonthPanel(d) {
   const w = { ...d.wrapped, last_day: (d.per_day && d.per_day.length ? d.per_day[d.per_day.length - 1].day : undefined) };
   const html = `<div class="panel-month"><div class="wrap-card">${cardHtml(w)}</div>`
-    + `<div class="wrap-actions"><button type="button" id="wrap-copy">Copy as text</button><button type="button" id="wrap-save">Save as image</button><span class="wrap-done" id="wrap-done" hidden>Copied</span></div></div>`;
-  openPanel('Your month', `The last ${w.days} days with Kiasi on one card, to paste or post.`, html);
+    + `<div class="wrap-actions"><button type="button" id="wrap-copy">Copy as text</button><button type="button" id="wrap-save">Save as image</button><button type="button" id="wrap-post">Post on the results page</button><span class="wrap-done" id="wrap-done" hidden>Copied</span></div></div>`;
+  openPanel('Your month', `The last ${w.days} days with Kiasi on one card, to paste, post, or add to the results page on the website. Posting opens a GitHub issue with the card filled in; nothing is sent until you submit it.`, html);
   $('#wrap-copy').onclick = async () => {
     try { await navigator.clipboard.writeText(cardText(w)); flash('Copied'); } catch { download(`kiasi-month-${w.last_day || 'card'}.txt`, cardText(w), 'text/plain'); }
+  };
+  $('#wrap-post').onclick = () => {
+    window.open(`https://github.com/raj-rangani/kiasi/issues/new?template=share-your-month.yml&card=${encodeURIComponent(cardText(w))}`, '_blank', 'noopener');
   };
   $('#wrap-save').onclick = () => { download(`kiasi-month-${w.last_day || 'card'}.svg`, cardSvg(w), 'image/svg+xml'); flash('Saved'); };
   finishPanelContent();

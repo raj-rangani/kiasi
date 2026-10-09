@@ -1,39 +1,26 @@
-# Re-records docs/demo.gif. Needs vhs, ttyd and ffmpeg on PATH, a project with node_modules in $PROJECT,
-# and docs/demo/cut.txt from make-cut.py. Run from the repo root: KIASI=$PWD PROJECT=~/app vhs docs/demo/demo.tape
-# The dashboard frame is appended afterwards; see docs/development.md.
+# Re-records docs/demo.gif: a real Claude Code session with Kiasi installed, in a project that has node_modules.
+# Needs vhs, ttyd and ffmpeg on PATH and the claude CLI logged in. Run from the repo root:
+#   PROJECT=/path/to/a/node/project vhs docs/demo/demo.tape
+# The dashboard frame is appended and the thinking pause is fast-forwarded afterwards; see docs/development.md.
 Output docs/demo/demo.mp4
 Set Shell bash
 Set Width 1100
 Set Height 620
-Set FontSize 15
-Set Padding 18
+Set FontSize 14
+Set Padding 16
+Set Theme "Dracula"
 Set Framerate 30
-Set TypingSpeed 28ms
+Set TypingSpeed 25ms
 Hide
-Type "cd $PROJECT && clear"
+Type "unset CLAUDE_CODE_CHILD_SESSION CLAUDECODE CLAUDE_CODE_ENTRYPOINT CLAUDE_CODE_SESSION_ID; cd $PROJECT && clear"
 Enter
+Type "claude --allowedTools 'Bash(npm ls*)'"
+Enter
+Wait+Screen@60s /Try "/
 Show
-Sleep 500ms
-Type "npm ls --all"
-Sleep 300ms
+Sleep 1500ms
+Type "Run npm ls --all. How much of its output reached you, and where is the rest?"
+Sleep 400ms
 Enter
-Sleep 1800ms
-Type "# 116,179 chars, about 29k tokens. Without Kiasi all of it enters the context"
-Enter
-Type "# and is re-sent on every later step of the session."
-Enter
-Sleep 2400ms
-Hide
-Type "clear"
-Enter
-Show
-Type "# With Kiasi, this is what Claude sees instead:"
-Enter
-Hide
-Type "python3 $KIASI/docs/demo/show-cut.py $KIASI/docs/demo/cut.txt"
-Enter
-Show
-Sleep 3400ms
-Type "# 2,940 chars entered the context. The full output is on disk, searchable."
-Enter
-Sleep 2600ms
+Wait+Screen@300s /· done /
+Sleep 7s

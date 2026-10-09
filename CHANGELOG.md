@@ -2,6 +2,10 @@
 
 ### Unreleased
 
+- Website: a results section with month cards posted by users, the plan and kind of work beside each, plus the star count and how many machines cloned the repository in the last 14 days. Cards come in through the "Share your month" issue form and are added by the Results workflow when the maintainer labels the issue `approved`; the Stats workflow counts daily.
+- Dashboard: the Your month panel has a "Post on the results page" button that opens that issue form with the card filled in.
+- The recording at the top of the README and on the website is now a real Claude Code session: `npm ls --all` returns 3,009 lines, and Claude reports that a 40-line digest reached it and names the file holding the rest.
+
 ## 0.8.0 - 2026-10-09
 
 - One-step install: `/kiasi:limits setup` writes `CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000` and `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` into the `env` block of `~/.claude/settings.json` along with the status line, keeping the user's other env keys, and says which it added. The session-start reminder for a missing setting now names that command instead of a JSON snippet to paste.
