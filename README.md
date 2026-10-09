@@ -3,20 +3,11 @@
   <img src="docs/logo-light.svg" alt="Kiasi" width="150">
 </picture>
 
-Kiasi is a Claude Code plugin that makes your weekly limit last longer. Every step of Claude Code re-sends the whole conversation, so one noisy tool output is paid for again on every step after it. Kiasi keeps that noise out with fixed rules, on your machine, with no model calls and no network.
+Your weekly limit is spent re-reading. Every step of Claude Code re-sends the whole conversation, so one noisy test log is paid for again on every step after it, for the rest of the session. One `npm install` log is 42,800 characters. One Playwright snapshot through MCP is 56,000. Twenty GitHub issues are 105,000. Each one rides along on every step that follows.
 
-On the machine it was built on, context re-sent per step went from 201k to 31k tokens, 6.5× less, and steps over 200k context went from 52% to 0%. Your own before-and-after is on the local dashboard the day after you install.
+Kiasi is a Claude Code plugin that keeps that noise out: fixed rules, on your machine, no model calls, no network. The full text of everything it cuts is saved and searchable, so nothing is lost. Install it and work as usual. The next day a local dashboard shows your own before and after, built from your own transcripts: the context each step re-sends, and the days of weekly limit Kiasi bought back.
 
-[**Website**](https://raj-rangani.github.io/kiasi/) · [Changelog](CHANGELOG.md) · MIT
-
-## Key features
-
-- **Output cap and cleaning**: tool output over 12,000 chars is cut, progress bars and repeated lines are stripped, the full text is saved to disk and named in the cut.
-- **Turn budget and loop check**: warned 10 steps before the pause at 60 (the tool calls of one response are one step, so parallel calls count once; later calls are refused and Claude saves a checklist in the project's `.kiasi/` folder, which git ignores; reply "continue", here or after `/clear`, and Claude resumes from it; `turn_budget_mode` can make the budget only warn, or turn it off); the same call failing 3 times tells Claude to rethink instead of retry.
-- **Re-read skip**: a file already in context and unchanged comes back as a pointer, not the text again.
-- **Paste manager**: a paste over 4,000 chars is saved to disk; over 40,000 it is refused and you resend with the path.
-- **Pruner and state** (experimental): at compaction your prompts and Claude's replies stay word for word while old tool output is pruned; the task, edited files and failing commands are re-injected.
-- **Local dashboard**: every action Kiasi took, the tokens it kept off your limit, your 5-hour and weekly limits, rebuilt every 30 minutes at `http://127.0.0.1:8787/`.
+[**Website**](https://raj-rangani.github.io/kiasi/) · [Benchmark](BENCHMARK.md) · [Settings](docs/settings.md) · [Changelog](CHANGELOG.md) · MIT
 
 ## Quick start
 
@@ -27,6 +18,17 @@ In the Claude Code terminal:
 /plugin install kiasi@kiasi
 ```
 
+Add two settings to the `env` block of `~/.claude/settings.json`. Kiasi reminds you at session start if either is missing.
+
+```json
+"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "200000",
+"CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"
+```
+
+The first compacts at 200k instead of the full window and is the biggest single lever, with or without Kiasi. The second turns on the experimental pruner and search.
+
+Restart Claude Code and run `/kiasi:limits setup` once. It adds your 5-hour and weekly limits and what Kiasi kept off them to the status line, after whatever you already had, and it is the only place the dashboard reads your plan limits from. The dashboard starts itself with every session at `http://127.0.0.1:8787/`.
+
 In the VS Code extension, where `/plugin` does not exist, open this link (GitHub shows it as plain text, so copy it into the browser's address bar). It opens the Claude Code panel on Kiasi, adds the marketplace if needed and asks for a scope:
 
 ```
@@ -35,28 +37,40 @@ vscode://anthropic.claude-code/install-plugin?plugin=kiasi&marketplace=raj-ranga
 
 Or type `/plugins` in the prompt box, add `raj-rangani/kiasi` in the Marketplaces tab, then install Kiasi from the Plugins tab. From any shell, `claude plugin marketplace add raj-rangani/kiasi` and `claude plugin install kiasi@kiasi` do the same without a dialog.
 
-Add two settings to the `env` block of `~/.claude/settings.json`. Kiasi reminds you at session start if either is missing.
+## What it cuts
 
-```json
-"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "200000",
-"CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"
-```
+- **Noisy tool output.** Over 12,000 chars it is cut to head and tail, progress bars and repeated lines are stripped, and the full text is saved to disk and named in the cut. File reads, range commands and diffs are never cut.
+- **Re-reads and huge pastes.** A file already in context and unchanged comes back as a pointer. A paste over 4,000 chars is saved to disk, over 40,000 it is refused and you resend the path.
+- **Runaway turns.** A warning 10 steps before the budget at 60, then a pause with a checklist in the project's `.kiasi/` folder; reply "continue" to resume. The same call failing 3 times tells Claude to rethink instead of retry.
+- **Compaction loss** (experimental). Your prompts and Claude's replies stay word for word while old tool output is pruned; the task, edited files and failing commands are re-injected.
 
-The first compacts at 200k instead of the full window and is the biggest single lever. The second turns on the experimental pruner and search.
+## Measured, not estimated
 
-Restart Claude Code and work as usual. Run `/kiasi:limits setup` once so the dashboard can show your plan limits. The dashboard starts itself with every session.
+Every number Kiasi shows is measured. The benchmark replays shape-realistic tool outputs through the same handlers that run in a session, and the dashboard measures your own sessions the same way, against the days before you installed.
 
-## Updating
+| Scenario | Chars in | Chars entered | Saved over 10 later steps |
+|---|---:|---:|---:|
+| GitHub issue list via MCP | 105,223 | 6,181 | 247,605 tokens |
+| npm install --loglevel=warn --no-fund --no-audit log | 42,800 | 3,569 | 98,077 tokens |
+| Test run through `mcp__kiasi__run` | 64,578 | 2,082 | 156,240 tokens |
 
-Claude Code does not update plugins on its own. A new Kiasi version becomes visible when the version in the repo changes, and you pick it up with:
+The full table and how to rerun it are in [BENCHMARK.md](BENCHMARK.md). On the machine Kiasi was built on, 16 days before against 7 days after: context re-sent per step 201k → 31k tokens, 6.5× less; steps over 200k context 52% → 0%. That is one machine. Yours is the number that matters, and it is on your dashboard the day after you install.
 
-```
-/plugin marketplace update kiasi
-```
+<img src="docs/overview.webp" alt="Kiasi dashboard overview" width="720">
 
-or `claude plugin update kiasi@kiasi` from a shell, then restart Claude Code. To update automatically at session start, open `/plugin`, pick the Kiasi marketplace under Marketplaces and choose Enable auto-update. If you use the status line, run `/kiasi:limits setup` again after an update that changed it; the release notes say when. Releases and their notes are at https://github.com/raj-rangani/kiasi/releases.
+## Compared with the alternatives
 
-## How it works
+| | Kiasi | [RTK](https://github.com/rtk-ai/rtk) | [Context Mode](https://github.com/mksglu/claude-context-mode) | `CLAUDE_CODE_AUTO_COMPACT_WINDOW` alone |
+|---|---|---|---|---|
+| What it covers | Bash, MCP and outside-file output, re-reads, pastes, turns, compaction | Bash commands it rewrites | MCP, Bash, Read and WebFetch routed through its server | Compaction point only |
+| Where the cut text goes | Saved in full, searchable | Filtered, not kept | Stored in a local database | n/a |
+| Before and after from your own transcripts | Yes, baseline from the days before install | No, estimates in the README | No, per-tool stats from install | No |
+| Model calls, network | None | None | None | None |
+| License | MIT | MIT | Elastic-2.0 | n/a |
+
+Kiasi tells you to set the compaction window too, because it is the biggest single lever. The comparison is what Kiasi adds on top of it, and the `holdout` setting lets you measure that on your own sessions.
+
+## The rules
 
 Each rule is a Claude Code hook with a fixed threshold you can change. Nothing is decided by a model.
 
@@ -70,11 +84,9 @@ Each rule is a Claude Code hook with a fixed threshold you can change. Nothing i
 | No idea where the week went | Local dashboard | `SessionStart` |
 | The week runs out before the reset | Runway, session receipt, weekly digest | `SessionEnd`, `SessionStart` |
 
-Cuts keep the head and tail and leave a `[kiasi kept …]` or `[kiasi trimmed …]` marker naming the saved file. File reads, range commands and diffs are never cut, so code quality does not depend on the cap.
+Cuts leave a `[kiasi kept …]` or `[kiasi trimmed …]` marker naming the saved file. The trade-off is the turn budget: a long autonomous turn is paused at 60 steps and asks how to go on. `turn_budget_mode` can make it only warn, or turn it off. Every threshold is in [docs/settings.md](docs/settings.md).
 
 ## Dashboard
-
-<img src="docs/overview.webp" alt="Kiasi dashboard overview" width="720">
 
 The days before you installed Kiasi are the baseline, built from your own transcripts. Every cut, skip and stop is a row with the file it saved and what it kept out. A per-day history outlives Claude Code's transcript retention, so the comparison does not expire.
 
@@ -99,49 +111,21 @@ Both come from the same event log and report the dashboard reads; nothing is sen
 
 ## Privacy
 
+- Nothing is lost. Every cut output and refused paste is saved in full and found again with `mcp__kiasi__search` or `scripts/search.py`.
 - No network calls. Kiasi reads your local transcripts and writes to its own folder under `~/.claude/plugins/data/`.
 - No prompt text is logged. Reports hold counts and sizes, never what you typed.
 - The dashboard listens on `127.0.0.1` only and refuses other host names.
-- Nothing is lost. Every cut output and refused paste is saved in full and found again with `mcp__kiasi__search` or `scripts/search.py`.
 - Saved files are moved to `trash/` after 7 unused days (pastes 14) and deleted 7 days later. The first week is report-only, `cleanup.py --restore` undoes a move, and `KIASI_CLEANUP=off` disables it. Turn checklists in a project's `.kiasi/` folder are cleaned the same way, and a restore puts them back there.
 
-## Settings
+## Updating
 
-Set these with `/config` or as env vars. Every other threshold is a named constant in `scripts/core/constants.py` or `hooks/constants.js`.
+Claude Code does not update plugins on its own. A new Kiasi version becomes visible when the version in the repo changes, and you pick it up with:
 
-| Setting | Env var | Default |
-|---|---|---|
-| `output_cap_chars` | `CLAUDE_PLUGIN_OPTION_OUTPUT_CAP_CHARS` | 12000 |
-| `turn_budget_mode` | `CLAUDE_PLUGIN_OPTION_TURN_BUDGET_MODE` | pause (or warn, off) |
-| `pause_notification` | `CLAUDE_PLUGIN_OPTION_PAUSE_NOTIFICATION` | auto (or always, off) |
-| `pause_question` | `CLAUDE_PLUGIN_OPTION_PAUSE_QUESTION` | auto (or always, off) |
-| `turn_call_budget` | `CLAUDE_PLUGIN_OPTION_TURN_CALL_BUDGET` | 60 |
-| `turn_token_budget` | `CLAUDE_PLUGIN_OPTION_TURN_TOKEN_BUDGET` | 8000000 |
-| `subagent_call_budget` | `CLAUDE_PLUGIN_OPTION_SUBAGENT_CALL_BUDGET` | 40 |
-| `holdout` | `CLAUDE_PLUGIN_OPTION_HOLDOUT` | empty (or reread_check, turn_budget, context_notices, output_cap, sandbox) |
-| `paste_refusal_chars` | `CLAUDE_PLUGIN_OPTION_PASTE_REFUSAL_CHARS` | 40000 |
-| `compaction_window_text` | `CLAUDE_PLUGIN_OPTION_COMPACTION_WINDOW_TEXT` | "200000" |
+```
+/plugin marketplace update kiasi
+```
 
-Set `holdout` to a rule name to switch it off in half of your sessions; the Rules tab then compares the two halves.
-
-A `.kiasi.json` in the project root can set any of these except `compaction_window_text` for that project, plus `turn_warn_steps` and `turn_warn_tokens` (by default the warning comes 10 calls, or a fifth of the tokens, before the budget).
-
-`pause_question` is what your own turn does when its budget runs low. At the warning, and again at the pause if the turn gets that far, Claude writes the checklist and asks how to go on, with three options: continue here with a fresh budget, hand the rest to a subagent, or stop. Continue renews the budget in place; the other two leave the turn paused, so replying continue later still resumes it. With `auto` the question is asked in the terminal, the VS Code extension and the desktop app; a headless run (`claude -p`) and a subagent are paused without it. With `off` the turn ends with the pause notice.
-
-`pause_notification` is a desktop notification when a turn is paused, through `notify-send` on Linux, `osascript` on macOS and a PowerShell toast on Windows. With `auto` it shows only in the VS Code extension and the desktop app, where the pause is otherwise one grey line in the chat; the terminal already raises its own notification and bell.
-
-`KIASI_DASHBOARD=off` stops the session-start autostart of the dashboard.
-
-### Trimming the startup floor
-
-The floor is what a session holds before its first reply (CLAUDE.md files, the skill, tool and agent listings, hook output, memory) and every request re-sends it. The Overview's "Startup floor" fix opens a panel with the pieces of each project's latest session, biggest first, and the floor per day, so a settings change shows as a step. `/kiasi:floor` audits the last 30 days of sessions and writes a fix script (never run by Kiasi) that moves what only some projects use out of the global scope: unused skills to `name-only`, single-project skills and agents into that project, user-scope MCP servers to project scope.
-
-A `UserPromptSubmit` hook that attaches the same text on every prompt adds a copy per prompt for the rest of the session. `scripts/once.py` runs any such hook once a session: in `settings.json` replace its command with `sh <kiasi>/scripts/run.sh once.py -- <the command>`. The audit writes that line for every hook it saw repeating.
-
-Two Claude Code settings outside Kiasi are worth setting too:
-
-- `CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000` under `env` in team settings: it caps runaway contexts, and the dashboard flags sessions that went past it.
-- `CLAUDE_CODE_PROMPT_CACHE_TTL=1h` on API keys: the default 5-minute TTL rewrites the whole context after a short break. The status line's `cache warm` countdown follows this value.
+or `claude plugin update kiasi@kiasi` from a shell, then restart Claude Code. To update automatically at session start, open `/plugin`, pick the Kiasi marketplace under Marketplaces and choose Enable auto-update. If you use the status line, run `/kiasi:limits setup` again after an update that changed it; the release notes say when. Releases and their notes are at https://github.com/raj-rangani/kiasi/releases.
 
 ## Requirements
 
@@ -150,15 +134,7 @@ Two Claude Code settings outside Kiasi are worth setting too:
 - Linux (tested), macOS (expected to work) or Windows with Git Bash, which Claude Code needs anyway (hooks run through `scripts/run.sh`, which picks `py -3`, `python` or `python3`; the dashboard and cleanup detach without POSIX calls; not yet tested on a Windows machine, reports welcome)
 - Node 18+ only for the experimental function hooks
 
-## Development
-
-```
-python3 -m unittest discover -s tests   # hook handlers, reports, dashboard
-claude plugin test .                     # hooks/*.test.ts on the real engine
-claude plugin validate .                 # manifest, marketplace and hooks.json
-```
-
-`scripts/kiasi.py` is the hook entry point and dispatches to `scripts/core/`. Reports live in `scripts/reports/`, the dashboard in `dashboard/`, and `scripts/README.md` says which hook calls what.
+Settings and thresholds: [docs/settings.md](docs/settings.md). Tests and layout: [docs/development.md](docs/development.md).
 
 ## Uninstall
 

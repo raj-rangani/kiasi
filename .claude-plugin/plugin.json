@@ -3,7 +3,7 @@
   "name": "kiasi",
   "displayName": "Kiasi",
   "version": "0.7.0",
-  "description": "Kiasi keeps Claude Code's context small and its weekly limit long: output caps, turn budgets, refused mega-pastes, deterministic pruning at compaction, sandbox tools that run commands and file analyses out of context, a searchable store of everything it cut, and a local dashboard of what it saved.",
+  "description": "Makes your Claude Code weekly limit last longer. Every step re-sends the whole conversation, so Kiasi keeps noisy tool output, re-reads and huge pastes out of it with fixed local rules: no model calls, no network. A local dashboard shows your own before and after the day after you install.",
   "author": { "name": "Raj Rangani", "email": "iamrajrangani@gmail.com" },
   "homepage": "https://github.com/raj-rangani/kiasi",
   "repository": "https://github.com/raj-rangani/kiasi",
