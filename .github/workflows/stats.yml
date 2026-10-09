@@ -16,16 +16,39 @@ jobs:
       - name: Write docs/stats.json
         env:
           # Traffic (clones, views) needs a token with push access. A fine-grained PAT with
-          # "Administration: read" as the TRAFFIC_TOKEN secret works; without it only stars are counted.
+          # "Administration: read" as the TRAFFIC_TOKEN secret works; without it the last readable
+          # count is kept and dated, and only the star count moves.
           GH_TOKEN: ${{ secrets.TRAFFIC_TOKEN || github.token }}
           REPO: ${{ github.repository }}
         run: |
-          stars=$(gh api "repos/$REPO" --jq .stargazers_count)
-          clones=$(gh api "repos/$REPO/traffic/clones" --jq .uniques 2>/dev/null || echo null)
-          views=$(gh api "repos/$REPO/traffic/views" --jq .uniques 2>/dev/null || echo null)
-          printf '{"updated": "%s", "stars": %s, "unique_clones_14d": %s, "unique_views_14d": %s}\n' \
-            "$(date -u +%Y-%m-%d)" "$stars" "$clones" "$views" > docs/stats.json
-          cat docs/stats.json
+          python3 - <<'EOF'
+          import datetime, json, os, pathlib, re, subprocess
+
+          def api(path, jq):
+              r = subprocess.run(["gh", "api", path, "--jq", jq], capture_output=True, text=True)
+              v = r.stdout.strip()
+              return int(v) if r.returncode == 0 and re.fullmatch(r"\d+", v) else None
+
+          p = pathlib.Path("docs/stats.json")
+          try:
+              old = json.loads(p.read_text())
+          except Exception:
+              old = {}
+          repo, today = os.environ["REPO"], datetime.date.today().isoformat()
+          out = {"updated": today, "stars": api(f"repos/{repo}", ".stargazers_count")}
+          clones = api(f"repos/{repo}/traffic/clones", ".uniques")
+          if clones is None:
+              out["unique_clones_14d"] = old.get("unique_clones_14d")
+              out["unique_views_14d"] = old.get("unique_views_14d")
+              out["traffic_as_of"] = old.get("traffic_as_of")
+              print("traffic is not readable with this token; kept the last count")
+          else:
+              out["unique_clones_14d"] = clones
+              out["unique_views_14d"] = api(f"repos/{repo}/traffic/views", ".uniques")
+              out["traffic_as_of"] = today
+          p.write_text(json.dumps(out) + "\n")
+          print(out)
+          EOF
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"

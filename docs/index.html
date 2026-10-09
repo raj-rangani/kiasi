@@ -758,7 +758,7 @@ body { overflow-x: clip; }
     var parts = [];
     if (st.stars != null) parts.push('<span><b>' + esc(st.stars) + '</b> star' + (st.stars === 1 ? '' : 's') + ' on GitHub</span>');
     if (st.unique_clones_14d != null) parts.push('<span><b>' + esc(st.unique_clones_14d) + '</b> machines cloned it in 14 days <span title="Installing the plugin clones the repository, so unique clones are the closest public count of installs.">(unique clones, how the plugin installs)</span></span>');
-    if (st.updated) parts.push('<span>counted ' + esc(st.updated) + '</span>');
+    if (st.traffic_as_of || st.updated) parts.push('<span>counted ' + esc(st.traffic_as_of || st.updated) + '</span>');
     if (!parts.length) return;
     counts.innerHTML = parts.join(' · ');
     counts.hidden = false;
