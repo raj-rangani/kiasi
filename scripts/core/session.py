@@ -102,8 +102,9 @@ def env_warning():
     if not missing:
         return ""
     snippet = ", ".join(f'"{k}": "{v}"' for k, v in missing.items())
-    return (f"kiasi: {', '.join(missing)} not set. Add to the env block of ~/.claude/settings.json for the full effect: "
-            f'{{ "env": {{ {snippet} }} }}')
+    return (f"kiasi: {', '.join(missing)} not set. Run /kiasi:limits setup once: it writes them to the env block of "
+            f"~/.claude/settings.json and sets up the status line, and they apply from the next Claude Code start. "
+            f'To set them by hand or in team settings: {{ "env": {{ {snippet} }} }}')
 
 
 def rules_text():

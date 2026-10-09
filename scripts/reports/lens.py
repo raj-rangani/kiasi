@@ -1095,11 +1095,25 @@ def pace_report(today_tokens):
             "note": "the 7 full days before today against the 7 before those; days without work count as zero"}
 
 
-def bought_back_report(totals, pace):
-    """Days of the weekly limit the avoided re-reads amount to at this week's daily rate, from core.digest."""
+def reread_price(cost):
+    """Dollars per million re-sent tokens: the cache-read rate of the window's priced models, weighted by their cache reads.
+
+    Re-sent context is almost all cache reads, so the read rate is the honest one; the input rate would overstate it 10 to 40 times."""
+    rows = [(r["read"], model_price(r["model"])[3]) for r in (cost or {}).get("models", []) if r.get("priced") and r.get("read")]
+    total = sum(read for read, _ in rows)
+    return round(sum(read * rate for read, rate in rows) / total, 3) if total else None
+
+
+def bought_back_report(totals, pace, cost=None):
+    """Days of the weekly limit the avoided re-reads amount to at this week's daily rate, from core.digest, and what they
+    would have cost at public API rates: saved tokens at the window's cache-read price (reread_price), None when no model is priced."""
     from core import digest
     days = digest.bought_back(totals.get("saved"), (pace or {}).get("rate"))
-    return {"days": days, "saved": totals.get("saved", 0), "kept_out": totals.get("kept_out", 0), "rate": (pace or {}).get("rate")} if days is not None else None
+    if days is None:
+        return None
+    price = reread_price(cost)
+    usd = round(totals.get("saved", 0) * price / 1e6, 2) if price is not None else None
+    return {"days": days, "saved": totals.get("saved", 0), "kept_out": totals.get("kept_out", 0), "rate": (pace or {}).get("rate"), "usd": usd, "usd_per_m": price}
 
 
 def savings_rows():
@@ -1566,7 +1580,7 @@ def build(days):
                      "holdout": constants.HOLDOUT, "holdout_rules": list(constants.HOLDOUT_RULES), "experiment_min_sessions": constants.LENS_EXPERIMENT_MIN_SESSIONS,
                      "delegation_credit": "only when an Agent call is logged as allowed or a subagent transcript starts after it: the log records no outcome"},
     }
-    report["bought_back"] = bought_back_report(report["totals"], report["pace"])
+    report["bought_back"] = bought_back_report(report["totals"], report["pace"], cost)
     report["wrapped"] = wrapped_report(session_rows, report["caps"], report["since"], report["pace"])
     report["skipped"] = dict(SKIPPED)
     constants.LOG_DIR.mkdir(parents=True, exist_ok=True)

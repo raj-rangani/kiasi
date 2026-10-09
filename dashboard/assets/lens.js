@@ -131,8 +131,9 @@ function renderFacts(d) {
   else if (b && a) since = `${fmtK(a.reread_per_turn)} per request now, ${fmtK(b.reread_per_turn)} before Kiasi`;
   else since = `${fmtK(t.reread_per_prompt)} of context per prompt`;
   if (bb && bb.days != null) {
-    out.push(fact('Bought back', bb.days < 0.1 ? `<span data-count="${Math.round(bb.days * 240) / 10}">${Math.round(bb.days * 240) / 10}</span><small>hours</small>` : `<span data-count="${bb.days}">${bb.days}</span><small>days</small>`, `of the weekly limit · ${since}`,
-      `Context per request compared with before Kiasi. ${fmtM(bb.kept_out)} tokens kept out, ${fmtM(bb.saved)} of re-reads avoided, at ${fmtM(bb.rate)} a day. Every token kept out would have been re-sent on every later request of its session.`));
+    const worth = bb.usd != null ? ` · worth ${fmtUsd(bb.usd)} at API rates` : '';
+    out.push(fact('Bought back', bb.days < 0.1 ? `<span data-count="${Math.round(bb.days * 240) / 10}">${Math.round(bb.days * 240) / 10}</span><small>hours</small>` : `<span data-count="${bb.days}">${bb.days}</span><small>days</small>`, `of the weekly limit${worth} · ${since}`,
+      `Context per request compared with before Kiasi. ${fmtM(bb.kept_out)} tokens kept out, ${fmtM(bb.saved)} of re-reads avoided, at ${fmtM(bb.rate)} a day. Every token kept out would have been re-sent on every later request of its session.${bb.usd != null ? ` The dollar figure prices those re-reads at the cache-read rate of the models you used, $${bb.usd_per_m} per million: what they would have cost on an API key, or what a flat plan would have spent of its limit.` : ''}`));
   } else {
     out.push(fact('Kept out', `${fmtM(kind('cap').kept_out + kind('pruned').kept_out)}<small>tokens</small>`, since, `${kind('cap').count} outputs capped, ${t.pruned} compactions pruned`));
   }

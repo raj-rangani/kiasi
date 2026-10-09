@@ -77,6 +77,19 @@ class TestChecklistFolder(KiasiTestCase):
 
 
 class TestSessionStart(KiasiTestCase):
+    def test_env_reminder_names_the_one_command_that_fixes_it(self):
+        import os
+        from unittest import mock
+        from core import session
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "200000"}, clear=False):
+            os.environ.pop("CLAUDE_CODE_ENABLE_FUNCTION_HOOKS", None)
+            text = session.env_warning()
+        self.assertIn("/kiasi:limits setup", text)
+        self.assertIn("CLAUDE_CODE_ENABLE_FUNCTION_HOOKS", text)
+        self.assertNotIn("CLAUDE_CODE_AUTO_COMPACT_WINDOW not", text, "only the missing setting is named")
+        with mock.patch.dict(os.environ, constants.REQUIRED_ENV):
+            self.assertEqual(session.env_warning(), "")
+
     def test_injects_rules(self):
         payload = {"session_id": "sess-start", "cwd": str(self.tmp), "source": "startup"}
         result = session.handle_session_start(payload)

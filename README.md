@@ -18,16 +18,12 @@ In the Claude Code terminal:
 /plugin install kiasi@kiasi
 ```
 
-Add two settings to the `env` block of `~/.claude/settings.json`. Kiasi reminds you at session start if either is missing.
+Restart Claude Code and run `/kiasi:limits setup` once. It does two things:
 
-```json
-"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "200000",
-"CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"
-```
+- Writes two settings to the `env` block of `~/.claude/settings.json`: `CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000`, which compacts at 200k instead of the full window and is the biggest single lever with or without Kiasi, and `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1`, which turns on the experimental pruner and search. They apply from the next start, and Kiasi reminds you at session start if either is missing.
+- Adds your 5-hour and weekly limits, and what Kiasi kept off them, to the status line after whatever you already had. It is the only place the dashboard reads your plan limits from.
 
-The first compacts at 200k instead of the full window and is the biggest single lever, with or without Kiasi. The second turns on the experimental pruner and search.
-
-Restart Claude Code and run `/kiasi:limits setup` once. It adds your 5-hour and weekly limits and what Kiasi kept off them to the status line, after whatever you already had, and it is the only place the dashboard reads your plan limits from. The dashboard starts itself with every session at `http://127.0.0.1:8787/`.
+The dashboard starts itself with every session at `http://127.0.0.1:8787/`. Teams that manage `settings.json` centrally can set the two values there instead; see [docs/settings.md](docs/settings.md).
 
 In the VS Code extension, where `/plugin` does not exist, open this link (GitHub shows it as plain text, so copy it into the browser's address bar). It opens the Claude Code panel on Kiasi, adds the marketplace if needed and asks for a scope:
 
