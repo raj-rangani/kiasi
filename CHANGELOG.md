@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+## 0.8.0 - 2026-10-09
+
 - One-step install: `/kiasi:limits setup` writes `CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000` and `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` into the `env` block of `~/.claude/settings.json` along with the status line, keeping the user's other env keys, and says which it added. The session-start reminder for a missing setting now names that command instead of a JSON snippet to paste.
 - Overview: the Bought back line says what the avoided re-reads are worth at API rates, priced at the cache-read rate of the models used in the window weighted by their reads (`bought_back.usd` and `usd_per_m` in the report). It is left out when no model in the window has a known price.
 - `docs/launch.md`: the Show HN title and first comment, the reply for weekly-limit threads, and the awesome-list pull request text.

@@ -2,7 +2,7 @@
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "kiasi",
   "displayName": "Kiasi",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Makes your Claude Code weekly limit last longer. Every step re-sends the whole conversation, so Kiasi keeps noisy tool output, re-reads and huge pastes out of it with fixed local rules: no model calls, no network. A local dashboard shows your own before and after the day after you install.",
   "author": { "name": "Raj Rangani", "email": "iamrajrangani@gmail.com" },
   "homepage": "https://github.com/raj-rangani/kiasi",
