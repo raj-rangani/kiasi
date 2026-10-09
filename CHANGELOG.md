@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+## 0.7.0 - 2026-10-09
+
 - What to cut next: the Overview block is a tinted bar of what the context is made of, with the share and name inside each segment and the remainder named, then three rows. Each row says what changed against the seven days before (the report keeps a day-by-day record of the shares in `share-history.json` and reads back the entry one window old), names the biggest single piece behind it (the largest piece of the busiest project's floor, the one file whose read cost most, the hook that attaches most) and links to its panel. The bar's floor and reminders segments open the same panels on click or Enter, hover and focus link a segment to its row, and the tail's tooltip lists the next three kinds. A footnote says what one step fewer per prompt is worth.
 - Where the re-read went: file reads are split by path, mirroring how system reminders are split by hook, under `attribution.files`.
 - Startup floor panel: the floor per project with its pieces (CLAUDE.md files, plugins and skills, MCP tool schemas, agents list, memory, hooks), and a line of the median floor per day kept in `floor-history.json` so a settings change shows as a step. System reminders panel: what hooks and Claude Code notices attach after the first reply, by source, with how often each fired.
