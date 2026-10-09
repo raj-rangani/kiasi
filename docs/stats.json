@@ -1,1 +1,1 @@
-{"updated": "2026-10-09", "stars": 1, "unique_clones_14d": 219, "unique_views_14d": 10}
+{"updated": "2026-10-09", "stars": 1, "unique_clones_14d": {"message":"Resource not accessible by integration","documentation_url":"https://docs.github.com/rest/metrics/traffic#get-repository-clones","status":"403"}null, "unique_views_14d": {"message":"Resource not accessible by integration","documentation_url":"https://docs.github.com/rest/metrics/traffic#get-page-views","status":"403"}null}
