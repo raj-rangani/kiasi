@@ -1,0 +1,44 @@
+name: Share your month
+description: Post your Kiasi month card for the results page on the website. It is reviewed before it appears.
+title: "Month card: "
+labels: [results]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Open the dashboard, click **Your month**, then **Copy as text**, and paste the card below.
+        The card holds totals only. Nothing else leaves your machine, and the maintainer reads every card before it goes on the page.
+  - type: textarea
+    id: card
+    attributes:
+      label: Your month card
+      description: The card text, as copied from the dashboard.
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: plan
+    attributes:
+      label: Plan
+      options: [Pro, Max 5x, Max 20x, Team, Enterprise, API, Other]
+    validations:
+      required: true
+  - type: dropdown
+    id: workload
+    attributes:
+      label: What you mostly use Claude Code for
+      options: [Web apps, Backend and APIs, Data and ML, Infra and DevOps, Mobile, Libraries and tools, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: note
+    attributes:
+      label: Anything to add
+      description: One or two lines, optional. Shown with the card.
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Show it
+      options:
+        - label: Show this card on the results page with my GitHub handle
+          required: true

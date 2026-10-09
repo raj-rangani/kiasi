@@ -255,6 +255,24 @@ body { overflow-x: clip; }
 .copy { white-space: nowrap; font: 500 12px/1 var(--sans); padding: 7px 11px; border-radius: 8px; border: 1px solid rgba(255,255,255,.14); background: transparent; color: var(--term-ink); cursor: pointer; transition: background .2s; }
 .copy:hover { background: rgba(255,255,255,.08); }
 .copy.ok { color: var(--good); border-color: var(--good); }
+.counts { margin-top: 36px; display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.counts b { color: var(--ink); font-weight: 600; }
+.results { margin-top: 28px; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+.rcard { background: var(--card); border: 1px solid var(--rule); border-radius: 16px; padding: 22px 22px 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.rcard .rmeta { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-family: var(--mono); font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.rcard .rhead b { display: block; font-family: var(--serif); font-weight: 400; font-size: 40px; line-height: 1; letter-spacing: -0.02em; color: var(--good); }
+.rcard .rhead.flat b { color: var(--ink); }
+.rcard .rhead span { display: block; margin-top: 6px; font-size: 14.5px; color: var(--ink); }
+.rcard .rrows { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; border-top: 1px solid var(--rule); padding-top: 14px; }
+.rcard .rrows div { min-width: 0; }
+.rcard .rrows em { display: block; font-style: normal; font-family: var(--mono); font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.rcard .rrows b { display: block; font-family: var(--serif); font-weight: 400; font-size: 20px; line-height: 1.15; margin-top: 3px; overflow-wrap: anywhere; }
+.rcard .rrows small { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+.rcard .rnote { font-size: 14px; line-height: 1.5; color: var(--muted); margin: 0; }
+.rcard .rwho { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: auto; }
+.rcard.add { border-style: dashed; background: transparent; justify-content: center; gap: 10px; }
+.rcard.add b { font-family: var(--serif); font-weight: 400; font-size: 24px; letter-spacing: -0.01em; }
+.rcard.add span { font-size: 14px; line-height: 1.5; color: var(--muted); }
 .trust2 { margin-top: 56px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 32px; border-top: 1px solid var(--rule); }
 .trust2 div { padding: 22px 0 0; }
 .trust2 svg { width: 20px; height: 20px; stroke: var(--accent-ink); fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
@@ -327,9 +345,9 @@ body { overflow-x: clip; }
     <p class="fine">Fixed rules, Python standard library, nothing sent anywhere.</p>
 
     <div class="stage">
-      <div class="term" id="demo" aria-label="A recorded terminal: a 116,179-character npm output, then what Kiasi lets into the context">
+      <div class="term" id="demo" aria-label="A recorded Claude Code session: npm ls --all returns 3,009 lines; Claude reports that a 40-line digest reached it and the rest is saved to disk">
         <div class="bar"><i></i><i></i><i></i><em class="lbl">claude · with kiasi</em> <span>recorded, not mocked</span></div>
-        <img class="rec" src="demo.gif" alt="npm ls --all prints 116,179 characters; with Kiasi, 2,940 enter the context and the rest is saved to disk; then the dashboard" width="1100" height="620">
+        <img class="rec" src="demo.gif" alt="A real Claude Code session with Kiasi: npm ls --all returns 3,009 lines, Claude reports that a 40-line digest reached it and names the file holding the rest; then the dashboard" width="1100" height="620">
       </div>
     </div>
 
@@ -367,12 +385,12 @@ body { overflow-x: clip; }
       <div class="tracks">
         <div class="cursor" id="cur"></div>
         <div class="track a">
-          <div class="who"><b>Without Kiasi</b>raw tool output, long turns</div>
+          <div class="rwho"><b>Without Kiasi</b>raw tool output, long turns</div>
           <div class="rail" id="railA"><div class="fill" id="fillA"></div></div>
           <div class="out" id="outA">&nbsp;</div>
         </div>
         <div class="track b">
-          <div class="who"><b>With Kiasi</b>capped, cleaned, stopped at 60</div>
+          <div class="rwho"><b>With Kiasi</b>capped, cleaned, stopped at 60</div>
           <div class="rail" id="railB"><div class="fill" id="fillB"></div></div>
           <div class="out" id="outB">&nbsp;</div>
         </div>
@@ -472,10 +490,22 @@ body { overflow-x: clip; }
     </div>
   </section>
 
+  <section id="results">
+    <div class="head">
+      <div>
+        <p class="fig reveal">Fig. 06 · results</p>
+        <h2 class="h2 reveal">Other people's <em>numbers.</em></h2>
+      </div>
+      <p class="sub reveal" style="--d:1">Each card is one machine's last 30 days, posted by its owner from the dashboard's <b>Your month</b> panel, with the plan and the kind of work beside it. Every card is read before it goes up. <a href="https://github.com/raj-rangani/kiasi/issues/new?template=share-your-month.yml">Add yours</a>.</p>
+    </div>
+    <p class="counts reveal" id="counts" hidden></p>
+    <div class="results reveal" id="results-grid" style="--d:1"></div>
+  </section>
+
   <section id="install">
     <div class="head">
       <div>
-        <p class="fig reveal">Fig. 06 · install</p>
+        <p class="fig reveal">Fig. 07 · install</p>
         <h2 class="h2 reveal">Three lines. <em>About a minute.</em></h2>
       </div>
       <p class="sub reveal" style="--d:1">Nothing to build, nothing to sign up for. Requires Claude Code 2.1.283 or newer and Python 3.8 or newer, standard library only.</p>
@@ -505,7 +535,7 @@ body { overflow-x: clip; }
   </section>
 
   <section class="fin">
-    <p class="fig reveal" style="justify-content:center">Fig. 07 · the ask</p>
+    <p class="fig reveal" style="justify-content:center">Fig. 08 · the ask</p>
     <h2 class="h2 reveal">Make this week's <em>limit last.</em></h2>
     <p class="sub reveal" style="--d:1">One minute to install. Your first before-and-after shows up the next day.</p>
     <div class="cmdbox reveal" style="--d:2"><span>/plugin marketplace add raj-rangani/kiasi</span><button class="copy" data-copy="/plugin marketplace add raj-rangani/kiasi&#10;/plugin install kiasi@kiasi">Copy</button></div>
@@ -694,6 +724,45 @@ body { overflow-x: clip; }
     });
   });
 
+})();
+</script>
+<script>
+(function () {
+  var grid = document.getElementById('results-grid'), counts = document.getElementById('counts');
+  if (!grid || !window.fetch) return;
+  var esc = function (v) { return String(v).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var FORM = 'https://github.com/raj-rangani/kiasi/issues/new?template=share-your-month.yml';
+  function card(e) {
+    var lines = String(e.card || '').split('\n');
+    var span = (lines[0] || '').match(/\((.*)\)/), head = (lines[1] || '').match(/^(\d[\d.]*× (?:less|more))\s+(.*)$/);
+    var big = head ? head[1] : (lines[1] || ''), sub = head ? head[2] : '', flat = !head || /more$/.test(big);
+    var rows = lines.slice(2).map(function (l) {
+      var i = l.indexOf(': '); if (i < 0) return null;
+      var key = l.slice(0, i), rest = l.slice(i + 2), j = rest.indexOf(', ');
+      return { k: key, v: j < 0 ? rest : rest.slice(0, j), n: j < 0 ? '' : rest.slice(j + 2) };
+    }).filter(Boolean).slice(0, 6);
+    var who = e.handle ? '<a href="https://github.com/' + esc(e.handle) + '">@' + esc(e.handle) + '</a>' : 'anonymous';
+    if (e.issue) who += ' · <a href="https://github.com/raj-rangani/kiasi/issues/' + esc(e.issue) + '">#' + esc(e.issue) + '</a>';
+    return '<article class="rcard">'
+      + '<div class="rmeta"><span>' + esc([e.plan, e.workload].filter(Boolean).join(' · ')) + '</span><span>' + esc(span ? span[1] : e.date || '') + '</span></div>'
+      + '<div class="rhead' + (flat ? ' flat' : '') + '"><b>' + esc(big) + '</b><span>' + esc(sub) + '</span></div>'
+      + '<div class="rrows">' + rows.map(function (r) { return '<div><em>' + esc(r.k) + '</em><b>' + esc(r.v) + '</b><small>' + esc(r.n) + '</small></div>'; }).join('') + '</div>'
+      + (e.note ? '<p class="rnote">' + esc(e.note) + '</p>' : '')
+      + '<div class="rwho">' + who + '</div></article>';
+  }
+  var add = '<a class="rcard add" href="' + FORM + '"><b>Add yours</b><span>Open the dashboard, click Your month, then Post on the results page. The card holds totals only, and it is read before it goes up.</span></a>';
+  fetch('results.json').then(function (r) { return r.json(); }).then(function (list) {
+    grid.innerHTML = list.slice().reverse().map(card).join('') + add;
+  }).catch(function () { grid.innerHTML = add; });
+  fetch('stats.json').then(function (r) { return r.json(); }).then(function (st) {
+    var parts = [];
+    if (st.stars != null) parts.push('<span><b>' + esc(st.stars) + '</b> star' + (st.stars === 1 ? '' : 's') + ' on GitHub</span>');
+    if (st.unique_clones_14d != null) parts.push('<span><b>' + esc(st.unique_clones_14d) + '</b> machines cloned it in 14 days <span title="Installing the plugin clones the repository, so unique clones are the closest public count of installs.">(unique clones, how the plugin installs)</span></span>');
+    if (st.updated) parts.push('<span>counted ' + esc(st.updated) + '</span>');
+    if (!parts.length) return;
+    counts.innerHTML = parts.join(' · ');
+    counts.hidden = false;
+  }).catch(function () {});
 })();
 </script>
 </body>

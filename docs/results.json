@@ -1,0 +1,11 @@
+[
+  {
+    "issue": null,
+    "handle": "raj-rangani",
+    "date": "2026-10-09",
+    "plan": "Max 20x",
+    "workload": "Web apps",
+    "note": "The machine Kiasi is built on. Long agentic sessions, most days of the week.",
+    "card": "Kiasi, last 30 days (10 Sep – 9 Oct)\n2.2× less context per request than before Kiasi\nBought back: 11 days, of the weekly limit\nKept out: 10.6M tokens, 734M of re-reads avoided\nContext sent: 2.86 B, 1,968 prompts on 24 days\nBusiest day: 14 Sep, 245M sent\nHeaviest session: mywebsite-storefront-admin, 60M re-read, 7 Oct\nMost cut: kiasi fetch · sandbox, 99 outputs, 1.3M kept out"
+  }
+]

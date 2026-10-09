@@ -7,9 +7,9 @@ Your weekly limit is spent re-reading. Every step of Claude Code re-sends the wh
 
 Kiasi is a Claude Code plugin that keeps that noise out: fixed rules, on your machine, no model calls, no network. The full text of everything it cuts is saved and searchable, so nothing is lost. Install it and work as usual. The next day a local dashboard shows your own before and after, built from your own transcripts: the context each step re-sends, and the days of weekly limit Kiasi bought back.
 
-[**Website**](https://raj-rangani.github.io/kiasi/) · [Benchmark](BENCHMARK.md) · [Settings](docs/settings.md) · [Changelog](CHANGELOG.md) · MIT
+[**Website**](https://raj-rangani.github.io/kiasi/) · [Results](https://raj-rangani.github.io/kiasi/#results) · [Benchmark](BENCHMARK.md) · [Settings](docs/settings.md) · [Changelog](CHANGELOG.md) · MIT
 
-<img src="docs/demo.gif" alt="A 116,179-character npm output, then the 2,940 characters Kiasi lets into the context, then the dashboard" width="720">
+<img src="docs/demo.gif" alt="A real Claude Code session with Kiasi: npm ls --all returns 3,009 lines, Claude reports that a 40-line digest reached it and names the file holding the rest; then the dashboard" width="720">
 
 ## Quick start
 

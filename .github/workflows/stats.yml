@@ -1,0 +1,36 @@
+name: Stats
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  count:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write docs/stats.json
+        env:
+          # Traffic (clones, views) needs a token with push access. A fine-grained PAT with
+          # "Administration: read" as the TRAFFIC_TOKEN secret works; without it only stars are counted.
+          GH_TOKEN: ${{ secrets.TRAFFIC_TOKEN || github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          stars=$(gh api "repos/$REPO" --jq .stargazers_count)
+          clones=$(gh api "repos/$REPO/traffic/clones" --jq .uniques 2>/dev/null || echo null)
+          views=$(gh api "repos/$REPO/traffic/views" --jq .uniques 2>/dev/null || echo null)
+          printf '{"updated": "%s", "stars": %s, "unique_clones_14d": %s, "unique_views_14d": %s}\n' \
+            "$(date -u +%Y-%m-%d)" "$stars" "$clones" "$views" > docs/stats.json
+          cat docs/stats.json
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/stats.json
+          if git diff --cached --quiet; then echo "nothing to commit"; exit 0; fi
+          git commit -m "Stats: $(date -u +%Y-%m-%d)"
+          git push

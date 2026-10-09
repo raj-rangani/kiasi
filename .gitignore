@@ -15,5 +15,4 @@ lens.json
 docs/dev-notes.md
 # Written by Claude Code each time it loads the plugin; early-access API declarations, not ours to publish.
 .claude-plugin/types/
-docs/demo/cut.txt
 docs/demo/demo.mp4
