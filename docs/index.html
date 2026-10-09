@@ -94,6 +94,7 @@ body { overflow-x: clip; }
 .term .bar i:first-child { background: #e0795f; } .term .bar i:nth-child(2) { background: #f2b632; } .term .bar i:nth-child(3) { background: #6cc28f; }
 .term .bar span { margin-left: auto; } .term .bar .lbl { font-style: normal; }
 .term .bar span b { color: var(--accent); font-weight: 400; font-variant-numeric: tabular-nums; }
+.term .rec { display: block; width: 100%; height: auto; }
 .term .body { padding: 18px 20px 20px; font-family: var(--mono); font-size: 13.5px; line-height: 1.7; }
 .line { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; opacity: 0; transform: translateY(6px); transition: opacity .35s var(--ease), transform .35s var(--ease); }
 .line.on { opacity: 1; transform: none; }
@@ -326,16 +327,9 @@ body { overflow-x: clip; }
     <p class="fine">Fixed rules, Python standard library, nothing sent anywhere.</p>
 
     <div class="stage">
-      <div class="term" id="demo" aria-label="What Kiasi does during a session">
-        <div class="bar"><i></i><i></i><i></i><em class="lbl">claude · with kiasi</em> <span>kept off your limit <b id="kept">0</b></span></div>
-        <div class="body">
-          <div class="line" data-saved="9800"><span class="cmd">Bash(npm install) <span class="what">· <b>cleaned</b> progress bars, colour codes</span></span><span class="num">41,380 → 2,114 chars</span></div>
-          <div class="line" data-saved="11700"><span class="cmd">Bash(npm test) <span class="what">· <b>capped</b> full log saved to disk</span></span><span class="num">58,902 → 12,000 chars</span></div>
-          <div class="line" data-saved="3100"><span class="cmd">Read(src/api/client.ts) <span class="what">· <b>skipped</b> unchanged, already in context</span></span><span class="num">pointer instead of text</span></div>
-          <div class="line plain" data-saved="0"><span class="cmd">Bash(npm test) ×3 failed <span class="what">· <b>loop check</b> stop retrying, check the assumption</span></span><span class="num">turn ends early</span></div>
-          <div class="line plain" data-saved="0"><span class="cmd">30 steps in this turn <span class="what">· <b>budget</b> remaining work goes to a checklist</span></span><span class="num">warned</span></div>
-          <div class="line" data-saved="186000"><span class="cmd">Compaction <span class="what">· <b>pruned</b> old tool output, your words kept verbatim</span></span><span class="num">212k → 26k tokens</span></div>
-        </div>
+      <div class="term" id="demo" aria-label="A recorded terminal: a 116,179-character npm output, then what Kiasi lets into the context">
+        <div class="bar"><i></i><i></i><i></i><em class="lbl">claude · with kiasi</em> <span>recorded, not mocked</span></div>
+        <img class="rec" src="demo.gif" alt="npm ls --all prints 116,179 characters; with Kiasi, 2,940 enter the context and the rest is saved to disk; then the dashboard" width="1100" height="620">
       </div>
     </div>
 
@@ -551,36 +545,6 @@ body { overflow-x: clip; }
       entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
     }, { rootMargin: '0px 0px -8% 0px' });
     reveals.forEach(function (el) { io.observe(el); });
-  }
-
-  var fmt = function (n) { return n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(n); };
-  var lines = document.querySelectorAll('#demo .line');
-  var kept = document.getElementById('kept');
-  var total = 0;
-  var showKept = function (n) { kept.textContent = fmt(n) + ' tokens'; };
-  if (still) {
-    lines.forEach(function (l) { l.classList.add('on'); total += +l.dataset.saved; });
-    showKept(total);
-  } else {
-    var play = function () {
-      total = 0; showKept(0);
-      lines.forEach(function (l) { l.classList.remove('on'); });
-      lines.forEach(function (l, i) {
-        setTimeout(function () {
-          l.classList.add('on');
-          var from = total, to = total + +l.dataset.saved, t0 = performance.now();
-          var tick = function (now) {
-            var k = Math.max(0, Math.min(1, (now - t0) / 600));
-            showKept(Math.round(from + (to - from) * (1 - Math.pow(1 - k, 3))));
-            if (k < 1) requestAnimationFrame(tick);
-          };
-          requestAnimationFrame(tick);
-          total = to;
-        }, 500 + i * 1100);
-      });
-    };
-    play();
-    setInterval(play, 500 + lines.length * 1100 + 5000);
   }
 
   var STOP = 60, WARN = 30, CPT = 4, BASE = 2000, STEPS = 70, NS = 'http://www.w3.org/2000/svg';
