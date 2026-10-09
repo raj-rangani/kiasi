@@ -19,7 +19,7 @@ const dayStart = day => new Date(`${day}T00:00:00`).getTime();
 function leadText(r) {
   if (!r) return ['Install the Kiasi status line to see when your weekly limit runs out.', 'Run /kiasi:limits setup in Claude Code. The days below are what you sent.', ''];
   const used = `${r.used}% of the weekly limit used`;
-  if (r.state === 'runs_out') return [`At this pace your weekly limit runs out <em class="bad">${esc(whenText(r.run_out_at))}</em>, before the reset ${esc(whenText(r.resets_at))}.`, `${used} · ${r.burn_per_day}% a day · the next fix below buys the most time`, 'bad'];
+  if (r.state === 'runs_out') return [`At this pace your weekly limit runs out <em class="bad">${esc(whenText(r.run_out_at))}</em>, before the reset <span class="when">${esc(whenText(r.resets_at))}</span>.`, `${used} · ${r.burn_per_day}% a day · the next fix below buys the most time`, 'bad'];
   if (r.state === 'clear') return [`At this pace you reach the reset ${esc(whenText(r.resets_at))} with about <em class="good">${r.spare}% to spare</em>.`, `${used} · ${r.burn_per_day}% a day`, 'good'];
   const pace = Math.abs(r.gap) <= LIMIT_PACE_SLACK ? 'on pace' : `${Math.abs(r.gap)} points ${r.gap > 0 ? 'ahead of' : 'under'} pace`;
   return [`${r.used}% of your weekly limit is used, <em class="${r.gap > LIMIT_PACE_SLACK ? 'bad' : 'good'}">${pace}</em> for the reset ${esc(whenText(r.resets_at))}.`, 'the forecast appears after a few status line readings', ''];
@@ -78,21 +78,24 @@ function renderWeek(d, l) {
       svg += `<path class="wk-proj-line after" d="M${P(cur)} L${P(end)}"/>`;
       if (r.state === 'runs_out') {
         const rx = x(end[0]);
-        const nearReset = rx > x(t1) - 130, inside = nearReset || W < 640;   // keep clear of the reset label
+        const textW = t => t.length * 6.6;   // the mono label's width at 11px, near enough to keep two labels apart
+        const nearReset = rx + 8 + textW(`runs out ${whenText(r.run_out_at)}`) > x(t1) - 4 - textW(`reset ${whenText(r.resets_at)}`), inside = nearReset || W < 640;   // keep clear of the reset label
         svg += `<rect class="wk-over after" x="${rx}" y="${bandTop}" width="${Math.max(0, x(t1) - rx)}" height="${bandH}"/>`
           + `<line class="wk-runout after" x1="${rx}" x2="${rx}" y1="${bandTop - 6}" y2="${barBottom}"/>`
           + `<circle class="wk-runout-dot pop" cx="${rx}" cy="${bandTop}" r="4"/>`
-          + `<text class="wk-runout-lbl" x="${rx + (nearReset ? -8 : 8)}" y="${inside ? bandTop + 16 : bandTop - 10}" text-anchor="${nearReset ? 'end' : 'start'}">runs out ${esc(whenText(r.run_out_at))}</text>`;
+          + `<text class="wk-runout-lbl" x="${rx + (nearReset ? -8 : 8)}" y="${nearReset ? bandBottom - 8 : inside ? bandTop + 16 : bandTop - 10}" text-anchor="${nearReset ? 'end' : 'start'}">runs out ${esc(whenText(r.run_out_at))}</text>`;
       } else if (r.state === 'clear') {
         svg += `<circle class="wk-end-dot" cx="${x(end[0])}" cy="${yPct(end[1])}" r="3.5"/>`
           + `<text class="wk-sub good" x="${x(t1) - 8}" y="${yPct(end[1]) - 10}" text-anchor="end">${r.spare}% to spare</text>`;
       }
     }
     const cx = x(cur[0]), cy = yPct(cur[1]);
-    const leftSide = cx > x(t1) - 170;
+    const runOutX = end && r.state === 'runs_out' ? x(end[0]) : Infinity;
+    const leftSide = cx > x(t1) - 170 || (runOutX - cx < 340 && cy > bandBottom - 30);   // keep off the runs-out label's row
+    const ly = cy + 18 > bandBottom - 4 ? bandBottom + 15 : cy + 18;   // under the dot, or under the floor when the dot sits on it
     const tip = `${r.used}% of the weekly limit used${r.burn_per_day ? `, ${r.burn_per_day}% a day` : ''}${pts.length ? ` · ${pts.length} readings this window` : ''}`;
     svg += `<g data-tip="${esc(tip)}"><circle class="wk-now-dot pop" cx="${cx}" cy="${cy}" r="4.5"/>`
-      + `<text class="wk-now-lbl" x="${cx + (leftSide ? -10 : 10)}" y="${cy + 4}" text-anchor="${leftSide ? 'end' : 'start'}">${r.used}% used${r.burn_per_day ? ` · ${r.burn_per_day}% a day` : ''}</text></g>`;
+      + `<text class="wk-now-lbl" x="${cx + (leftSide ? -10 : 10)}" y="${ly}" text-anchor="${leftSide ? 'end' : 'start'}">${r.used}% used${r.burn_per_day ? ` · ${r.burn_per_day}% a day` : ''}</text></g>`;
     svg += `<line class="wk-reset" x1="${x(t1)}" x2="${x(t1)}" y1="${pad.top}" y2="${barBottom}"/><text class="wk-sub" x="${x(t1) - 4}" y="${pad.top + 12}" text-anchor="end">reset ${esc(whenText(r.resets_at))}</text>`;
   }
   // sent bars
@@ -142,9 +145,11 @@ function renderFacts(d) {
   const top = ((d.attribution || {}).kinds || [])[0];
   if (top) {
     const [name] = plainKind(top.kind);
-    out.push(fact('Next fix', `<span class="fact-text">${esc(name)}</span>`, `${Math.round(top.share * 100)}% of the context sent · <a href="#fix-block">how</a>`, ''));
+    const how = KIND_PANELS[top.kind] ? `<a href="#fix-block" data-kind="${esc(top.kind)}">how</a>` : '<a href="#fix-block">how</a>';
+    out.push(fact('Next fix', `<span class="fact-text">${esc(name)}</span>`, `${Math.round(top.share * 100)}% of the context sent · ${how}`, ''));
   }
   $('#facts').innerHTML = out.join('');
+  $('#facts').querySelectorAll('[data-kind]').forEach(a => { a.onclick = e => { e.preventDefault(); openKindPanel(a.dataset.kind, d); }; });
   $('#facts').querySelectorAll('[data-count]').forEach(countUp);
 }
 
@@ -191,6 +196,107 @@ const PLAIN_KIND = {
 };
 const plainKind = kind => PLAIN_KIND[kind] || [kind.charAt(0).toUpperCase() + kind.slice(1), ''];
 const FIX_ROWS = 3;
+const KIND_PANELS = { 'floor': 'see the pieces', 'system reminders': 'see the sources' };
+const FLOOR_PROJECTS = 6;
+const FLOOR_PIECES = 10;
+const STEPS_FIX_MIN = 3;
+const FLOOR_LINE = { width: 600, height: 40, pad: 5, dot: 2.2, headroom: 0.75 };
+const fmtTok = n => n == null ? '–' : n < 9950 ? `${(Math.round(n / 100) / 10).toFixed(1)} k` : `${Math.round(n / 1000)} k`;
+const pieceName = name => !name ? '' : name.includes('/') ? `…/${name.split('/').filter(Boolean).slice(-2).join('/')}` : name;
+
+
+
+function floorLine(days, values) {
+  const { width, height, pad, dot, headroom } = FLOOR_LINE;
+  const seen = values.filter(v => v != null);
+  const top = Math.max(1, ...seen), low = Math.min(...seen) * headroom;
+  const slot = width / days.length, floor = height - pad;
+  const x = i => ((i + 0.5) * slot).toFixed(1), y = v => (floor - (v - low) / Math.max(1, top - low) * (floor - pad * 2)).toFixed(1);
+  const md = day => day.slice(5).replace('-', '/');
+  const known = values.map((v, i) => [v, i]).filter(([v]) => v != null);
+  const points = known.map(([v, i]) => `${x(i)},${y(v)}`).join(' ');
+  const dots = known.map(([v, i]) => `<circle cx="${x(i)}" cy="${y(v)}" r="${dot}"><title>${esc(md(days[i]))}: ${fmtK(v)} floor</title></circle>`).join('');
+  return `<svg class="day-line floor-line" viewBox="0 0 ${width} ${height}" role="img" aria-label="Floor per day"><line class="base" x1="0" x2="${width}" y1="${floor}" y2="${floor}"/><polyline points="${points}"/>${dots}</svg>${dayCellLabels(days)}`;
+}
+
+function floorPanel(d) {
+  const prefix = d.prefix || {};
+  const entries = Object.entries(prefix.projects || {});
+  const real = entries.filter(([project]) => !/^-?tmp-/.test(project));
+  const projects = (real.length ? real : entries).sort((a, b) => b[1].sessions - a[1].sessions || b[1].floor_tokens - a[1].floor_tokens).slice(0, FLOOR_PROJECTS);
+  const days = Object.keys(prefix.per_day || {}).sort();
+  const floorShare = (((d.attribution || {}).kinds || []).find(k => k.kind === 'floor') || {}).share;
+  const steps = (d.totals || {}).mean_steps;
+  const intro = `<p class="panel-intro">The floor is what a session holds before its first reply: instructions, skill and tool listings, hook output and memory. Every later request re-sends it${steps ? `, ${steps} times a prompt here` : ''}${floorShare != null ? `, ${Math.round(floorShare * 100)}% of all context sent` : ''}. Each project below lists the pieces of its latest session, biggest first, so the trim is a named file or setting. <code>/kiasi:floor</code> writes the fix script.</p>`;
+  const blocks = projects.map(([project, p]) => {
+    const pieces = (p.pieces || []).slice(0, FLOOR_PIECES), max = Math.max(1, ...pieces.map(x => x.chars));
+    const series = days.map(day => ((prefix.per_day[day] || {})[project] || {}).floor ?? null);
+    const line = days.length > 1 && series.some(v => v != null) ? `<div class="floor-days">${floorLine(days, series)}</div>` : '';
+    return `<section class="floor-proj"><h3><b>${esc(projectTail(project))}</b><span>${fmtK(p.floor_tokens)} tokens · ${p.sessions} session${p.sessions === 1 ? '' : 's'} · last ${esc(p.latest_day || '')}</span></h3>${line}
+      <ol class="floor-pieces">${pieces.map(x => `<li><span class="hbar"><i style="width:${Math.max(1, 100 * x.chars / max)}%"></i></span><span class="piece-name" title="${esc(x.name || x.kind)}">${esc(pieceName(x.name) || x.kind)}</span><span class="piece-kind">${esc(x.kind)}</span><span class="piece-size">${fmtTok(x.chars / 4)}</span></li>`).join('')}</ol></section>`;
+  }).join('');
+  return intro + (blocks || '<p class="panel-intro">No session started in this window.</p>');
+}
+
+function hooksPanel(d) {
+  const rows = ((d.attribution || {}).hooks || []);
+  const max = Math.max(1, ...rows.map(r => r.tokens));
+  const intro = `<p class="panel-intro">What hooks and Claude Code notices attach after the first reply, split by source. A hook that says the same thing on every prompt can fire once a session instead: wrap it with <code>scripts/once.py</code> from the Kiasi install. Listings and instructions re-attach after a compaction and when a new folder's CLAUDE.md is read.</p>`;
+  const list = rows.map(r => `<li><span class="hbar"><i style="width:${Math.max(1, 100 * r.tokens / max)}%"></i></span><span class="piece-name" title="${esc(r.label)}">${esc(r.label)}</span><span class="piece-kind">${r.fires} fire${r.fires === 1 ? '' : 's'}${r.chars_per_fire ? ` · ${fmtTok(r.chars_per_fire / 4)} each` : ''}</span><span class="piece-size">${Math.round(r.share * 100)}%</span></li>`).join('');
+  return intro + (list ? `<ol class="floor-pieces">${list}</ol>` : '<p class="panel-intro">Nothing attached in this window.</p>');
+}
+
+const PANEL_PARAMS = { 'floor': 'floor', 'system reminders': 'reminders' };
+
+function openKindPanel(kind, d) {
+  const opts = { onClose: () => setViewParam('') };   // closing clears the address, so a refresh does not reopen it
+  if (kind === 'floor') openPanel('Startup floor', 'What a session loads before its first reply, paid on every request.', floorPanel(d), opts);
+  else if (kind === 'system reminders') openPanel('System reminders', 'Context that hooks and notices attach as the session goes.', hooksPanel(d), opts);
+  else return;
+  setViewParam(PANEL_PARAMS[kind]);
+}
+
+function openParamPanel(d) {
+  const kind = Object.keys(PANEL_PARAMS).find(k => PANEL_PARAMS[k] === viewParam());
+  if (kind) openKindPanel(kind, d);
+}
+
+
+function specificAdvice(kind, d) {
+  const attribution = d.attribution || {};
+  if (kind === 'floor') {
+    const entries = Object.entries((d.prefix || {}).projects || {});
+    const real = entries.filter(([project]) => !/^-?tmp-/.test(project));
+    const [project, p] = (real.length ? real : entries).sort((a, b) => b[1].sessions - a[1].sessions || b[1].floor_tokens - a[1].floor_tokens)[0] || [];
+    const top = p && (p.pieces || [])[0];
+    if (!top) return '';
+    return `${pieceName(top.name) || top.kind} is ${fmtK(Math.round(top.chars / CHARS_PER_TOKEN))} of the ${fmtK(p.floor_tokens)} floor in ${projectTail(project)}.`;
+  }
+  if (kind === 'file reads') {
+    const top = (attribution.files || [])[0];
+    return top && top.share >= 0.05 ? `${pieceName(top.path)} alone is ${Math.round(top.share * 100)}% of these reads.` : '';
+  }
+  if (kind === 'system reminders') {
+    const top = (attribution.hooks || [])[0];
+    return top && top.share >= 0.05 ? `${top.label} attaches ${Math.round(top.share * 100)}% of this, ${top.fires} time${top.fires === 1 ? '' : 's'} this week.` : '';
+  }
+  return '';
+}
+
+function fixAdvice(kind, d) {
+  const generic = ATTRIB_ADVICE[kind] || plainKind(kind)[1];
+  const specific = specificAdvice(kind, d);
+  if (!specific) return generic;
+  const cut = generic.indexOf('. ');
+  return cut < 0 ? `${specific} ${generic}` : `${specific}${generic.slice(cut + 1)}`;
+}
+
+function shareDelta(kind, share, prior) {
+  if (!prior || prior.shares[kind] == null) return '';
+  const pts = Math.round((share - prior.shares[kind]) * 100);
+  if (!pts) return `<span class="delta flat" title="the same share as in the 7 days before">no change</span>`;
+  return `<span class="delta ${pts > 0 ? 'up' : 'down'}" title="against the share in the 7 days before">${pts > 0 ? '+' : '−'}${Math.abs(pts)} pts</span>`;
+}
 
 function renderFixes(d) {
   const all = ((d.attribution || {}).kinds || []);
@@ -198,14 +304,45 @@ function renderFixes(d) {
   block.hidden = !all.length;
   if (!all.length) return;
   const rows = all.slice(0, FIX_ROWS);
-  const max = all[0].tokens;
-  $('#fix-sub').textContent = `the ${FIX_ROWS} biggest of ${all.length} kinds`;
+  const rest = 1 - rows.reduce((n, r) => n + r.share, 0);
+  const prior = (d.attribution || {}).prior;
+  $('#fix-sub').textContent = `of everything sent in the last ${d.days || 7} days`;
+  const LABEL_MIN = 0.12;
+  const seg = (cls, share, label, title, kind) => `<i class="seg ${cls}${KIND_PANELS[kind] ? ' opens' : ''}" style="width:${(share * 100).toFixed(1)}%" title="${esc(title)}" tabindex="0"${KIND_PANELS[kind] ? ` role="button" data-kind="${esc(kind)}"` : ''}>${share >= LABEL_MIN ? `<b>${Math.round(share * 100)}%</b><span>${esc(label)}</span>` : ''}</i>`;
+  const others = all.slice(FIX_ROWS);
+  const tail = others.slice(0, 3).map(r => `${plainKind(r.kind)[0]} ${Math.round(r.share * 100)}%`).join(', ');
+  $('#fix-bar').innerHTML = rows.map((r, i) => seg(`s${i + 1}`, r.share, plainKind(r.kind)[0], `${plainKind(r.kind)[0]}: ${Math.round(r.share * 100)}%${KIND_PANELS[r.kind] ? ' · click to ' + KIND_PANELS[r.kind] : ''}`, r.kind)).join('')
+    + seg('rest', Math.max(0, rest), others.length ? `${others.length} other kind${others.length === 1 ? '' : 's'}` : 'other', `${others.length} other kinds: ${Math.round(rest * 100)}%${tail ? ' · ' + tail + (others.length > 3 ? ', …' : '') : ''}`);
+  const hot = (el, key) => {
+    el.onmouseenter = el.onfocus = () => block.dataset.hot = key;
+    el.onmouseleave = el.onblur = () => delete block.dataset.hot;
+  };
+  $('#fix-bar').querySelectorAll('.seg').forEach((el, i) => {
+    hot(el, i < rows.length ? `s${i + 1}` : 'rest');
+    if (el.dataset.kind) {
+      el.onclick = () => openKindPanel(el.dataset.kind, d);
+      el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openKindPanel(el.dataset.kind, d); } };
+    }
+  });
   $('#fixes-list').innerHTML = rows.map((r, i) => {
-    const [name, what] = plainKind(r.kind);
-    return `<li class="fix"><span class="rank">${i + 1}</span><span class="name">${esc(name)}</span>
-      <span class="share"><span class="hbar"><i style="width:${Math.max(1, 100 * r.tokens / max)}%"></i></span><span>${Math.round(r.share * 100)}%</span></span>
-      <span class="what">${esc(ATTRIB_ADVICE[r.kind] || what)}</span></li>`;
+    const [name] = plainKind(r.kind);
+    const more = KIND_PANELS[r.kind] ? `<button type="button" class="fix-more" data-kind="${esc(r.kind)}">${KIND_PANELS[r.kind]} ›</button>` : '';
+    return `<li class="fix s${i + 1}"><span class="name">${esc(name)}${shareDelta(r.kind, r.share, prior)}</span><span class="what">${esc(fixAdvice(r.kind, d))}</span>${more}</li>`;
   }).join('');
+  $('#fixes-list').querySelectorAll('.fix-more').forEach(b => { b.onclick = () => openKindPanel(b.dataset.kind, d); });
+  $('#fixes-list').querySelectorAll('.fix').forEach((li, i) => {
+    li.onmouseenter = () => block.dataset.hot = `s${i + 1}`;
+    li.onmouseleave = () => delete block.dataset.hot;
+    li.addEventListener('focusin', () => block.dataset.hot = `s${i + 1}`);
+    li.addEventListener('focusout', () => delete block.dataset.hot);
+  });
+  $('#fix-steps').innerHTML = stepsNote(d);
+}
+
+function stepsNote(d) {
+  const steps = (d.totals || {}).mean_steps;
+  if (!steps || steps < STEPS_FIX_MIN) return '';
+  return `Each prompt takes <b>${steps} steps</b> on average, and every step re-sends all of the above. One step fewer per prompt is worth about <b>${Math.round(100 / steps)}%</b> of everything sent: batch independent commands into one call and run each test suite once.`;
 }
 
 function renderSpikeNote(d) {
@@ -219,5 +356,5 @@ function renderSpikeNote(d) {
   host.innerHTML = `One session on ${esc(String(top.day || '').slice(5, 10))} sent ${fmtM(top.reread)} of context across ${top.prompts} prompt${top.prompts === 1 ? '' : 's'}, ${top.factor}× the usual${more}. <a href="#sessions">See it in Sessions →</a>`;
 }
 
-registerView('overview', d => { lastData = d; renderWeek(d, window.limitsReading); renderSpikeNote(d); renderFixes(d); });
+registerView('overview', d => { lastData = d; renderWeek(d, window.limitsReading); renderSpikeNote(d); renderFixes(d); openParamPanel(d); });
 })();

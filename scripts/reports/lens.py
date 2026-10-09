@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import gzip
 import json
+import re
 import os
 import sys
 import time
@@ -29,7 +30,16 @@ RUNAWAY_TOKENS = 200_000
 AGENT_TOOLS = ("Agent", "Task")
 WINDOW_ENV = "CLAUDE_CODE_AUTO_COMPACT_WINDOW"
 PREFIX_PIECES = 12
-PREFIX_KINDS = ("CLAUDE.md files", "plugins and skills", "MCP tool schemas", "agents list", "memory", "other")
+PREFIX_KINDS = ("CLAUDE.md files", "plugins and skills", "MCP tool schemas", "agents list", "memory", "hooks", "other")
+HOOK_TYPES = ("hook_additional_context", "hook_system_message")
+RECORD_ATTACHMENTS = {"prompt_snapshot", "hook_success", "hook_error_during_execution", "deferred_tools_record", "thinking_drop", "credential_org",
+                      "remote_session_change", "auto_mode", "model", "date", "environment", "edited_text_file"}  # transcript bookkeeping, never sent to the model
+HOOK_LABEL_CHARS = 36
+HOOK_ROWS = 8
+FLOOR_HISTORY_NAME = "floor-history.json"
+SHARE_HISTORY_NAME = "share-history.json"
+FILE_ROWS = 8
+STEPS_FIX_MIN = 3.0
 ATTACHMENT_KINDS = {"skill_listing": "plugins and skills", "deferred_tools_delta": "MCP tool schemas", "mcp_instructions_delta": "MCP tool schemas",
                     "agent_listing_delta": "agents list", "instructions": "CLAUDE.md files"}
 REMINDER_HINTS = (("MEMORY.md", "memory"), ("CLAUDE.md", "CLAUDE.md files"), ("skills are available", "plugins and skills"), ("mcp__", "MCP tool schemas"),
@@ -110,6 +120,61 @@ def piece(kind, chars, name=None):
     return {"kind": kind, "chars": chars, **({"name": name} if name else {})}
 
 
+def hook_text(a):
+    content = a.get("content")
+    if isinstance(content, list):
+        return "\n".join(c if isinstance(c, str) else str((c or {}).get("text", "")) for c in content)
+    return content if isinstance(content, str) else json.dumps(content, ensure_ascii=False) if content else ""
+
+
+def hook_label(a):
+    """A name for one hook's injection: its event and the first words of what it attaches, so the same hook adds up across fires."""
+    first = next((line for line in hook_text(a).splitlines() if line.strip()), "").strip()
+    first = re.sub(r"^[#*>\s-]+|<[^>]*>|\(.*", "", first).strip()
+    first = re.split(r"[:.;,]", first, 1)[0].strip()
+    if len(first) > HOOK_LABEL_CHARS:
+        first = first[:HOOK_LABEL_CHARS].rsplit(" ", 1)[0]
+    return f"{a.get('hookName') or a.get('hookEvent') or 'hook'}: {first or 'untitled'}"
+
+
+NOTICE_NAMES = {"instructions": "CLAUDE.md files attached", "deferred_tools_delta": "tool listing", "agent_listing_delta": "agents listing", "mcp_instructions_delta": "MCP instructions",
+                "skill_listing": "skills listing", "batching_reminder_sent": "batching reminder", "total_tokens_reminder": "tokens-left reminder", "silent_turn_reminder": "silent-turn reminder",
+                "prompt_snapshot": "system prompt", "session_context": "session context", "bash_output_audience_note": "shell output note"}
+
+
+def notice_name(kind):
+    return NOTICE_NAMES.get(kind, str(kind).replace("_", " "))
+
+
+def attachment_label(a):
+    return hook_label(a) if a.get("type") in HOOK_TYPES else f"notice: {notice_name(a.get('type', 'other'))}"
+
+
+def reminder_sources(entry, message):
+    """(label, chars) for each reminder this entry adds to the context: hook output, a Claude Code notice or a system-reminder text block."""
+    if entry.get("type") == "attachment":
+        a = entry.get("attachment") or {}
+        if a.get("type") in RECORD_ATTACHMENTS:
+            return []
+        if a.get("type") in HOOK_TYPES:
+            return [(hook_label(a), len(hook_text(a)))]
+        return [(attachment_label(a), text_size(a.get("content") or a.get("context") or {k: v for k, v in a.items() if k != "type"}))]
+    if entry.get("type") == "user":
+        content = message.get("content")
+        blocks = content if isinstance(content, list) else [{"type": "text", "text": content}] if isinstance(content, str) else []
+        texts = [b.get("text") or "" for b in blocks if isinstance(b, dict) and b.get("type") == "text"]
+        return [(reminder_label(t), len(t)) for t in texts if t.lstrip().startswith("<system-reminder>")]
+    return []
+
+
+def reminder_label(text):
+    first = next((line for line in text.lstrip()[len("<system-reminder>"):].splitlines() if line.strip()), "").strip()
+    first = re.split(r"[:.;,(]", first, 1)[0].strip()
+    if len(first) > HOOK_LABEL_CHARS:
+        first = first[:HOOK_LABEL_CHARS].rsplit(" ", 1)[0]
+    return f"reminder: {first or 'untitled'}"
+
+
 def prefix_pieces(entry):
     """What one pre-first-reply entry adds to the fixed prefix, sized in chars; what cannot be attributed is 'other'."""
     out = []
@@ -122,9 +187,11 @@ def prefix_pieces(entry):
                 out.append(piece("memory" if "memory" in path.lower() else "CLAUDE.md files", text_size(f), path or None))
         elif kind:
             body = {k: v for k, v in a.items() if k not in ("type", "isInitial", "skillCount")}
-            out.append(piece(kind, text_size(body), a.get("type")))
-        elif a.get("type") in ("hook_additional_context", "session_context", "prompt_snapshot"):
-            out.append(piece("other", text_size(a.get("content") or a.get("context") or a.get("systemPrompt")), a.get("hookName") or a.get("type")))
+            out.append(piece(kind, text_size(body), notice_name(a.get("type"))))
+        elif a.get("type") in HOOK_TYPES:
+            out.append(piece("hooks", len(hook_text(a)), hook_label(a)))
+        elif a.get("type") in ("session_context", "prompt_snapshot"):
+            out.append(piece("other", text_size(a.get("content") or a.get("context") or a.get("systemPrompt")), notice_name(a.get("type"))))
     elif entry.get("type") == "user":
         content = (entry.get("message") or {}).get("content")
         blocks = content if isinstance(content, list) else [{"type": "text", "text": content}] if isinstance(content, str) else []
@@ -136,20 +203,44 @@ def prefix_pieces(entry):
     return out
 
 
-def prefix_report(sessions):
+def floor_days(sessions, days):
+    """Per day and project, the median floor of the sessions started that day; merged into FLOOR_HISTORY_FILE so a settings change shows as a step past the window."""
+    seen = defaultdict(lambda: defaultdict(list))
+    for info in sessions.values():
+        if info["new"] and info["contexts"] and info["first_day"]:
+            seen[info["first_day"]][info["project"]].append(info["contexts"][0])
+    fresh = {day: {project: {"floor": int(percentile(v, 0.5)), "sessions": len(v)} for project, v in projects.items()} for day, projects in seen.items()}
+    first_full = local_day(window_start(days) + 86400)
+    path = constants.LOG_DIR / FLOOR_HISTORY_NAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with file_lock(path):
+        try:
+            stored = json.loads(path.read_text()).get("per_day") or {}
+        except (OSError, ValueError, AttributeError):
+            stored = {}
+        for day, projects in fresh.items():
+            if day >= first_full or day not in stored:
+                stored[day] = projects
+        kept = {day: stored[day] for day in sorted(stored)}
+        write_atomic(path, json.dumps({"updated": time.strftime("%Y-%m-%dT%H:%M:%S"), "per_day": kept}, indent=1))
+    return kept
+
+
+def prefix_report(sessions, days=7):
     """Per project: the median floor (first reply's context of sessions started in the window) and the pieces of its latest such session."""
     by_project = defaultdict(list)
     for info in sessions.values():
         if info["new"] and info["pieces"]:
             by_project[info["project"]].append(info)
-    report = {}
+    report = {"projects": {}, "per_day": floor_days(sessions, days)}
     for project, infos in by_project.items():
         infos.sort(key=lambda i: i["steps"][0])
         merged = Counter()
         for p in infos[-1]["pieces"]:
             merged[(p["kind"], p.get("name"))] += p["chars"]
         pieces = [piece(kind, chars, name) for (kind, name), chars in sorted(merged.items(), key=lambda x: -x[1])[:PREFIX_PIECES]]
-        report[project] = {"floor_tokens": int(percentile([i["contexts"][0] for i in infos], 0.5)), "sessions": len(infos), "pieces": pieces}
+        report["projects"][project] = {"floor_tokens": int(percentile([i["contexts"][0] for i in infos], 0.5)), "sessions": len(infos), "pieces": pieces,
+                                       "latest": infos[-1]["session"], "latest_day": infos[-1]["first_day"]}
     return report
 
 
@@ -333,8 +424,10 @@ def result_kind(name):
     return RESULT_KINDS.get(name, "other tool results")
 
 
-def add_live(live, names, entry, message):
-    """Size what this entry leaves in the context for every later step, by kind, in chars."""
+def add_live(live, names, entry, message, hooks=None, files=None):
+    """Size what this entry leaves in the context for every later step, by kind, in chars; hooks gets the reminders by their source, files the reads by path."""
+    hooks = hooks if hooks is not None else Counter()
+    files = files if files is not None else Counter()
     content = message.get("content")
     blocks = content if isinstance(content, list) else [{"type": "text", "text": content}] if isinstance(content, str) else []
     if entry.get("type") == "assistant" and message.get("model") != SYNTHETIC_MODEL:
@@ -343,6 +436,8 @@ def add_live(live, names, entry, message):
                 continue
             if b.get("type") == "tool_use":
                 names[b.get("id")] = str(b.get("name", ""))
+                if b.get("name") == "Read" and isinstance(b.get("input"), dict) and b["input"].get("file_path"):
+                    names[("path", b.get("id"))] = str(b["input"]["file_path"])
                 live["tool calls"] += text_size(b.get("input"))
             elif b.get("type") == "text":
                 live["assistant text"] += len(b.get("text") or "")
@@ -352,15 +447,19 @@ def add_live(live, names, entry, message):
                 continue
             if b.get("type") == "tool_result":
                 live[result_kind(names.get(b.get("tool_use_id"), ""))] += text_size(b.get("content"))
+                path = names.get(("path", b.get("tool_use_id")))
+                if path:
+                    files[path] += text_size(b.get("content"))
             elif b.get("type") == "text":
                 text = b.get("text") or ""
-                live["system reminders" if text.lstrip().startswith("<system-reminder>") else "prompts and pastes"] += len(text)
-    elif entry.get("type") == "attachment":
-        a = entry.get("attachment") or {}
-        live["system reminders"] += text_size(a.get("content") or a.get("context") or {k: v for k, v in a.items() if k != "type"})
+                if not text.lstrip().startswith("<system-reminder>"):
+                    live["prompts and pastes"] += len(text)
+    for label, size in reminder_sources(entry, message):
+        live["system reminders"] += size
+        hooks[label] += size
 
 
-def attribute(info, live, reread):
+def attribute(info, live, reread, hooks=None, files=None):
     """Split one step's re-read across what sat in the context: the floor first, then the pieces since the last compaction by size."""
     if not reread:
         return
@@ -375,17 +474,68 @@ def attribute(info, live, reread):
         return
     for kind, chars in live.items():
         info["attrib"][kind] += rest * chars / total
+    reminders = rest * live.get("system reminders", 0) / total
+    hook_total = sum((hooks or {}).values())
+    if reminders and hook_total:
+        for label, chars in hooks.items():
+            info["hook_attrib"][label] += reminders * chars / hook_total
+    reads = rest * live.get("file reads", 0) / total
+    file_total = sum((files or {}).values())
+    if reads and file_total:
+        for path, chars in files.items():
+            info["file_attrib"][path] += reads * chars / file_total
 
 
-def attribution_report(sessions):
+def attribution_report(sessions, days=7):
     """Where the window's main-session re-read went, by what sat in the context: sized per step, scaled to the measured bill."""
     total = Counter()
     for info in sessions.values():
         total.update(info.get("attrib") or {})
     whole = sum(total.values())
     rows = [{"kind": kind, "tokens": round(v), "share": round(v / whole, 4)} for kind, v in total.most_common() if v >= 1]
-    return {"kinds": rows, "total": round(whole),
+    return {"kinds": rows, "total": round(whole), "hooks": hook_rows(sessions, total.get("system reminders", 0)),
+            "files": file_rows(sessions, total.get("file reads", 0)), "prior": share_history({r["kind"]: r["share"] for r in rows}, days),
             "note": "Each step's re-read split across what sat in the context: the floor (the first request's context) first, then everything added since the last compaction, by size; subagent steps are not included"}
+
+
+def file_rows(sessions, reads):
+    """The file reads split by path, biggest first: the files whose whole text sat in the context longest."""
+    tokens = Counter()
+    for info in sessions.values():
+        tokens.update(info.get("file_attrib") or {})
+    return [{"path": path, "tokens": round(v), "share": round(v / reads, 4) if reads else 0} for path, v in tokens.most_common(FILE_ROWS) if v >= 1]
+
+
+def share_history(shares, days):
+    """Today's shares stored under SHARE_HISTORY_NAME; returns the shares as they stood one window ago, or None before there is one."""
+    today = local_day(time.time())
+    cutoff = local_day(time.time() - days * 86400)
+    path = constants.LOG_DIR / SHARE_HISTORY_NAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with file_lock(path):
+        try:
+            stored = json.loads(path.read_text()).get("per_day") or {}
+        except (OSError, ValueError, AttributeError):
+            stored = {}
+        if shares:
+            stored[today] = shares
+        kept = {day: stored[day] for day in sorted(stored)[-(days * 4):]}
+        write_atomic(path, json.dumps({"updated": time.strftime("%Y-%m-%dT%H:%M:%S"), "per_day": kept}, indent=1))
+    old = [day for day in kept if day <= cutoff]
+    return {"day": old[-1], "shares": kept[old[-1]]} if old else None
+
+
+def hook_rows(sessions, reminders):
+    """The system reminders split by the hook or notice that attached them, biggest first, with how often each fired."""
+    tokens, fires, chars = Counter(), Counter(), Counter()
+    for info in sessions.values():
+        tokens.update(info.get("hook_attrib") or {})
+        fires.update(info.get("hook_fires") or {})
+        chars.update(info.get("hook_chars") or {})
+    rows = [{"label": label, "tokens": round(v), "share": round(v / reminders, 4) if reminders else 0, "fires": fires.get(label, 0),
+             "chars_per_fire": round(chars.get(label, 0) / fires[label]) if fires.get(label) else None}
+            for label, v in tokens.most_common(HOOK_ROWS) if v >= 1]
+    return rows
 
 
 def spike_report(sessions):
@@ -449,21 +599,25 @@ def scan_sessions(days):
     main_bill, prompts = Counter(), Counter()
     for path in main:
         info = {"session": Path(path).stem, "project": project_of(path), "steps": [], "contexts": [], "prompts": [], "reread": 0, "recalls": [], "new": None, "pieces": [], "partial": False, "first_day": None, "agents": [], "synthetic": 0, "synthetic_kinds": Counter(),
-                "floor": None, "attrib": Counter()}
+                "floor": None, "attrib": Counter(), "hook_attrib": Counter(), "hook_fires": Counter(), "hook_chars": Counter(), "file_attrib": Counter()}
         asked, searches = set(), set()
-        names, live = {}, Counter()
+        names, live, hooks, files = {}, Counter(), Counter(), Counter()
         for entry, usage in usage_entries(path):
             t = epoch_iso(entry["timestamp"])
             message = entry.get("message") or {}
             if entry.get("isCompactSummary"):
-                live = Counter({"compaction summary": text_size(message.get("content"))})
+                live, hooks, files = Counter({"compaction summary": text_size(message.get("content"))}), Counter(), Counter()
             elif usage:
                 if info["floor"] is None:
                     info["floor"] = sum(usage.get(k, 0) for k in CONTEXT_KEYS)
                 elif local_day(t) >= first_day:
-                    attribute(info, live, usage.get("cache_read_input_tokens", 0))
+                    attribute(info, live, usage.get("cache_read_input_tokens", 0), hooks, files)
             if info["floor"] is not None and not entry.get("isCompactSummary"):
-                add_live(live, names, entry, message)
+                add_live(live, names, entry, message, hooks, files)
+            if info["floor"] is not None and local_day(t) >= first_day:
+                for label, size in reminder_sources(entry, message):
+                    info["hook_fires"][label] += 1
+                    info["hook_chars"][label] += size
             if entry.get("type") == "assistant":
                 info["recalls"].extend((t, text) for text in recall_texts(message))
                 searches |= search_ids(message)
@@ -1383,7 +1537,7 @@ def build(days):
         "pace": pace_report(bill.get(local_day(time.time()), 0)),
         "bought_back": None,
         "wrapped": None,
-        "attribution": attribution_report(sessions),
+        "attribution": attribution_report(sessions, days),
         "spikes": spike_report(sessions),
         "per_day": [{"day": day, "paid": bill.get(day, 0), "prompts": prompts.get(day, 0), "reread_per_prompt": int(main_bill.get(day, 0) / prompts[day]) if prompts.get(day) else None,
                      "steps": sessions.day_steps.get(day, 0), "steps_per_prompt": round(sessions.day_steps.get(day, 0) / prompts[day], 1) if prompts.get(day) else None,
@@ -1395,7 +1549,7 @@ def build(days):
                      **{k: v for k, v in per_day[day].items() if v}} for day in days_seen],
         "sessions": session_rows,
         "window": window_in_effect(),
-        "prefix": prefix_report(sessions),
+        "prefix": prefix_report(sessions, days),
         "steps_hist": step_histogram(sessions),
         "caps": cap_summary(actions),
         "recall": recall_rows(events, sessions),

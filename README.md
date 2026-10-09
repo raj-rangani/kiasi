@@ -132,6 +132,12 @@ A `.kiasi.json` in the project root can set any of these except `compaction_wind
 
 `KIASI_DASHBOARD=off` stops the session-start autostart of the dashboard.
 
+### Trimming the startup floor
+
+The floor is what a session holds before its first reply (CLAUDE.md files, the skill, tool and agent listings, hook output, memory) and every request re-sends it. The Overview's "Startup floor" fix opens a panel with the pieces of each project's latest session, biggest first, and the floor per day, so a settings change shows as a step. `/kiasi:floor` audits the last 30 days of sessions and writes a fix script (never run by Kiasi) that moves what only some projects use out of the global scope: unused skills to `name-only`, single-project skills and agents into that project, user-scope MCP servers to project scope.
+
+A `UserPromptSubmit` hook that attaches the same text on every prompt adds a copy per prompt for the rest of the session. `scripts/once.py` runs any such hook once a session: in `settings.json` replace its command with `sh <kiasi>/scripts/run.sh once.py -- <the command>`. The audit writes that line for every hook it saw repeating.
+
 Two Claude Code settings outside Kiasi are worth setting too:
 
 - `CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000` under `env` in team settings: it caps runaway contexts, and the dashboard flags sessions that went past it.

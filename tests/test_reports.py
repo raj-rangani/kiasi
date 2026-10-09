@@ -344,7 +344,7 @@ class TestLensReport(ReportTestCase):
             {"type": "text", "text": "<system-reminder>something unknown</system-reminder>"}]}}
         skills = {"type": "attachment", "timestamp": self.stamp(0), "attachment": {"type": "skill_listing", "content": "z" * 300, "skillCount": 3}}
         self.write(self.project / "s1.jsonl", [reminder, skills, self.prompt(1), self.step("r1", 2, 40000)])
-        [prefix] = self.lens.build(7)["prefix"].values()
+        [prefix] = self.lens.build(7)["prefix"]["projects"].values()
         self.assertEqual(prefix["floor_tokens"], 40100)
         kinds = {p["kind"]: p["chars"] for p in prefix["pieces"]}
         self.assertGreater(kinds["CLAUDE.md files"], 400)
@@ -653,6 +653,34 @@ class TestRuleOutcomes(ReportTestCase):
         self.assertEqual(kinds["floor"], 100, "the first request's context is the floor, paid first on every later step")
         self.assertEqual(sum(kinds.values()), 300, "the whole re-read of the later step is accounted for")
         self.assertGreater(kinds["other tool results"], kinds["assistant text"], "the rest is split by the size of what each kind left in the context")
+
+    def test_file_reads_are_split_by_the_file_behind_each_read_call(self):
+        path = constants.TRANSCRIPT_ROOT / "-proj" / "files.jsonl"
+        read = lambda second, rid, file: {"type": "assistant", "requestId": rid, "timestamp": self.stamp(second),  # noqa: E731
+                                          "message": {"content": [{"type": "tool_use", "id": rid, "name": "Read", "input": {"file_path": file}}]}}
+        result = lambda second, rid, text: {"type": "user", "timestamp": self.stamp(second),  # noqa: E731
+                                            "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": rid, "content": text}]}}
+        self.write(path, [self.prompt(0), self.step("f-1", 1, 0), read(2, "r1", "/app/big.py"), result(3, "r1", "x" * 3000),
+                          read(4, "r2", "/app/small.py"), result(5, "r2", "x" * 1000), self.step("f-2", 6, 500)])
+        out = self.lens.build(7)["attribution"]
+        files = {row["path"]: row for row in out["files"]}
+        self.assertEqual(list(files), ["/app/big.py", "/app/small.py"], "biggest file first")
+        self.assertAlmostEqual(files["/app/big.py"]["share"], 0.75, places=2, msg="the file reads split by each file's size in the context")
+        kinds = {row["kind"]: row["tokens"] for row in out["kinds"]}
+        self.assertAlmostEqual(files["/app/big.py"]["tokens"] + files["/app/small.py"]["tokens"], kinds["file reads"], delta=1)
+
+    def test_prior_shares_come_from_the_history_stored_one_window_ago(self):
+        week_ago = self.lens.local_day(time.time() - 7 * 86400)
+        history = constants.LOG_DIR / self.lens.SHARE_HISTORY_NAME
+        history.parent.mkdir(parents=True, exist_ok=True)
+        history.write_text(json.dumps({"per_day": {week_ago: {"floor": 0.6, "file reads": 0.2}}}))
+        path = constants.TRANSCRIPT_ROOT / "-proj" / "attr.jsonl"
+        self.write(path, [self.prompt(0), self.step("attr-1", 1, 0), self.tool_result(2), self.step("attr-2", 3, 300)])
+        out = self.lens.build(7)["attribution"]
+        self.assertEqual(out["prior"], {"day": week_ago, "shares": {"floor": 0.6, "file reads": 0.2}})
+        stored = json.loads(history.read_text())["per_day"]
+        self.assertIn(self.lens.local_day(time.time()), stored, "today's shares are stored for next week's comparison")
+        self.assertAlmostEqual(stored[self.lens.local_day(time.time())]["floor"], 1 / 3, places=3)
 
     def test_spikes_are_sessions_far_above_the_median_reread_per_prompt(self):
         self.session("a", [1, 5], [2, 6])
