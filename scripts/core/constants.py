@@ -15,6 +15,7 @@ PLUGIN_ROOT = Path(__file__).resolve().parents[2]
 # if the pointer is stale, they fall back to ~/.claude/kiasi.
 PLUGIN_NAME = "kiasi"
 HOME_DIR = Path.home() / ".claude" / PLUGIN_NAME
+CLAUDE_CONFIG_FILE = Path.home() / ".claude.json"  # Claude Code's own config; reports/lens.py reads the account's billing type from it
 DATA_DIR_POINTER = HOME_DIR / "data-dir"
 PLUGIN_ROOT_POINTER = HOME_DIR / "plugin-root"
 DASHBOARD_LAUNCHER = HOME_DIR / "dashboard-launcher.py"
@@ -74,6 +75,12 @@ BUDGET_FILE = LOG_DIR / "budget.json"
 HISTORY_FILE = LOG_DIR / "history.json"
 # What Kiasi avoided per day, merged on each lens.py build the same way; the Overview's all-time avoided figure is its sum.
 SAVINGS_FILE = LOG_DIR / "savings.json"
+RECEIPTS_FILE = LOG_DIR / "receipts.jsonl"  # one session receipt a line, newest last
+RECEIPTS_KEEP = 200
+DIGEST_FILE = LOG_DIR / "digest.json"  # when the weekly digest was last shown
+DIGEST_DAYS = 7
+DIGEST_MIN_DAYS = 7  # report days needed before a digest is worth showing
+LIMIT_PACE_SLACK = 5  # percentage points either side of the window's elapsed share that still count as on pace
 TRANSCRIPT_ROOT = Path.home() / ".claude" / "projects"
 
 TRANSCRIPT_TAIL_BYTES = 400_000
@@ -327,6 +334,7 @@ SEARCH_HIT_LINES = 5
 LENS_FILE = LOG_DIR / "lens.json.gz"  # gzipped; the dashboard server sends it as is with Content-Encoding: gzip
 LENS_MAX_ACTIONS = 2000
 LENS_MAX_SESSIONS = 60
+WRAPPED_DAYS = 30  # the month card covers the last 30 days of the per-day history
 LENS_SERIES_POINTS = 240
 LENS_COMPACT_JOIN_SECONDS = 180
 LENS_STEP_BUCKETS = ((1, 1), (2, 5), (6, 10), (11, 20), (21, 29), (30, 59), (60, None))
@@ -341,6 +349,19 @@ LENS_HIT_TARGET = 0.7  # share of input read from cache; 70%+ is the usual bar f
 # A miss writes what would have been read, so its extra cost in re-read tokens is tokens * (write - read) / read.
 CACHE_WRITE_PRICE = 1.25
 CACHE_READ_PRICE = 0.1
+# Public Claude API prices in dollars per million tokens: input, output, cache write, cache read (reports/lens.py prices the
+# re-read bill with them). Keyed by model id prefix; a dated id such as claude-haiku-4-5-20251001 matches its prefix.
+# Cache reads are 0.1x input except where the price list says otherwise. From platform.claude.com/docs/en/about-claude/pricing.
+MODEL_PRICES = {
+    "claude-fable-5-1": (10.0, 50.0, 12.5, 0.25), "claude-mythos-5-1": (10.0, 50.0, 12.5, 0.25),
+    "claude-fable-5": (10.0, 50.0, 12.5, 1.0), "claude-mythos-5": (10.0, 50.0, 12.5, 1.0),
+    "claude-opus-5-5": (4.0, 20.0, 5.0, 0.2), "claude-opus-5": (5.0, 25.0, 6.25, 0.5),
+    "claude-opus-4-8": (5.0, 25.0, 6.25, 0.5), "claude-opus-4-7": (5.0, 25.0, 6.25, 0.5), "claude-opus-4-6": (5.0, 25.0, 6.25, 0.5),
+    "claude-opus-4-5": (5.0, 25.0, 6.25, 0.5), "claude-opus-4-1": (15.0, 75.0, 18.75, 1.5), "claude-opus-4": (15.0, 75.0, 18.75, 1.5),
+    "claude-sonnet-5-5": (2.0, 10.0, 2.5, 0.2), "claude-sonnet-5": (2.0, 10.0, 2.5, 0.2),
+    "claude-sonnet-4-6": (3.0, 15.0, 3.75, 0.3), "claude-sonnet-4-5": (3.0, 15.0, 3.75, 0.3), "claude-sonnet-4": (3.0, 15.0, 3.75, 0.3),
+    "claude-haiku-5-5": (0.1, 0.5, 0.125, 0.01), "claude-haiku-4-5": (1.0, 5.0, 1.25, 0.1), "claude-haiku-3-5": (0.8, 4.0, 1.0, 0.08),
+}
 # Files whose change rewrites the start of the prompt and so empties the cache. UserPromptSubmit stats them
 # (mtime and size, no reads) and logs which group changed since the session's previous prompt.
 CONFIG_FINGERPRINT = {
@@ -567,6 +588,8 @@ LIMITS_HISTORY_NAME = "limits-history.jsonl"
 FORECAST_MIN_POINTS = 2
 FORECAST_MIN_SPAN_SECONDS = 4 * 3600
 LIMIT_GROUP_SPAN = {"session": 5 * 3600, "weekly": 7 * 86400}
+# The burn line on the Overview draws at most this many readings of the current weekly window.
+RUNWAY_POINTS_MAX = 120
 
 # Session postmortem: deterministic findings ranked by token cost, shown in the
 # dashboard's session detail. A jump is one step growing the context this much.
@@ -610,3 +633,5 @@ TASKFILE_START_SOURCES = ("startup", "clear", "resume")
 LENS_HANDOFF_WINDOW_MINUTES = 60  # a handoff notice is followed by a restored session in the project within this
 LENS_NUDGE_PROMPTS = 3  # a compact or clear nudge is followed by a compaction or a new session within this many prompts
 LENS_EXPERIMENT_MIN_SESSIONS = 10  # sessions needed on each side of a holdout before the comparison counts
+LENS_SPIKE_FACTOR = 4  # a session whose re-read per prompt is this many times the window's median is a spike
+LENS_SPIKE_MIN_TOKENS = 5_000_000  # and only when it re-read at least this much in total

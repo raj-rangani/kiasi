@@ -344,7 +344,7 @@ class TestLensReport(ReportTestCase):
             {"type": "text", "text": "<system-reminder>something unknown</system-reminder>"}]}}
         skills = {"type": "attachment", "timestamp": self.stamp(0), "attachment": {"type": "skill_listing", "content": "z" * 300, "skillCount": 3}}
         self.write(self.project / "s1.jsonl", [reminder, skills, self.prompt(1), self.step("r1", 2, 40000)])
-        [prefix] = self.lens.build(7)["prefix"].values()
+        [prefix] = self.lens.build(7)["prefix"]["projects"].values()
         self.assertEqual(prefix["floor_tokens"], 40100)
         kinds = {p["kind"]: p["chars"] for p in prefix["pieces"]}
         self.assertGreater(kinds["CLAUDE.md files"], 400)
@@ -545,6 +545,89 @@ class TestLensReport(ReportTestCase):
         self.assertEqual(self.lens.since_install(), {"install_day": None, "before": None, "after": None})
 
 
+class TestCostReport(ReportTestCase):
+    def test_model_price_matches_the_longest_prefix_and_dated_ids(self):
+        lens = self.lens
+        self.assertEqual(lens.model_price("claude-haiku-4-5-20251001"), constants.MODEL_PRICES["claude-haiku-4-5"])
+        self.assertEqual(lens.model_price("claude-opus-5-5"), constants.MODEL_PRICES["claude-opus-5-5"], "opus-5-5 is not priced as opus-5")
+        self.assertEqual(lens.model_price("claude-opus-5"), constants.MODEL_PRICES["claude-opus-5"])
+        self.assertEqual(lens.model_price("claude-opus-5-5-20260401"), constants.MODEL_PRICES["claude-opus-5-5"], "a dated suffix matches")
+        self.assertIsNone(lens.model_price("claude-opus-55"), "a prefix match needs a dash boundary")
+        self.assertIsNone(lens.model_price("claude-opus-6"), "an unknown family is unpriced, not guessed")
+        self.assertIsNone(lens.model_price("unknown"))
+
+    def test_cost_report_prices_each_model_and_measures_the_cache_saving(self):
+        def step(request, second, model, read, create=0, inp=0, out=0):
+            entry = self.step(request, second, read, create)
+            entry["message"]["model"] = model
+            entry["message"]["usage"].update({"input_tokens": inp, "output_tokens": out})
+            return entry
+        # 1M cache reads on opus-5-5 ($0.20 read, $4 input) and 1M on fable-5-1 ($0.25 read, $10 input), plus a priced write and output
+        self.write(self.project / "s1.jsonl", [self.prompt(0), step("a", 1, "claude-opus-5-5", 1_000_000, create=100_000, inp=50_000, out=10_000),
+                                               step("b", 2, "claude-fable-5-1", 1_000_000), step("c", 3, "made-up-model", 500_000)])
+        report = self.lens.build(7)
+        cost = report["cost"]
+        by_model = {row["model"]: row for row in cost["models"]}
+        self.assertAlmostEqual(by_model["claude-opus-5-5"]["cost"], 0.2 + 0.5 + 0.2 + 0.2, places=2)
+        self.assertAlmostEqual(by_model["claude-opus-5-5"]["saved"], 3.8, places=2, msg="1M reads at $0.20 against $4 fresh")
+        self.assertAlmostEqual(by_model["claude-fable-5-1"]["saved"], 9.75, places=2)
+        self.assertEqual((by_model["made-up-model"]["priced"], by_model["made-up-model"].get("cost")), (False, None))
+        self.assertEqual(cost["unpriced_tokens"], 500_000)
+        self.assertAlmostEqual(cost["cost"], 1.1 + 0.25, places=2)
+        self.assertAlmostEqual(cost["saved"], 13.55, places=2)
+        self.assertEqual(cost["models"][0]["model"], "claude-opus-5-5", "ranked by cost")
+        [day] = report["per_day"]
+        self.assertEqual((day["cost_usd"], day["cache_saved_usd"]), (1.35, 13.55))
+        self.assertEqual(report["settings"]["holdout_rules"], list(constants.HOLDOUT_RULES))
+
+    def test_billing_plan_comes_from_the_key_variables_and_the_account_record(self):
+        write = lambda d: constants.CLAUDE_CONFIG_FILE.write_text(json.dumps(d))
+        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "", "ANTHROPIC_AUTH_TOKEN": ""}):
+            self.assertEqual(self.lens.billing_plan(), "unknown", "no config file")
+            write({"oauthAccount": {"billingType": "stripe_subscription"}})
+            self.assertEqual(self.lens.billing_plan(), "subscription")
+            write({"hasAvailableSubscription": True})
+            self.assertEqual(self.lens.billing_plan(), "subscription")
+            write({"primaryApiKey": "sk-ant-x", "oauthAccount": {"billingType": "stripe_subscription"}})
+            self.assertEqual(self.lens.billing_plan(), "api", "a stored key means per-token billing")
+            write({"oauthAccount": {}})
+            self.assertEqual(self.lens.billing_plan(), "unknown")
+            self.assertEqual(self.lens.build(7)["settings"]["plan"], "unknown")
+        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-x"}):
+            self.assertEqual(self.lens.billing_plan(), "api")
+
+    def test_subagent_steps_are_priced_too(self):
+        self.write(self.project / "s1.jsonl", [self.prompt(0), self.step("a", 1, 1000)])
+        sub = self.step("x", 2, 2_000_000)
+        sub["message"]["model"] = "claude-haiku-5-5"
+        self.write(self.project / "s1" / "subagents" / "agent-1.jsonl", [sub])
+        cost = self.lens.cost_report(self.lens.scan_sessions(7)[0].usage)
+        self.assertAlmostEqual(cost["saved"], 2 * (0.1 - 0.01), places=3)
+        self.assertEqual(cost["unpriced_tokens"], 1000 + 10 + 90 + 5, "the main step carries no model in this fixture")
+
+
+class TestPaceReport(ReportTestCase):
+    def test_pace_compares_the_last_seven_full_days_with_the_seven_before(self):
+        day = lambda n: time.strftime("%Y-%m-%d", time.localtime(time.time() - n * 86400))
+        row = lambda d, main, sub=0: {"day": d, "main": {"cache_read_input_tokens": main}, "sub": {"cache_read_input_tokens": sub}}
+        constants.BUDGET_FILE.write_text(json.dumps({"per_day": [row(day(10), 700_000), row(day(3), 350_000, 350_000), row(day(1), 700_000), row(day(0), 50_000)]}))
+        pace = self.lens.pace_report(50_000)
+        self.assertEqual((pace["rate"], pace["week"], pace["prior_rate"], pace["prior_week"], pace["today"]), (200_000, 1_400_000, 100_000, 700_000, 50_000))
+        self.assertEqual(len(pace["series"]), 14)
+        self.assertEqual(pace["series"][-1], {"day": day(1), "tokens": 700_000}, "today is partial and left out of the series")
+        constants.BUDGET_FILE.write_text(json.dumps({"per_day": [row(day(2), 100)]}))
+        self.assertIsNone(self.lens.pace_report(0)["prior_week"], "no row in the week before means no comparison")
+        constants.BUDGET_FILE.write_text(json.dumps({"per_day": [row(day(0), 100)]}))
+        self.assertIsNone(self.lens.pace_report(100), "today alone is not a full day")
+
+
+    def test_per_day_rows_carry_main_session_steps_per_prompt(self):
+        self.write(self.project / "s1.jsonl", [self.prompt(0), self.step("a", 1, 1000), self.step("b", 2, 1000), self.prompt(3), self.step("c", 4, 1000)])
+        self.write(self.project / "s1" / "subagents" / "agent-1.jsonl", [self.step("x", 5, 1000)])
+        [day] = self.lens.build(7)["per_day"]
+        self.assertEqual((day["prompts"], day["steps"], day["steps_per_prompt"]), (2, 3, 1.5), "subagent steps are not main-session steps")
+
+
 class TestRuleOutcomes(ReportTestCase):
     def session(self, name, prompts, steps, agents=(), read=100_000):
         """A transcript with typed prompts at the given seconds, steps (one request each) and Agent calls."""
@@ -562,6 +645,50 @@ class TestRuleOutcomes(ReportTestCase):
 
     def prompts(self, sid, seconds):
         return [(s, {"event": "prompt", "session_id": sid}) for s in seconds]
+
+    def test_reread_is_attributed_to_the_floor_then_to_what_sat_in_the_context(self):
+        path = constants.TRANSCRIPT_ROOT / "-proj" / "attr.jsonl"
+        self.write(path, [self.prompt(0), self.step("attr-1", 1, 0), self.tool_result(2), self.step("attr-2", 3, 300)])
+        kinds = {row["kind"]: row["tokens"] for row in self.lens.build(7)["attribution"]["kinds"]}
+        self.assertEqual(kinds["floor"], 100, "the first request's context is the floor, paid first on every later step")
+        self.assertEqual(sum(kinds.values()), 300, "the whole re-read of the later step is accounted for")
+        self.assertGreater(kinds["other tool results"], kinds["assistant text"], "the rest is split by the size of what each kind left in the context")
+
+    def test_file_reads_are_split_by_the_file_behind_each_read_call(self):
+        path = constants.TRANSCRIPT_ROOT / "-proj" / "files.jsonl"
+        read = lambda second, rid, file: {"type": "assistant", "requestId": rid, "timestamp": self.stamp(second),  # noqa: E731
+                                          "message": {"content": [{"type": "tool_use", "id": rid, "name": "Read", "input": {"file_path": file}}]}}
+        result = lambda second, rid, text: {"type": "user", "timestamp": self.stamp(second),  # noqa: E731
+                                            "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": rid, "content": text}]}}
+        self.write(path, [self.prompt(0), self.step("f-1", 1, 0), read(2, "r1", "/app/big.py"), result(3, "r1", "x" * 3000),
+                          read(4, "r2", "/app/small.py"), result(5, "r2", "x" * 1000), self.step("f-2", 6, 500)])
+        out = self.lens.build(7)["attribution"]
+        files = {row["path"]: row for row in out["files"]}
+        self.assertEqual(list(files), ["/app/big.py", "/app/small.py"], "biggest file first")
+        self.assertAlmostEqual(files["/app/big.py"]["share"], 0.75, places=2, msg="the file reads split by each file's size in the context")
+        kinds = {row["kind"]: row["tokens"] for row in out["kinds"]}
+        self.assertAlmostEqual(files["/app/big.py"]["tokens"] + files["/app/small.py"]["tokens"], kinds["file reads"], delta=1)
+
+    def test_prior_shares_come_from_the_history_stored_one_window_ago(self):
+        week_ago = self.lens.local_day(time.time() - 7 * 86400)
+        history = constants.LOG_DIR / self.lens.SHARE_HISTORY_NAME
+        history.parent.mkdir(parents=True, exist_ok=True)
+        history.write_text(json.dumps({"per_day": {week_ago: {"floor": 0.6, "file reads": 0.2}}}))
+        path = constants.TRANSCRIPT_ROOT / "-proj" / "attr.jsonl"
+        self.write(path, [self.prompt(0), self.step("attr-1", 1, 0), self.tool_result(2), self.step("attr-2", 3, 300)])
+        out = self.lens.build(7)["attribution"]
+        self.assertEqual(out["prior"], {"day": week_ago, "shares": {"floor": 0.6, "file reads": 0.2}})
+        stored = json.loads(history.read_text())["per_day"]
+        self.assertIn(self.lens.local_day(time.time()), stored, "today's shares are stored for next week's comparison")
+        self.assertAlmostEqual(stored[self.lens.local_day(time.time())]["floor"], 1 / 3, places=3)
+
+    def test_spikes_are_sessions_far_above_the_median_reread_per_prompt(self):
+        self.session("a", [1, 5], [2, 6])
+        self.session("b", [1, 5], [2, 6])
+        self.session("c", [1, 5], [2, 6], read=3_000_000)
+        spikes = self.lens.build(7)["spikes"]
+        self.assertEqual([row["session"] for row in spikes["rows"]], ["c"])
+        self.assertEqual((spikes["rows"][0]["factor"], spikes["median_per_prompt"]), (30.0, 100_000))
 
     def test_delegation_followed_and_paid_against_the_prediction_split_by_brief(self):
         self.session("a", [1], [2, 3], agents=[4])
@@ -614,12 +741,12 @@ class TestRuleOutcomes(ReportTestCase):
     def test_skips_nudges_and_routing_report_what_held(self):
         at = lambda second, event, **rest: (second, {"event": event, "session_id": "r", **rest})  # noqa: E731
         events = [at(1, "read_skipped", path="a", chars=8000), at(2, "read_skipped", path="b", chars=8000), at(3, "read_retry", path="a"),
-                  at(1, "read_nudge", path="a"), at(5, "read_nudge", path="b"),
+                  at(1, "read_nudge", path="a"), at(2, "read_nudge_repeat", path="a"), at(5, "read_nudge", path="b"),
                   at(1, "routed", tool_name="Bash"), at(2, "routed", tool_name="Bash"), at(4, "route_retry", tool_name="Bash")]
         out = self.outcomes(events, sessions=False)
         self.assertEqual((out["reads"]["fired"], out["reads"]["followed"]), (2, 1))
         self.assertEqual(out["reads"]["effect"], "2k tokens not re-sent; 1 repeated and let through")
-        self.assertEqual((out["read_nudge"]["fired"], out["read_nudge"]["followed"]), (2, 1))
+        self.assertEqual((out["read_nudge"]["fired"], out["read_nudge"]["followed"], out["read_nudge"]["effect"]), (2, 1, "1 read in full anyway"))
         self.assertEqual((out["route"]["fired"], out["route"]["followed"]), (2, 1))
         self.assertNotIn("reread", out)
 
@@ -643,3 +770,22 @@ class TestRuleOutcomes(ReportTestCase):
         timed.append((self.lens.epoch_iso(self.stamp(0)), start("off9", True)[1]))
         self.assertTrue(self.lens.experiment_report(timed, self.lens.scan_sessions(7)[0])["enough"])
         self.assertIsNone(self.lens.experiment_report([], found))
+
+
+class TestBoughtBackAndMonth(KiasiTestCase):
+    def test_blocks_from_history_and_savings(self):
+        from reports import lens
+        today = time.strftime("%Y-%m-%d")
+        constants.HISTORY_FILE.write_text(json.dumps({"per_day": [
+            {"day": today, "prompts": 10, "main": {"cache_read_input_tokens": 300}, "sub": {"cache_read_input_tokens": 100}},
+            {"day": "2020-01-01", "prompts": 99, "main": {"cache_read_input_tokens": 9999}, "sub": {}}]}))
+        constants.SAVINGS_FILE.write_text(json.dumps({"per_day": [{"day": today, "kept_out": 50, "saved": 200}, {"day": "2020-01-01", "kept_out": 7, "saved": 7}]}))
+        rows = [{"short": "abc12345", "project": "-home-user-app", "bill": 400, "day": today}]
+        w = lens.wrapped_report(rows, {"by_tool": [{"tool": "Bash", "count": 2, "kept_out": 50}]}, {"factor": 2.0, "install_day": today}, {"rate": 100})
+        self.assertEqual((w["days"], w["sent"], w["prompts"], w["active_days"]), (constants.WRAPPED_DAYS, 400, 10, 1))
+        self.assertEqual((w["kept_out"], w["saved"], w["bought_back_days"]), (50, 200, 2.0))
+        self.assertEqual(w["busiest"], {"day": today, "sent": 400})
+        self.assertEqual(w["heaviest"]["short"], "abc12345")
+        self.assertEqual(w["top_tool"]["tool"], "Bash")
+        self.assertEqual(lens.bought_back_report({"saved": 200, "kept_out": 50}, {"rate": 100}), {"days": 2.0, "saved": 200, "kept_out": 50, "rate": 100})
+        self.assertIsNone(lens.bought_back_report({"saved": 200}, {}))

@@ -83,6 +83,8 @@ class TestReadNudge(KiasiTestCase):
         self.assertEqual(first["hookSpecificOutput"]["permissionDecision"], "deny")
         self.assertIn("mcp__kiasi__distill", first["hookSpecificOutput"]["permissionDecisionReason"])
         self.assertIsNone(reads.handle_read_check(self.payload(big)), "the repeat goes through")
+        logged = [json.loads(line)["event"] for line in constants.EVENT_LOG.read_text().splitlines()]
+        self.assertEqual(logged[-2:], ["read_nudge", "read_nudge_repeat"], "the repeat is logged so the report can count the nudges that were ignored")
 
     def test_sectioned_reads_small_files_and_images_pass(self):
         big = self.proj / "big.py"

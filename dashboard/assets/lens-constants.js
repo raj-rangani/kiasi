@@ -81,10 +81,10 @@ const KIND_HELP = {
 };
 const MARK_LABELS = { compaction: 'compaction', pruned: 'pruned compaction', check: 're-read check', stop: 'turn stopped' };
 const VIEWS = [
-  ['overview', 'Overview', 'What your sessions paid, how that changed since Kiasi was switched on, and what Kiasi did. <b>Re-read</b> is the whole conversation sent again on every step.'],
-  ['sessions', 'Sessions', 'One chart per session: context at every step, prompts as ticks, compactions as rings. Click a session for its full trajectory and every Kiasi action inside it.'],
-  ['rules', 'Rules', 'Each rule of Kiasi: how often it fired, how many tokens it cut, and its log. The chart shows where the steps go, which is what the turn budget shapes. Cache misses and the cut outputs read back follow the rules.'],
-  ['budget', 'Budget', 'Where the weekly limit goes: every turn re-reads the whole conversation, so the cost is context size times turns.'],
+  ['overview', 'Overview', 'Whether your weekly limit lasts to its reset, and what Kiasi kept out of it. One line to read, one chart of the burn, and the three fixes that matter most.'],
+  ['sessions', 'Sessions', 'Every session this week, costliest first, drawn as the context at each step. Open one for its full trajectory and every Kiasi action inside it.'],
+  ['rules', 'Rules', 'The rules Kiasi applies to your sessions: what each one fired on and how many tokens it cut. Open a rule for its day-by-day detail and its log.'],
+  ['budget', 'Budget', 'Your 5-hour and weekly windows, and where the limit goes: every turn re-reads the whole conversation. The largest tool results are where to cut.'],
   ['storage', 'Storage', 'What Kiasi keeps on disk and for how long. A saved file follows its session: once both are unused for a week it goes to trash, and the trash is emptied a week later.']
 ];
 // Page-level empty states, one per view. `missing` is shown when no report exists yet,
@@ -192,3 +192,6 @@ const EST_TIPS = {
   extra: 'Estimate: tokens written again after each miss, priced against a cache read.',
 };
 const EST_NOTE = 'Figures marked est. come from a formula; everything else is read from your transcripts.';
+const COUNT_UP_MS = 600;      // the bought-back number counts up on render, ease-out; KPI counters sit in the 400-800ms range
+// The Overview's spike line shows only when the spike session started within this many days, so it reads as news and clears on its own.
+const SPIKE_NOTE_DAYS = 2;

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import gzip
 import json
+import re
 import os
 import sys
 import time
@@ -12,6 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core import constants
+from core.events import event_epoch
 from reports.budget import SKIPPED, SYNTHETIC_MODEL, file_lock, first_ask, install_day, project_of, read_lines, reset_skips, skip, transcript_files, window_start, write_atomic
 
 SAVING_KINDS = ("cap", "paste_refused", "delegated", "pruned", "read_skipped")
@@ -28,7 +30,16 @@ RUNAWAY_TOKENS = 200_000
 AGENT_TOOLS = ("Agent", "Task")
 WINDOW_ENV = "CLAUDE_CODE_AUTO_COMPACT_WINDOW"
 PREFIX_PIECES = 12
-PREFIX_KINDS = ("CLAUDE.md files", "plugins and skills", "MCP tool schemas", "agents list", "memory", "other")
+PREFIX_KINDS = ("CLAUDE.md files", "plugins and skills", "MCP tool schemas", "agents list", "memory", "hooks", "other")
+HOOK_TYPES = ("hook_additional_context", "hook_system_message")
+RECORD_ATTACHMENTS = {"prompt_snapshot", "hook_success", "hook_error_during_execution", "deferred_tools_record", "thinking_drop", "credential_org",
+                      "remote_session_change", "auto_mode", "model", "date", "environment", "edited_text_file"}  # transcript bookkeeping, never sent to the model
+HOOK_LABEL_CHARS = 36
+HOOK_ROWS = 8
+FLOOR_HISTORY_NAME = "floor-history.json"
+SHARE_HISTORY_NAME = "share-history.json"
+FILE_ROWS = 8
+STEPS_FIX_MIN = 3.0
 ATTACHMENT_KINDS = {"skill_listing": "plugins and skills", "deferred_tools_delta": "MCP tool schemas", "mcp_instructions_delta": "MCP tool schemas",
                     "agent_listing_delta": "agents list", "instructions": "CLAUDE.md files"}
 REMINDER_HINTS = (("MEMORY.md", "memory"), ("CLAUDE.md", "CLAUDE.md files"), ("skills are available", "plugins and skills"), ("mcp__", "MCP tool schemas"),
@@ -51,7 +62,11 @@ def synthetic_kind(entry, message):
 
 
 def epoch_local(ts):
-    return time.mktime(time.strptime(ts, "%Y-%m-%dT%H:%M:%S"))
+    """An event-log stamp as seconds since the epoch; raises ValueError when unreadable, as the callers skip such records."""
+    t = event_epoch(ts)
+    if not t:
+        raise ValueError(f"unreadable stamp {ts!r}")
+    return t
 
 
 def epoch_iso(ts):
@@ -105,6 +120,61 @@ def piece(kind, chars, name=None):
     return {"kind": kind, "chars": chars, **({"name": name} if name else {})}
 
 
+def hook_text(a):
+    content = a.get("content")
+    if isinstance(content, list):
+        return "\n".join(c if isinstance(c, str) else str((c or {}).get("text", "")) for c in content)
+    return content if isinstance(content, str) else json.dumps(content, ensure_ascii=False) if content else ""
+
+
+def hook_label(a):
+    """A name for one hook's injection: its event and the first words of what it attaches, so the same hook adds up across fires."""
+    first = next((line for line in hook_text(a).splitlines() if line.strip()), "").strip()
+    first = re.sub(r"^[#*>\s-]+|<[^>]*>|\(.*", "", first).strip()
+    first = re.split(r"[:.;,]", first, 1)[0].strip()
+    if len(first) > HOOK_LABEL_CHARS:
+        first = first[:HOOK_LABEL_CHARS].rsplit(" ", 1)[0]
+    return f"{a.get('hookName') or a.get('hookEvent') or 'hook'}: {first or 'untitled'}"
+
+
+NOTICE_NAMES = {"instructions": "CLAUDE.md files attached", "deferred_tools_delta": "tool listing", "agent_listing_delta": "agents listing", "mcp_instructions_delta": "MCP instructions",
+                "skill_listing": "skills listing", "batching_reminder_sent": "batching reminder", "total_tokens_reminder": "tokens-left reminder", "silent_turn_reminder": "silent-turn reminder",
+                "prompt_snapshot": "system prompt", "session_context": "session context", "bash_output_audience_note": "shell output note"}
+
+
+def notice_name(kind):
+    return NOTICE_NAMES.get(kind, str(kind).replace("_", " "))
+
+
+def attachment_label(a):
+    return hook_label(a) if a.get("type") in HOOK_TYPES else f"notice: {notice_name(a.get('type', 'other'))}"
+
+
+def reminder_sources(entry, message):
+    """(label, chars) for each reminder this entry adds to the context: hook output, a Claude Code notice or a system-reminder text block."""
+    if entry.get("type") == "attachment":
+        a = entry.get("attachment") or {}
+        if a.get("type") in RECORD_ATTACHMENTS:
+            return []
+        if a.get("type") in HOOK_TYPES:
+            return [(hook_label(a), len(hook_text(a)))]
+        return [(attachment_label(a), text_size(a.get("content") or a.get("context") or {k: v for k, v in a.items() if k != "type"}))]
+    if entry.get("type") == "user":
+        content = message.get("content")
+        blocks = content if isinstance(content, list) else [{"type": "text", "text": content}] if isinstance(content, str) else []
+        texts = [b.get("text") or "" for b in blocks if isinstance(b, dict) and b.get("type") == "text"]
+        return [(reminder_label(t), len(t)) for t in texts if t.lstrip().startswith("<system-reminder>")]
+    return []
+
+
+def reminder_label(text):
+    first = next((line for line in text.lstrip()[len("<system-reminder>"):].splitlines() if line.strip()), "").strip()
+    first = re.split(r"[:.;,(]", first, 1)[0].strip()
+    if len(first) > HOOK_LABEL_CHARS:
+        first = first[:HOOK_LABEL_CHARS].rsplit(" ", 1)[0]
+    return f"reminder: {first or 'untitled'}"
+
+
 def prefix_pieces(entry):
     """What one pre-first-reply entry adds to the fixed prefix, sized in chars; what cannot be attributed is 'other'."""
     out = []
@@ -117,9 +187,11 @@ def prefix_pieces(entry):
                 out.append(piece("memory" if "memory" in path.lower() else "CLAUDE.md files", text_size(f), path or None))
         elif kind:
             body = {k: v for k, v in a.items() if k not in ("type", "isInitial", "skillCount")}
-            out.append(piece(kind, text_size(body), a.get("type")))
-        elif a.get("type") in ("hook_additional_context", "session_context", "prompt_snapshot"):
-            out.append(piece("other", text_size(a.get("content") or a.get("context") or a.get("systemPrompt")), a.get("hookName") or a.get("type")))
+            out.append(piece(kind, text_size(body), notice_name(a.get("type"))))
+        elif a.get("type") in HOOK_TYPES:
+            out.append(piece("hooks", len(hook_text(a)), hook_label(a)))
+        elif a.get("type") in ("session_context", "prompt_snapshot"):
+            out.append(piece("other", text_size(a.get("content") or a.get("context") or a.get("systemPrompt")), notice_name(a.get("type"))))
     elif entry.get("type") == "user":
         content = (entry.get("message") or {}).get("content")
         blocks = content if isinstance(content, list) else [{"type": "text", "text": content}] if isinstance(content, str) else []
@@ -131,20 +203,44 @@ def prefix_pieces(entry):
     return out
 
 
-def prefix_report(sessions):
+def floor_days(sessions, days):
+    """Per day and project, the median floor of the sessions started that day; merged into FLOOR_HISTORY_FILE so a settings change shows as a step past the window."""
+    seen = defaultdict(lambda: defaultdict(list))
+    for info in sessions.values():
+        if info["new"] and info["contexts"] and info["first_day"]:
+            seen[info["first_day"]][info["project"]].append(info["contexts"][0])
+    fresh = {day: {project: {"floor": int(percentile(v, 0.5)), "sessions": len(v)} for project, v in projects.items()} for day, projects in seen.items()}
+    first_full = local_day(window_start(days) + 86400)
+    path = constants.LOG_DIR / FLOOR_HISTORY_NAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with file_lock(path):
+        try:
+            stored = json.loads(path.read_text()).get("per_day") or {}
+        except (OSError, ValueError, AttributeError):
+            stored = {}
+        for day, projects in fresh.items():
+            if day >= first_full or day not in stored:
+                stored[day] = projects
+        kept = {day: stored[day] for day in sorted(stored)}
+        write_atomic(path, json.dumps({"updated": time.strftime("%Y-%m-%dT%H:%M:%S"), "per_day": kept}, indent=1))
+    return kept
+
+
+def prefix_report(sessions, days=7):
     """Per project: the median floor (first reply's context of sessions started in the window) and the pieces of its latest such session."""
     by_project = defaultdict(list)
     for info in sessions.values():
         if info["new"] and info["pieces"]:
             by_project[info["project"]].append(info)
-    report = {}
+    report = {"projects": {}, "per_day": floor_days(sessions, days)}
     for project, infos in by_project.items():
         infos.sort(key=lambda i: i["steps"][0])
         merged = Counter()
         for p in infos[-1]["pieces"]:
             merged[(p["kind"], p.get("name"))] += p["chars"]
         pieces = [piece(kind, chars, name) for (kind, name), chars in sorted(merged.items(), key=lambda x: -x[1])[:PREFIX_PIECES]]
-        report[project] = {"floor_tokens": int(percentile([i["contexts"][0] for i in infos], 0.5)), "sessions": len(infos), "pieces": pieces}
+        report["projects"][project] = {"floor_tokens": int(percentile([i["contexts"][0] for i in infos], 0.5)), "sessions": len(infos), "pieces": pieces,
+                                       "latest": infos[-1]["session"], "latest_day": infos[-1]["first_day"]}
     return report
 
 
@@ -303,6 +399,195 @@ class Sessions(dict):
         super().__init__()
         self.agent_steps = {}
         self.agent_starts = defaultdict(list)
+        self.usage = defaultdict(lambda: defaultdict(Counter))  # day -> model -> read, write, input, output tokens of main and subagent steps
+        self.day_steps = Counter()  # main-session steps a day
+
+
+USAGE_KEYS = {"read": "cache_read_input_tokens", "write": "cache_creation_input_tokens", "input": "input_tokens", "output": "output_tokens"}
+
+
+def add_usage(sessions, day, message, usage):
+    counter = sessions.usage[day][message.get("model") or "unknown"]
+    for key, field in USAGE_KEYS.items():
+        counter[key] += usage.get(field, 0) or 0
+
+
+RESULT_KINDS = {"Read": "file reads", "Bash": "shell output", "Grep": "search results", "Glob": "search results", "Agent": "subagent results", "Task": "subagent results",
+                "WebFetch": "web pages", "WebSearch": "web pages", "Edit": "edits", "Write": "edits", "MultiEdit": "edits", "NotebookEdit": "edits"}
+
+
+def result_kind(name):
+    if name.startswith("mcp__kiasi__"):
+        return "kiasi tool results"
+    if name.startswith("mcp__"):
+        return "MCP tool results"
+    return RESULT_KINDS.get(name, "other tool results")
+
+
+def add_live(live, names, entry, message, hooks=None, files=None):
+    """Size what this entry leaves in the context for every later step, by kind, in chars; hooks gets the reminders by their source, files the reads by path."""
+    hooks = hooks if hooks is not None else Counter()
+    files = files if files is not None else Counter()
+    content = message.get("content")
+    blocks = content if isinstance(content, list) else [{"type": "text", "text": content}] if isinstance(content, str) else []
+    if entry.get("type") == "assistant" and message.get("model") != SYNTHETIC_MODEL:
+        for b in blocks:
+            if not isinstance(b, dict):
+                continue
+            if b.get("type") == "tool_use":
+                names[b.get("id")] = str(b.get("name", ""))
+                if b.get("name") == "Read" and isinstance(b.get("input"), dict) and b["input"].get("file_path"):
+                    names[("path", b.get("id"))] = str(b["input"]["file_path"])
+                live["tool calls"] += text_size(b.get("input"))
+            elif b.get("type") == "text":
+                live["assistant text"] += len(b.get("text") or "")
+    elif entry.get("type") == "user":
+        for b in blocks:
+            if not isinstance(b, dict):
+                continue
+            if b.get("type") == "tool_result":
+                live[result_kind(names.get(b.get("tool_use_id"), ""))] += text_size(b.get("content"))
+                path = names.get(("path", b.get("tool_use_id")))
+                if path:
+                    files[path] += text_size(b.get("content"))
+            elif b.get("type") == "text":
+                text = b.get("text") or ""
+                if not text.lstrip().startswith("<system-reminder>"):
+                    live["prompts and pastes"] += len(text)
+    for label, size in reminder_sources(entry, message):
+        live["system reminders"] += size
+        hooks[label] += size
+
+
+def attribute(info, live, reread, hooks=None, files=None):
+    """Split one step's re-read across what sat in the context: the floor first, then the pieces since the last compaction by size."""
+    if not reread:
+        return
+    floor = min(info["floor"] or 0, reread)
+    info["attrib"]["floor"] += floor
+    rest = reread - floor
+    total = sum(live.values())
+    if rest <= 0:
+        return
+    if not total:
+        info["attrib"]["other"] += rest
+        return
+    for kind, chars in live.items():
+        info["attrib"][kind] += rest * chars / total
+    reminders = rest * live.get("system reminders", 0) / total
+    hook_total = sum((hooks or {}).values())
+    if reminders and hook_total:
+        for label, chars in hooks.items():
+            info["hook_attrib"][label] += reminders * chars / hook_total
+    reads = rest * live.get("file reads", 0) / total
+    file_total = sum((files or {}).values())
+    if reads and file_total:
+        for path, chars in files.items():
+            info["file_attrib"][path] += reads * chars / file_total
+
+
+def attribution_report(sessions, days=7):
+    """Where the window's main-session re-read went, by what sat in the context: sized per step, scaled to the measured bill."""
+    total = Counter()
+    for info in sessions.values():
+        total.update(info.get("attrib") or {})
+    whole = sum(total.values())
+    rows = [{"kind": kind, "tokens": round(v), "share": round(v / whole, 4)} for kind, v in total.most_common() if v >= 1]
+    return {"kinds": rows, "total": round(whole), "hooks": hook_rows(sessions, total.get("system reminders", 0)),
+            "files": file_rows(sessions, total.get("file reads", 0)), "prior": share_history({r["kind"]: r["share"] for r in rows}, days),
+            "note": "Each step's re-read split across what sat in the context: the floor (the first request's context) first, then everything added since the last compaction, by size; subagent steps are not included"}
+
+
+def file_rows(sessions, reads):
+    """The file reads split by path, biggest first: the files whose whole text sat in the context longest."""
+    tokens = Counter()
+    for info in sessions.values():
+        tokens.update(info.get("file_attrib") or {})
+    return [{"path": path, "tokens": round(v), "share": round(v / reads, 4) if reads else 0} for path, v in tokens.most_common(FILE_ROWS) if v >= 1]
+
+
+def share_history(shares, days):
+    """Today's shares stored under SHARE_HISTORY_NAME; returns the shares as they stood one window ago, or None before there is one."""
+    today = local_day(time.time())
+    cutoff = local_day(time.time() - days * 86400)
+    path = constants.LOG_DIR / SHARE_HISTORY_NAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with file_lock(path):
+        try:
+            stored = json.loads(path.read_text()).get("per_day") or {}
+        except (OSError, ValueError, AttributeError):
+            stored = {}
+        if shares:
+            stored[today] = shares
+        kept = {day: stored[day] for day in sorted(stored)[-(days * 4):]}
+        write_atomic(path, json.dumps({"updated": time.strftime("%Y-%m-%dT%H:%M:%S"), "per_day": kept}, indent=1))
+    old = [day for day in kept if day <= cutoff]
+    return {"day": old[-1], "shares": kept[old[-1]]} if old else None
+
+
+def hook_rows(sessions, reminders):
+    """The system reminders split by the hook or notice that attached them, biggest first, with how often each fired."""
+    tokens, fires, chars = Counter(), Counter(), Counter()
+    for info in sessions.values():
+        tokens.update(info.get("hook_attrib") or {})
+        fires.update(info.get("hook_fires") or {})
+        chars.update(info.get("hook_chars") or {})
+    rows = [{"label": label, "tokens": round(v), "share": round(v / reminders, 4) if reminders else 0, "fires": fires.get(label, 0),
+             "chars_per_fire": round(chars.get(label, 0) / fires[label]) if fires.get(label) else None}
+            for label, v in tokens.most_common(HOOK_ROWS) if v >= 1]
+    return rows
+
+
+def spike_report(sessions):
+    """Sessions whose re-read per prompt ran far above the window's median: the runaway runs that use a limit up."""
+    rated = [(info, info["reread"] / len(info["prompts"])) for info in sessions.values() if len(info["prompts"]) >= 2]
+    median = percentile([rate for _, rate in rated], 0.5) if len(rated) >= 3 else None
+    rows = []
+    for info, rate in rated:
+        if median and rate >= constants.LENS_SPIKE_FACTOR * median and info["reread"] >= constants.LENS_SPIKE_MIN_TOKENS:
+            rows.append({"session": info["session"], "project": info["project"], "day": local_day(info["steps"][0]), "prompts": len(info["prompts"]), "steps": len(info["steps"]),
+                         "reread": info["reread"], "per_prompt": int(rate), "factor": round(rate / median, 1), "peak": max(info["contexts"])})
+    return {"rows": sorted(rows, key=lambda r: -r["reread"]), "median_per_prompt": int(median) if median else None, "factor": constants.LENS_SPIKE_FACTOR,
+            "min_tokens": constants.LENS_SPIKE_MIN_TOKENS, "note": "sessions with two or more prompts whose re-read per prompt is at least the factor times the window's median"}
+
+
+def model_price(model):
+    """The price row of a model id, matched by its longest known prefix; None for a model not in the table."""
+    best = max((prefix for prefix in constants.MODEL_PRICES if model == prefix or model.startswith(prefix + "-")), key=len, default=None)
+    return constants.MODEL_PRICES[best] if best else None
+
+
+def cost_report(usage):
+    """What the window's usage would cost at public API rates, per model and per day, and what the cache saved.
+
+    The saving is measured: every cache-read token is priced at its model's read rate against the input rate
+    it would have cost fresh. It is not the estimate the dashboard once showed for tokens kept out of context."""
+    models, per_day = defaultdict(Counter), defaultdict(lambda: Counter())
+    unpriced = Counter()
+    for day, by_model in usage.items():
+        for model, tokens in by_model.items():
+            price = model_price(model)
+            if price is None:
+                unpriced.update(tokens)
+                models[model].update(tokens)
+                continue
+            in_price, out_price, write_price, read_price = price
+            cost = (tokens["input"] * in_price + tokens["write"] * write_price + tokens["read"] * read_price + tokens["output"] * out_price) / 1e6
+            saved = tokens["read"] * (in_price - read_price) / 1e6
+            models[model].update(tokens)
+            models[model]["cost"] += cost
+            models[model]["saved"] += saved
+            per_day[day]["cost"] += cost
+            per_day[day]["saved"] += saved
+    rows = [{"model": model, "priced": model_price(model) is not None, **{k: int(v) if k in USAGE_KEYS else round(v, 2) for k, v in tokens.items()}}
+            for model, tokens in models.items()]
+    rows.sort(key=lambda r: (-r.get("cost", 0), -r["read"]))
+    cost = sum(r.get("cost", 0) for r in rows)
+    saved = sum(r.get("saved", 0) for r in rows)
+    return {"cost": round(cost, 2), "saved": round(saved, 2), "saved_share": round(saved / (cost + saved), 4) if cost + saved else None,
+            "models": rows, "unpriced_tokens": sum(unpriced.values()),
+            "per_day": {day: {k: round(v, 2) for k, v in row.items()} for day, row in sorted(per_day.items())},
+            "note": "public API rates per model; shown on the dashboard only when the account is billed through the API"}
 
 
 def scan_sessions(days):
@@ -313,11 +598,26 @@ def scan_sessions(days):
     bill = Counter()
     main_bill, prompts = Counter(), Counter()
     for path in main:
-        info = {"session": Path(path).stem, "project": project_of(path), "steps": [], "contexts": [], "prompts": [], "reread": 0, "recalls": [], "new": None, "pieces": [], "partial": False, "first_day": None, "agents": [], "synthetic": 0, "synthetic_kinds": Counter()}
+        info = {"session": Path(path).stem, "project": project_of(path), "steps": [], "contexts": [], "prompts": [], "reread": 0, "recalls": [], "new": None, "pieces": [], "partial": False, "first_day": None, "agents": [], "synthetic": 0, "synthetic_kinds": Counter(),
+                "floor": None, "attrib": Counter(), "hook_attrib": Counter(), "hook_fires": Counter(), "hook_chars": Counter(), "file_attrib": Counter()}
         asked, searches = set(), set()
+        names, live, hooks, files = {}, Counter(), Counter(), Counter()
         for entry, usage in usage_entries(path):
             t = epoch_iso(entry["timestamp"])
             message = entry.get("message") or {}
+            if entry.get("isCompactSummary"):
+                live, hooks, files = Counter({"compaction summary": text_size(message.get("content"))}), Counter(), Counter()
+            elif usage:
+                if info["floor"] is None:
+                    info["floor"] = sum(usage.get(k, 0) for k in CONTEXT_KEYS)
+                elif local_day(t) >= first_day:
+                    attribute(info, live, usage.get("cache_read_input_tokens", 0), hooks, files)
+            if info["floor"] is not None and not entry.get("isCompactSummary"):
+                add_live(live, names, entry, message, hooks, files)
+            if info["floor"] is not None and local_day(t) >= first_day:
+                for label, size in reminder_sources(entry, message):
+                    info["hook_fires"][label] += 1
+                    info["hook_chars"][label] += size
             if entry.get("type") == "assistant":
                 info["recalls"].extend((t, text) for text in recall_texts(message))
                 searches |= search_ids(message)
@@ -346,6 +646,8 @@ def scan_sessions(days):
                 info["reread"] += usage.get("cache_read_input_tokens", 0)
                 bill[day] += usage.get("cache_read_input_tokens", 0)
                 main_bill[day] += usage.get("cache_read_input_tokens", 0)
+                sessions.day_steps[day] += 1
+                add_usage(sessions, day, message, usage)
             elif entry.get("type") == "user" and is_prompt(entry.get("message") or {}) and first_ask(entry, asked) and day >= first_day:
                 info["prompts"].append(t)
                 prompts[day] += 1
@@ -363,6 +665,7 @@ def scan_sessions(days):
                 if local_day(t) < first_day:
                     continue
                 bill[local_day(t)] += usage.get("cache_read_input_tokens", 0)
+                add_usage(sessions, local_day(t), entry.get("message") or {}, usage)
                 sessions.agent_steps.setdefault(agent, []).append(t)
         if agent in sessions.agent_steps:
             sessions.agent_steps[agent].sort()
@@ -406,7 +709,7 @@ def problem_rows(events):
         row = found.setdefault(kind, {"kind": kind, "explanation": PROBLEM_KINDS.get(kind, "Kiasi worked around a failure of this kind."), "count": 0})
         row["count"] += 1
         detail = record.get("error") or record.get("path") or record.get("settings") or record.get("project") or record.get("hook") or ""
-        row.update({"ts": record.get("ts") or epoch_iso(t), "session": str(record.get("session_id") or "")[:8],
+        row.update({"ts": record["ts"], "session": str(record.get("session_id") or "")[:8],
                     "message": detail if isinstance(detail, str) else json.dumps(detail, ensure_ascii=False),
                     "path": str(record.get("path") or "")})
     return sorted(found.values(), key=lambda row: (-row["count"], row["kind"]))
@@ -757,6 +1060,76 @@ def period_metrics(rows):
     }
 
 
+def billing_plan():
+    """"api" when Claude Code is billed per token, "subscription" for a Pro, Max, Team or Enterprise seat, else "unknown".
+
+    From the key variables Claude Code honours and the account record it keeps in ~/.claude.json; no token is read."""
+    if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"):
+        return "api"
+    try:
+        config = json.loads(constants.CLAUDE_CONFIG_FILE.read_text())
+    except (OSError, ValueError):
+        return "unknown"
+    if config.get("primaryApiKey"):
+        return "api"
+    billing = (config.get("oauthAccount") or {}).get("billingType") or ""
+    return "subscription" if "subscription" in billing or config.get("hasAvailableSubscription") else "unknown"
+
+
+def pace_report(today_tokens):
+    """Re-read tokens a day over the 7 full days before today against the 7 before those, from the day history budget.py keeps.
+
+    A day with no work counts as zero: the pace is what a weekly limit sees, not the mean of busy days. None until a full day is known."""
+    tokens = {}
+    for row in history_rows():
+        tokens[row["day"]] = sum((row.get(side) or {}).get("cache_read_input_tokens", 0) for side in ("main", "sub"))
+    day = lambda n: local_day(time.time() - n * 86400)
+    last = [tokens.get(day(n), 0) for n in range(1, 8)]
+    prior = [tokens.get(day(n), 0) for n in range(8, 15)]
+    if not any(day(n) in tokens for n in range(1, 8)):
+        return None
+    has_prior = any(day(n) in tokens for n in range(8, 15))
+    return {"rate": int(sum(last) / 7), "week": sum(last), "prior_rate": int(sum(prior) / 7) if has_prior else None,
+            "prior_week": sum(prior) if has_prior else None, "today": today_tokens,
+            "series": [{"day": day(n), "tokens": tokens.get(day(n), 0)} for n in range(14, 0, -1)],
+            "note": "the 7 full days before today against the 7 before those; days without work count as zero"}
+
+
+def bought_back_report(totals, pace):
+    """Days of the weekly limit the avoided re-reads amount to at this week's daily rate, from core.digest."""
+    from core import digest
+    days = digest.bought_back(totals.get("saved"), (pace or {}).get("rate"))
+    return {"days": days, "saved": totals.get("saved", 0), "kept_out": totals.get("kept_out", 0), "rate": (pace or {}).get("rate")} if days is not None else None
+
+
+def savings_rows():
+    try:
+        return json.loads(constants.SAVINGS_FILE.read_text()).get("per_day") or []
+    except (OSError, ValueError, AttributeError):
+        return []
+
+
+def wrapped_report(session_rows, caps, since, pace, days=constants.WRAPPED_DAYS):
+    """The month card: the last WRAPPED_DAYS days from the per-day history and savings, plus the window's heaviest session and most-cut tool."""
+    first = local_day(time.time() - (days - 1) * 86400)
+    hist = [r for r in history_rows() if r.get("day", "") >= first]
+    sent = {r["day"]: sum((r.get(side) or {}).get("cache_read_input_tokens", 0) for side in ("main", "sub")) for r in hist}
+    prompts = sum(int(r.get("prompts") or 0) for r in hist)
+    saves = [r for r in savings_rows() if r.get("day", "") >= first]
+    kept = sum(r.get("kept_out", 0) for r in saves)
+    saved = sum(r.get("saved", 0) for r in saves)
+    busiest = max(sent, key=sent.get) if sent else None
+    top_tool = (caps.get("by_tool") or [{}])[0] if caps else {}
+    heaviest = session_rows[0] if session_rows else None
+    from core import digest
+    return {"days": days, "first_day": first, "active_days": len([d for d, v in sent.items() if v]), "sent": sum(sent.values()), "prompts": prompts,
+            "kept_out": kept, "saved": saved, "bought_back_days": digest.bought_back(saved, (pace or {}).get("rate")),
+            "busiest": {"day": busiest, "sent": sent[busiest]} if busiest else None,
+            "factor": (since or {}).get("factor"), "install_day": (since or {}).get("install_day"),
+            "heaviest": {"short": heaviest["short"], "project": heaviest["project"], "bill": heaviest["bill"], "day": heaviest["day"]} if heaviest else None,
+            "top_tool": {"tool": top_tool.get("tool") or top_tool.get("name") or top_tool.get("label"), "count": top_tool.get("count"), "kept_out": top_tool.get("kept_out")} if top_tool else None}
+
+
 def history_rows():
     """Per-day rows from HISTORY_FILE, which keeps every day budget.py ever built; budget.json's window when there is none yet."""
     for path in (constants.HISTORY_FILE, constants.BUDGET_FILE):
@@ -997,17 +1370,23 @@ def rule_outcomes(events, sessions, logged=None):
         out["turn"] = outcome(len(warns), ok, f"mean {mean_of(warns):.1f} steps after the warning", f"the turn ended within {constants.LENS_COMPLY_STEPS} steps after the warning, the rule used for pauses")
     restores = [(t, record.get("session_id", "")) for t, record in events if record.get("event") == "session_start" and record.get("taskfile")]
     if handoffs:
-        done, first, notice = 0, [], []
+        done, instead, first, notice = 0, 0, [], []
         for t, sid, record in handoffs:
             project = (sessions.get(sid) or {}).get("project")
+            hit = False
             for w, other in restores:
                 info = sessions.get(other)
                 if t < w <= t + window and other != sid and info and project and info["project"] == project:
                     done += 1
+                    hit = True
                     first.append(info["contexts"][0])
                     notice.append(record.get("context_tokens", 0))
                     break
+            if not hit and any(t < w <= t + window for w, _ in by[sid]["compact"]):
+                instead += 1
         effect = f"restored sessions started at a median {figure(percentile(first, 0.5))} against {figure(percentile(notice, 0.5))} at the notice" if first else "no restored session yet"
+        if instead:
+            effect += f"; {instead} compacted within the hour instead"
         out["handoff"] = outcome(len(handoffs), done, effect, f"a session_start that restored the task file in the same project within {constants.LENS_HANDOFF_WINDOW_MINUTES} minutes")
 
     def moved_on(t, sid):
@@ -1033,8 +1412,9 @@ def rule_outcomes(events, sessions, logged=None):
         out["reads"] = outcome(len(skips), len(held), f"{figure(cut)} tokens not re-sent; {len(skips) - len(held)} repeated and let through", "a skipped read counts as followed unless the same path was read again")
     nudged = [(t, r) for t, r in events if r.get("event") == "read_nudge"]
     if nudged:
-        yes = sum(1 for t, r in nudged if any(w > t for w, _ in by[r.get("session_id", "")]["read_retry"]))
-        out["read_nudge"] = outcome(len(nudged), yes, f"{yes} followed by a repeated read of a skipped file", "a read_retry later in the same session")
+        repeats = [(t, r) for t, r in events if r.get("event") == "read_nudge_repeat"]
+        ignored = sum(1 for t, r in nudged if any(w > t and rr.get("path") == r.get("path") and rr.get("session_id") == r.get("session_id") for w, rr in repeats))
+        out["read_nudge"] = outcome(len(nudged), len(nudged) - ignored, f"{ignored} read in full anyway", "a nudged read counts as followed unless the same file was then read whole")
     routed = [(t, r) for t, r in events if r.get("event") == "route_retry"]
     sent = [(t, r) for t, r in events if r.get("event") == "routed"]
     if sent:
@@ -1130,6 +1510,7 @@ def build(days):
         miss_tokens[local_day(miss["t"])] += miss["tokens"]
     constants.LOG_DIR.mkdir(parents=True, exist_ok=True)
     all_time = merge_savings(actions, days)
+    cost = cost_report(sessions.usage)
     report = {
         "generated": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "days": days,
@@ -1152,15 +1533,23 @@ def build(days):
         **({"experiment": experiment} if experiment else {}),
         "since": since_install(),
         "all_time": all_time,
+        "cost": cost,
+        "pace": pace_report(bill.get(local_day(time.time()), 0)),
+        "bought_back": None,
+        "wrapped": None,
+        "attribution": attribution_report(sessions, days),
+        "spikes": spike_report(sessions),
         "per_day": [{"day": day, "paid": bill.get(day, 0), "prompts": prompts.get(day, 0), "reread_per_prompt": int(main_bill.get(day, 0) / prompts[day]) if prompts.get(day) else None,
+                     "steps": sessions.day_steps.get(day, 0), "steps_per_prompt": round(sessions.day_steps.get(day, 0) / prompts[day], 1) if prompts.get(day) else None,
                      "sessions": len(startups.get(day, [])), "startup": int(sum(startups[day]) / len(startups[day])) if startups.get(day) else None,
                      "kinds": dict(kind_counts.get(day, {})),
                      "cache_misses": dict(misses.get(day, {})), "cache_miss_tokens": miss_tokens.get(day, 0),
                      "hit_rate": round(cache_days[day]["read"] / cache_days[day]["input"], 4) if cache_days.get(day, {}).get("input") else None,
+                     "cost_usd": cost["per_day"].get(day, {}).get("cost"), "cache_saved_usd": cost["per_day"].get(day, {}).get("saved"),
                      **{k: v for k, v in per_day[day].items() if v}} for day in days_seen],
         "sessions": session_rows,
         "window": window_in_effect(),
-        "prefix": prefix_report(sessions),
+        "prefix": prefix_report(sessions, days),
         "steps_hist": step_histogram(sessions),
         "caps": cap_summary(actions),
         "recall": recall_rows(events, sessions),
@@ -1172,10 +1561,13 @@ def build(days):
         "pastes": list(reversed(pastes)),
         "budget_rows": list(reversed(budget_rows)),
         "actions": list(reversed(actions))[: constants.LENS_MAX_ACTIONS],
-        "settings": {"warn_tokens": constants.CONTEXT_WARN_TOKENS, "hard_tokens": constants.CONTEXT_HARD_TOKENS, "turn_warn_steps": constants.turn_warn_steps(),
+        "settings": {"plan": billing_plan(), "warn_tokens": constants.CONTEXT_WARN_TOKENS, "hard_tokens": constants.CONTEXT_HARD_TOKENS, "turn_warn_steps": constants.turn_warn_steps(),
                      "turn_stop_steps": constants.TURN_STOP_STEPS, "turn_budget_mode": constants.TURN_BUDGET_MODE, "comply_steps": constants.LENS_COMPLY_STEPS, "saving_kinds": SAVING_KINDS,
+                     "holdout": constants.HOLDOUT, "holdout_rules": list(constants.HOLDOUT_RULES), "experiment_min_sessions": constants.LENS_EXPERIMENT_MIN_SESSIONS,
                      "delegation_credit": "only when an Agent call is logged as allowed or a subagent transcript starts after it: the log records no outcome"},
     }
+    report["bought_back"] = bought_back_report(report["totals"], report["pace"])
+    report["wrapped"] = wrapped_report(session_rows, report["caps"], report["since"], report["pace"])
     report["skipped"] = dict(SKIPPED)
     constants.LOG_DIR.mkdir(parents=True, exist_ok=True)
     constants.LENS_FILE.parent.mkdir(parents=True, exist_ok=True)

@@ -26,6 +26,7 @@ class KiasiTestCase(unittest.TestCase):
 
     def _patch_data_dir(self, data_dir):
         constants.DATA_DIR = data_dir
+        constants.CLAUDE_CONFIG_FILE = data_dir / "claude.json"
         constants.LOG_DIR = data_dir
         constants.EVENT_LOG = data_dir / "kiasi.jsonl"
         constants.SESSION_DIR = data_dir / "sessions"
@@ -37,6 +38,8 @@ class KiasiTestCase(unittest.TestCase):
         constants.BUDGET_FILE = data_dir / "budget.json"
         constants.HISTORY_FILE = data_dir / "history.json"
         constants.SAVINGS_FILE = data_dir / "savings.json"
+        constants.RECEIPTS_FILE = data_dir / "receipts.jsonl"
+        constants.DIGEST_FILE = data_dir / "digest.json"
         constants.LENS_FILE = data_dir / "lens.json.gz"
         constants.HOME_DIR = data_dir / "home"
         constants.DATA_DIR_POINTER = constants.HOME_DIR / "data-dir"

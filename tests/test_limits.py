@@ -34,6 +34,19 @@ class TestLimitsForecast(KiasiTestCase):
         self.assertEqual(item["severity"], "warning")
         self.assertGreater(item["burn_per_day"], 15)
 
+    def test_the_runway_carries_the_window_readings_thinned(self):
+        now = int(time.time())
+        resets = now + 5 * 86400
+        self.write_reading(40, resets)
+        points = [{"ts": now - 2 * 86400 + i * 600, "used": min(40, i // 8), "resets_at": resets} for i in range(288)]
+        points.insert(0, {"ts": resets - 8 * 86400, "used": 90, "resets_at": resets - 7 * 86400})  # last window: left out
+        self.write_history(points)
+        runway = self.limits_data.get_limits()["runway"]
+        self.assertLessEqual(len(runway["points"]), constants.RUNWAY_POINTS_MAX)
+        self.assertEqual(runway["points"][0], [now - 2 * 86400, 0], "the first reading of the window is kept")
+        self.assertEqual(runway["points"][-1], [points[-1]["ts"], points[-1]["used"]], "and so is the last")
+        self.assertTrue(all(a[0] < b[0] for a, b in zip(runway["points"], runway["points"][1:])), "in time order")
+
     def test_short_or_flat_history_stays_quiet(self):
         now = int(time.time())
         resets = now + 5 * 86400
@@ -135,3 +148,29 @@ class LimitsLockTest(KiasiTestCase):
             self.assertIsNone(self.statusline.lock_backend())
             with self.statusline.limits_lock(self.tmp):
                 pass
+
+
+class TestClaudeConfigFallback(KiasiTestCase):
+    def setUp(self):
+        super().setUp()
+        import limits_data
+        self.limits_data = limits_data
+
+    def test_claude_code_cached_windows_feed_the_limits_when_no_status_line_wrote(self):
+        constants.CLAUDE_CONFIG_FILE.write_text(json.dumps({"cachedUsageUtilization": {
+            "fetchedAtMs": int(time.time() * 1000) - 60_000,
+            "utilization": {"five_hour": {"utilization": 12, "resets_at": "2026-10-07T09:20:00+00:00"},
+                            "seven_day": {"utilization": 40, "resets_at": "2026-10-12T09:20:00+00:00"},
+                            "seven_day_opus": {"utilization": None}}}}))
+        reading = self.limits_data.get_limits()
+        self.assertEqual((reading["source"], reading["setup"]), ("claude_code", "ready"))
+        self.assertEqual([(item["key"], item["used"]) for item in reading["limits"]], [("five_hour", 12), ("seven_day", 40)])
+
+    def test_a_newer_status_line_reading_wins_over_the_cached_one(self):
+        constants.CLAUDE_CONFIG_FILE.write_text(json.dumps({"cachedUsageUtilization": {
+            "fetchedAtMs": int(time.time() * 1000) - 3_600_000, "utilization": {"seven_day": {"utilization": 40, "resets_at": None}}}}))
+        (constants.DATA_DIR / constants.RATE_LIMITS_NAME).write_text(json.dumps(
+            {"updated": int(time.time()), "rate_limits": {"seven_day": {"used_percentage": 55, "resets_at": None}}}))
+        reading = self.limits_data.get_limits()
+        self.assertEqual(reading["source"], "statusline")
+        self.assertEqual([item["used"] for item in reading["limits"]], [55])

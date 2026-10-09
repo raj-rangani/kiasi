@@ -4,6 +4,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const fmtM = n => n >= 1e6 ? `${(n / 1e6).toFixed(n >= 1e8 ? 0 : 1)} M` : n >= 1000 ? `${Math.round(n / 1000)} k` : String(Math.round(n || 0));
 const fmtK = n => n == null ? '–' : `${Math.round(n / 1000)} k`;
 const pct = x => x == null ? '–' : `${Math.round(x * 100)}%`;
+const fmtUsd = n => n == null ? '–' : n >= 1000 ? `$${Math.round(n).toLocaleString()}` : n >= 100 ? `$${n.toFixed(0)}` : n >= 10 ? `$${n.toFixed(1)}` : `$${n.toFixed(2)}`;
 const label = k => KIND_LABELS[k] || k;
 const stamp = ts => String(ts || '').replace('T', ' ');
 const read = k => { try { return localStorage.getItem(k); } catch { return null; } };
@@ -62,13 +63,30 @@ function untilText(ms) {
   return `${Math.floor(hours / 24)}d ${hours % 24}h`;
 }
 
+// The project name a session card shows: the path with its container directories dropped, so
+// "-var-www-html-kiasi" reads as "kiasi". A session at a container itself keeps that container's name.
+const PROJECT_ROOTS = new Set(['var', 'www', 'html', 'home', 'users', 'srv', 'opt', 'tmp', 'mnt', 'projects', 'code', 'src', 'dev', 'work', 'repos', 'sites', 'htdocs']);
+const PROJECT_NAME_CHARS = 22;
+
+function projectTail(project) {
+  const segs = (project || '').replace(/^-+/, '').split('-').filter(Boolean);
+  let i = 0;
+  while (i < segs.length - 1 && PROJECT_ROOTS.has(segs[i].toLowerCase())) i++;
+  const rest = segs.slice(i);
+  if (!rest.length) return project || '';
+  // Too long: keep whole segments from the end, since the last ones name the project.
+  let keep = rest.length;
+  while (keep > 1 && rest.slice(rest.length - keep).join('-').length > PROJECT_NAME_CHARS) keep--;
+  return (keep < rest.length ? '…' : '') + rest.slice(rest.length - keep).join('-');
+}
+
 const LIMIT_SPAN = { session: 5 * 3600, weekly: 7 * 86400 };
 
 function paceText(used, pace) {
   const gap = used - pace;
-  if (gap > LIMIT_PACE_SLACK) return `${gap} pts ahead of pace`;
-  if (gap < -LIMIT_PACE_SLACK) return `${-gap} pts under pace`;
-  return 'on pace';
+  if (gap > LIMIT_PACE_SLACK) return 'using it faster than the clock runs';
+  if (gap < -LIMIT_PACE_SLACK) return 'using it slower than the clock runs';
+  return 'on pace with the clock';
 }
 
 function limitColumn(item, now, first, stale, updated) {
@@ -86,7 +104,7 @@ function limitColumn(item, now, first, stale, updated) {
     : pace == null ? '' : paceText(used, pace);
   const runOut = item.run_out_at && !expired ? new Date(item.run_out_at * 1000) : null;
   const runOutLine = runOut && resets && runOut < resets && runOut > now && !stale
-    ? ` · at this pace runs out <strong>${esc(runOut.toLocaleString([], WHEN_OPTS))}</strong>, before the reset` : '';
+    ? `<br>at this pace runs out <strong>${esc(runOut.toLocaleString([], WHEN_OPTS))}</strong>, before the reset` : '';
   return `<div class="lim ${tone}${item === first ? ' first' : ''}${stale ? ' old' : ''}" role="group" aria-label="${esc(item.label)}">`
     + `<div class="lim-head"><span>${esc(item.label)}</span>${item === first ? '<span class="lim-first">runs out first</span>' : ''}</div>`
     + `<div class="lim-value">${expired ? 'new' : `${used}%`}<small>used</small></div>`
@@ -95,6 +113,8 @@ function limitColumn(item, now, first, stale, updated) {
 }
 
 function renderLimits(l) {
+  window.limitsReading = l;
+  if (typeof renderRunway === 'function') renderRunway(l);
   const el = $('#limits');
   const items = (l && l.limits || []).filter(item => item.used != null);
   if (!items.length) {
@@ -186,7 +206,7 @@ function dayLine(counts, days, install) {
   const dots = values.map((v, i) => `<circle cx="${x(i)}" cy="${y(v)}" r="${v && i === peak ? peakDot : dot}"><title>${esc(md(days[i]))}: ${v} fired</title></circle>`).join('');
   const on = install ? days.indexOf(install) : -1;
   const marker = on > 0 ? `<line class="marker" x1="${(on * slot).toFixed(1)}" x2="${(on * slot).toFixed(1)}" y1="0" y2="${floor}"><title>Kiasi switched on ${esc(md(install))}</title></line>` : '';
-  const svg = `<svg class="day-line" viewBox="0 0 ${width} ${height}" role="img" aria-label="Fires per day, ${esc(md(days[0]))} to ${esc(md(days[days.length - 1]))}"><line class="base" x1="0" x2="${width}" y1="${floor}" y2="${floor}"/>${marker}<polygon points="${x(0)},${floor} ${points} ${x(values.length - 1)},${floor}"/><polyline points="${points}"/>${dots}</svg>`;
+  const svg = `<svg class="day-line" viewBox="0 0 ${width} ${height}" role="img" aria-label="Fires per day, ${esc(md(days[0]))} to ${esc(md(days[days.length - 1]))}"><line class="base" x1="0" x2="${width}" y1="${floor}" y2="${floor}"/>${marker}<polygon points="${x(0)},${floor} ${points} ${x(values.length - 1)},${floor}"/><polyline pathLength="1" points="${points}"/>${dots}</svg>`;
   return `${svg}<span class="cells counts" style="--n:${days.length}">${values.map((v, i) => `<i class="${v ? '' : 'nil'}" data-day="${esc(days[i].slice(8))}" title="${esc(md(days[i]))}: ${v} fired">${v}</i>`).join('')}</span>`;
 }
 

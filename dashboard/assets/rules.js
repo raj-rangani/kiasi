@@ -2,31 +2,17 @@
 const root = document.querySelector('[data-view="rules"]');
 const $ = s => root.querySelector(s);
 const P = s => document.querySelector('#panel-content').querySelector(s);
-function renderSteps(d) {
-  const hist = d.steps_hist;
-  const warn = d.settings.turn_warn_steps, stop = d.settings.turn_stop_steps;
-  const total = hist.reduce((s, h) => s + h.prompts, 0);
-  const prompts = total || 1;
-  const bill = hist.reduce((s, h) => s + h.bill, 0) || 1;
-  const top = Math.max(...hist.map(h => Math.max(h.prompts / prompts, h.bill / bill))) || 1;
-  const bar = (cls, share, value) => `<span class="sb-bar ${cls}"><span class="track"><i style="width:${(share / top * 100).toFixed(1)}%"></i></span><b>${value}</b><small>${pct(share)}</small></span>`;
-  const row = h => `<div class="sb-row${h.low >= stop ? ' bad' : h.low >= warn ? ' warn' : ''}"><span class="sb-band">${esc(h.label)}</span>
-      ${bar('prompts', h.prompts / prompts, h.prompts.toLocaleString())}${bar('bill', h.bill / bill, fmtM(h.bill))}
-      <span class="sb-each">${h.prompts ? fmtM(h.bill / h.prompts) : '–'}</span></div>`;
-  $('#steps-chart').innerHTML = `<div class="sb-head"><span>steps</span><span>prompts with a step · share of ${total.toLocaleString()}</span><span>re-read tokens · share of ${fmtM(bill)}</span><span>per prompt</span></div>${hist.map(row).join('')}`;
-  $('#steps-legend').innerHTML = `<span><i class="sbp"></i>prompts</span><span><i class="sbb"></i>re-read tokens</span>${hist.some(h => h.low >= warn && h.low < stop) ? '<span><i class="amber"></i>warned</span>' : ''}<span><i class="red"></i>${stop}+ steps, the turn budget</span><span>both bars are the band's share of the total, on one scale</span>`;
-  const over = hist.filter(h => h.low >= warn);
-  const overPrompts = over.reduce((s, h) => s + h.prompts, 0);
-  const overBill = over.reduce((s, h) => s + h.bill, 0);
-  $('#steps-note').textContent = `A band whose blue bar is longer than its grey bar costs more than its share of prompts. ${overPrompts.toLocaleString()} of ${total.toLocaleString()} prompts ran ${over.length ? over[0].low : stop}+ steps and carry ${pct(overBill / bill)} of the re-read tokens.`;
-}
-
 let openRule = '';
 let openRow = null;
 
 function countOf(d, kind) { return (d.by_kind[kind] || {}).count || 0; }
 function fired(d, rule) { return rule.kinds.reduce((t, k) => t + countOf(d, k), 0); }
 function keptOut(d, rule) { return rule.kinds.reduce((t, k) => t + ((d.by_kind[k] || {}).kept_out || 0), 0); }
+
+// Each fact as its own span: inline with separators on a desktop, one per line on a phone.
+function factItems(text) {
+  return text.split(' · ').map(t => `<span class="fact">${esc(t)}</span>`).join('');
+}
 
 function facts(d, rule) {
   const n = kind => countOf(d, kind);
@@ -62,17 +48,6 @@ function outcomeLines(d, rule) {
   return lines.length ? `<p class="outcome">${lines.join('<br>')}</p>` : '';
 }
 
-function renderExperiment(d) {
-  const e = d.experiment;
-  $('#experiment-sheet').hidden = !e;
-  if (!e) return;
-  const v = (side, key, f) => side[key] == null ? '–' : f(side[key]);
-  const rows = [['sessions', 'sessions', String], ['prompts', 'prompts', String], ['median context', 'median_context', fmtK], ['re-read per prompt', 'reread_per_prompt', fmtM], ['steps per prompt', 'steps_per_prompt', String]]
-    .map(([name, key, f]) => [name, num(v(e.on, key, f)), num(v(e.off, key, f))]);
-  const short = e.enough ? '' : `<p class="hist-note">too few sessions yet: ${e.on.sessions} on, ${e.off.sessions} off of ${e.min_sessions} each</p>`;
-  $('#experiment').innerHTML = `<h3 class="sub">${esc(e.rule)}</h3>${table(['', '#rule on', '#rule off'], rows)}${short}`;
-}
-
 function ruleDays(d) {
   const days = d.per_day.map(p => p.day).slice(-RULE_STRIP_DAYS);
   const perRule = {};
@@ -100,7 +75,7 @@ function renderRules(d) {
       <b class="rl-num fired" data-label="fired">${n.toLocaleString()}</b>
       <b class="rl-num cut${cut ? '' : ' none'}" data-label="tokens cut">${cut ? fmtM(cut) : '–'}</b>
       <div class="rl-days">${days.length ? dayLine(counts, days, install) : ''}</div>
-      <div class="rl-facts"><p class="facts">${esc(facts(d, rule))}</p>${outcomeLines(d, rule)}</div><span class="chev">›</span></div>`;
+      <div class="rl-facts"><p class="facts">${factItems(facts(d, rule))}</p>${outcomeLines(d, rule)}</div><span class="chev">›</span></div>`;
   };
   $('#rules').innerHTML = `<div class="rl-head"><span>rule</span><span class="num">fired · ${d.days || d.per_day.length} days</span><span class="num">tokens cut</span><span class="rl-dayhead"><em>fired per day${span}</em>${dayCellLabels(days)}</span><span>breakdown</span><span></span></div>${RULES.map(row).join('')}`;
   $('#rules').querySelectorAll('.rl-row').forEach(el => {
@@ -212,16 +187,6 @@ function renderDetail(d) {
   finishPanelContent();
 }
 
-function renderProblems(d) {
-  const rows = d.problems || [];
-  $('#problems-sheet').hidden = !rows.length;
-  $('#problems').innerHTML = rows.length ? `<table class="since-table"><thead><tr><th>problem</th><th class="num">count</th><th>last seen</th><th>last message</th></tr></thead><tbody>${rows.map(row => {
-    const at = new Date(row.ts);
-    const seen = isNaN(at) ? row.ts : at.toLocaleString([], WHEN_OPTS);
-    return `<tr><td>${esc(row.kind)}<br><span class="hist-note">${esc(row.explanation)}</span></td><td class="num">${row.count}</td><td>${esc(seen)}${row.session ? ` · ${esc(row.session)}` : ''}</td><td>${esc(row.message || row.path || '–')}</td></tr>`;
-  }).join('')}</tbody></table>` : '';
-}
-
 function select(key, keep) {
   openRule = openRule === key && !keep ? '' : key;
   openRow = null;
@@ -236,9 +201,5 @@ registerView('rules', d => {
   if (wanted && wanted !== openRule && RULES.some(r => r.key === wanted)) { openRule = wanted; openRow = null; }
   renderRules(d);
   renderDetail(d);
-  renderExperiment(d);
-  renderSteps(d);
-  renderTuning(d);
-  renderProblems(d);
 });
 })();

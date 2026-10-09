@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="What the context kiasi did and how many re-read tokens each action kept off the weekly limit.">
 <title>Kiasi</title>
-<link rel="stylesheet" href="assets/budget.css?v=2026100701">
-<link rel="stylesheet" href="assets/lens.css?v=2026100638">
+<link rel="stylesheet" href="assets/budget.css?v=2026100828">
+<link rel="stylesheet" href="assets/lens.css?v=2026100930">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cstyle%3E.s{fill:none;stroke:%231d1a16}@media (prefers-color-scheme:dark){.s{stroke:%23f6f2ea}}%3C/style%3E%3Cpath class='s' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' d='M8 3H4v18h4M16 3h4v18h-4'/%3E%3Ccircle fill='%23f2b632' cx='12' cy='12' r='3.6'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -29,40 +29,24 @@
 
   <main class="view" data-view="overview" hidden>
   <section class="view-empty" hidden></section>
-  <section class="sheet">
-    <div class="sheet-head">
-      <h2><span class="num">01</span>What you paid</h2>
-      <p>Measured from your transcripts. Re-read tokens are the cache reads of main sessions and subagents; the Budget tab splits the same bill by subagents and by project.</p>
+  <section class="week" id="week">
+    <div class="week-head">
+      <div class="lead-col">
+        <p class="lead" id="lead"></p>
+        <p class="lead-sub" id="lead-sub"></p>
+        <p class="lead-actions"><button type="button" class="textbtn" id="month-share" hidden>Share your month</button></p>
+      </div>
+      <div class="ledger" id="facts"></div>
     </div>
-    <div class="kpis" id="stats"></div>
-    <h3 class="block-head">Re-read tokens paid per day</h3>
-    <div class="chart" id="bill-chart"></div>
-    <p class="startup-hint" id="startup-hint" hidden></p>
+    <div class="chart week-chart" id="week-chart"></div>
   </section>
-  <section class="sheet">
-    <div class="sheet-head">
-      <h2><span class="num">02</span>Before and after Kiasi</h2>
-      <p>What your sessions measured before Kiasi was switched on and since. It is an observation, not a controlled test: the work in the two periods differs, and steps include subagent steps.</p>
-    </div>
-    <div id="trend" hidden></div>
-    <div class="since" id="since"></div>
+  <div class="notices" id="notices"><p class="notice" id="spike-note" hidden></p></div>
+  <section class="block" id="fix-block" hidden>
+    <h2 class="block-title">What to cut next<small id="fix-sub"></small></h2>
+    <div class="fix-bar" id="fix-bar" aria-label="Where the re-read went, by kind"></div>
+    <ol class="fixes-list" id="fixes-list"></ol>
+    <p class="fix-steps" id="fix-steps"></p>
   </section>
-  <section class="sheet">
-    <div class="sheet-head">
-      <h2><span class="num">03</span>What Kiasi did</h2>
-      <p>Counts from Kiasi's own log: how often each rule acted and how many tokens it cut. No token saving is credited to a rule here.</p>
-    </div>
-    <div class="measured" id="did"></div>
-    <p class="more-link"><a href="#rules">Each rule day by day, with its log →</a></p>
-  </section>
-  <section class="sheet" id="floor-sheet">
-    <div class="sheet-head">
-      <h2><span class="num">04</span>Context window and floor</h2>
-      <p>The window in effect, sessions that ran past 200k, and what each project loads before the first reply. The floor is re-sent on every step.</p>
-    </div>
-    <div id="floor"></div>
-  </section>
-  <p class="storage-line" id="storage"></p>
   </main>
 
   <main class="view" data-view="sessions" hidden>
@@ -70,20 +54,11 @@
   <section class="sheet">
     <div class="sheet-head">
       <h2><span class="num">01</span>The costliest sessions</h2>
-      <p>Small multiples, sorted by re-read bill. Click one to open it. The dashed and solid lines are the warning and hard limits.</p>
+      <p>Sorted by what they re-sent. Click one to open it. Each card is the context at every step; ticks are prompts, rings compactions, and the dashed and solid lines the warning and hard limits.</p>
     </div>
     <div class="multiples" id="multiples"></div>
     <div class="legend"><span><i class="tick"></i>prompt</span><span><i class="ring"></i>compaction</span><span><i class="ring pruned"></i>pruned compaction</span><span><i class="amber"></i>re-read check</span><span><i class="red"></i>turn stopped</span><span><i class="line"></i>warning</span><span><i class="line warn"></i>hard limit</span></div>
   </section>
-  <section class="sheet">
-    <div class="sheet-head">
-      <h2><span class="num">02</span>All sessions</h2>
-      <p>Every main session in range. Click a row to open it.</p>
-    </div>
-    <div id="sessions"></div>
-    <p class="more" id="sessions-more"></p>
-  </section>
-  
   </main>
 
   <main class="view" data-view="rules" hidden>
@@ -94,44 +69,6 @@
       <p>How often each rule fired, how many tokens it cut, and its fires per day. The line is the rule's fires per day, with the count under each day; each line has its own scale, and the larger dot is its peak day. Click a rule for its detail and log.</p>
     </div>
     <div class="rule-list" id="rules"></div>
-  </section>
-  <section class="sheet" id="experiment-sheet" hidden>
-    <div class="sheet-head">
-      <h2>Experiment</h2>
-      <p>Sessions started with a rule held out (off) against sessions with it on, same window. Read it once both sides have enough sessions.</p>
-    </div>
-    <div id="experiment"></div>
-  </section>
-  <section class="sheet">
-    <div class="sheet-head">
-      <h2><span class="num">02</span>Steps per prompt</h2>
-      <p>For each step band, its share of the prompts next to its share of the re-read tokens, and what one prompt of that length cost. This is what the turn budget shapes.</p>
-    </div>
-    <div class="steps-bars" id="steps-chart"></div>
-    <div class="legend" id="steps-legend"></div>
-    <p class="hist-note" id="steps-note"></p>
-  </section>
-  <section class="sheet">
-    <div class="sheet-head">
-      <h2><span class="num">03</span>Cache</h2>
-      <p>A miss writes the conversation to the cache again at a higher price. The causes worth fixing, by what they cost.</p>
-    </div>
-    <div class="cache-tiles" id="cache-tiles"></div>
-    <div id="cache-causes"></div>
-  </section>
-  <section class="sheet">
-    <div class="sheet-head">
-      <h2><span class="num">04</span>Recall</h2>
-      <p>How often Claude went back to the full text of a cut output. Rarely means the cap could be tighter; often means it cuts too much.</p>
-    </div>
-    <div id="recall"></div>
-  </section>
-  <section class="sheet" id="problems-sheet" hidden>
-    <div class="sheet-head">
-      <h2><span class="num">05</span>Problems</h2>
-      <p>Failures Kiasi worked around instead of stopping. Each one is also on stderr when it happens.</p>
-    </div>
-    <div id="problems"></div>
   </section>
   </main>
 
@@ -148,7 +85,7 @@
   <section class="sheet">
     <div class="sheet-head">
       <h2><span class="num">02</span>What to cut next</h2>
-      <p>The single tool results that cost the most this week, repeats grouped. Click one to open its session.</p>
+      <p>The single tool results that cost the most this week, repeats grouped. Read a file by section, save a fetched page once, cap the rest. Click one to open its session.</p>
     </div>
     <div class="fixes" id="fixes"></div>
   </section>
@@ -181,14 +118,15 @@
       <div class="panel-content" id="panel-content" tabindex="-1"></div>
     </div>
   </aside>
-  <script src="assets/lens-constants.js?v=2026100701"></script>
-<script src="assets/lens-common.js?v=2026100701"></script>
-<script src="assets/lens.js?v=2026100703"></script>
-<script src="assets/sessions.js?v=2026100705"></script>
-<script src="assets/rules.js?v=2026100703"></script>
-<script src="assets/budget.js?v=2026100705"></script>
-<script src="assets/storage.js?v=2026100701"></script>
-<script src="assets/sync.js?v=2026100201"></script>
+  <script src="assets/lens-constants.js?v=2026100829"></script>
+<script src="assets/lens-common.js?v=2026100825"></script>
+<script src="assets/lens.js?v=2026100930"></script>
+<script src="assets/sessions.js?v=2026100823"></script>
+<script src="assets/rules.js?v=2026100823"></script>
+<script src="assets/budget.js?v=2026100823"></script>
+<script src="assets/month.js?v=2026100828"></script>
+<script src="assets/storage.js?v=2026100713"></script>
+<script src="assets/sync.js?v=2026100213"></script>
 <script>startApp();</script>
 </body>
 </html>

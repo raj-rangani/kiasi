@@ -69,6 +69,7 @@ def read_nudge(payload, tool_input, session_id, state):
     if path in nudges:
         nudges.remove(path)
         save_session(session_id, state)
+        log_event({"event": "read_nudge_repeat", "session_id": session_id, "path": path, "chars": stamp[1], "agent_id": payload.get("agent_id")})
         return None
     nudges.append(path)
     save_session(session_id, state)

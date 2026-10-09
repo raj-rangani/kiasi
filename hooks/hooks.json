@@ -97,6 +97,17 @@
           }
         ]
       }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/run.sh\" kiasi.py",
+            "timeout": 20
+          }
+        ]
+      }
     ]
   },
   "modules": [

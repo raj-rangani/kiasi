@@ -13,7 +13,7 @@ import json
 import time
 from datetime import datetime
 
-from core import constants
+from core import constants, digest
 
 
 def _read_json(path):
@@ -81,6 +81,19 @@ def normalize_statusline(data):
     return {"updated": int(data.get("updated") or 0), "source": "statusline", "limits": items}
 
 
+def normalize_claude_config(data):
+    """Claude Code's own cached reading of the limit windows, kept in ~/.claude.json: the fallback when no status line writes rate-limits.json."""
+    cached = (data or {}).get("cachedUsageUtilization") or {}
+    items = []
+    for field, window in (cached.get("utilization") or {}).items():
+        label, group = _window_label(field)
+        if label and isinstance(window, dict) and window.get("utilization") is not None:
+            items.append(_item(field, label, group, window["utilization"], window.get("resets_at")))
+    if not items:
+        return None
+    return {"updated": int((cached.get("fetchedAtMs") or 0) / 1000), "source": "claude_code", "limits": items}
+
+
 def _history_points():
     points = []
     try:
@@ -115,6 +128,20 @@ def _forecast(points, item, now):
             "burn_per_day": round(rate * 86400, 1)}
 
 
+def runway_points(points, runway, now, limit=constants.RUNWAY_POINTS_MAX):
+    """The weekly readings of the current window as [ts, used] pairs for the burn line, thinned to at most
+    `limit` points with the first and last always kept."""
+    if not runway:
+        return []
+    resets = runway["resets_at"]
+    mine = sorted((p for p in points if p.get("key") == "seven_day" and p.get("used") is not None
+                   and resets - constants.LIMIT_GROUP_SPAN["weekly"] <= p.get("ts", 0) <= now), key=lambda p: p["ts"])
+    if len(mine) > limit:
+        step = (len(mine) - 1) / (limit - 1)
+        mine = [mine[round(i * step)] for i in range(limit)]
+    return [[int(p["ts"]), int(p["used"])] for p in mine]
+
+
 def add_forecast(reading):
     points = _history_points()
     now = int(time.time())
@@ -133,7 +160,8 @@ def statusline_installed():
 
 def get_limits():
     readings = [normalize_rate_limits(_read_json(constants.DATA_DIR / constants.RATE_LIMITS_NAME)),
-                normalize_statusline(_read_json(constants.DATA_DIR / constants.LEGACY_LIMITS_NAME))]
+                normalize_statusline(_read_json(constants.DATA_DIR / constants.LEGACY_LIMITS_NAME)),
+                normalize_claude_config(_read_json(constants.CLAUDE_CONFIG_FILE))]
     readings = sorted((r for r in readings if r), key=lambda r: r["updated"], reverse=True)
     if not readings:
         return {"updated": 0, "source": None, "limits": [],
@@ -141,7 +169,11 @@ def get_limits():
     best = readings[0]
     for older in readings[1:]:
         best = _merge(best, older)
-    return add_forecast(dict(best, setup="ready"))
+    reading = add_forecast(dict(best, setup="ready"))
+    reading["runway"] = digest.runway(reading)
+    if reading["runway"]:
+        reading["runway"]["points"] = runway_points(_history_points(), reading["runway"], int(time.time()))
+    return reading
 
 
 def _merge(newer, older):

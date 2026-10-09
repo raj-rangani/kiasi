@@ -24,7 +24,7 @@ function sessionSvg(s, settings, W, H, detailed) {
   if (detailed) svg += gridY(f, y, max, fmtK);
   svg += limitLines(f, y, settings, detailed);
   points.filter(p => p.prompt).forEach(p => { svg += `<line class="ctx-prompt" x1="${x(p.i).toFixed(1)}" x2="${x(p.i).toFixed(1)}" y1="${f.pad.top}" y2="${f.bottom}"/>`; });
-  svg += `<path class="ctx" d="${points.map((p, k) => `${k ? 'L' : 'M'}${x(p.i).toFixed(1)},${y(p.context).toFixed(1)}`).join(' ')}"/>`;
+  svg += `<path class="ctx" pathLength="1" d="${points.map((p, k) => `${k ? 'L' : 'M'}${x(p.i).toFixed(1)},${y(p.context).toFixed(1)}`).join(' ')}"/>`;
   points.forEach(p => {
     const marks = p.marks || [];
     const cls = marks.includes('stop') ? 'ctx-stop' : marks.includes('check') ? 'ctx-check' : marks.includes('pruned') ? 'ctx-pruned' : marks.includes('compaction') ? 'ctx-ring' : detailed ? 'ctx-dot' : '';
@@ -37,15 +37,28 @@ function sessionSvg(s, settings, W, H, detailed) {
   return svg + '</svg>';
 }
 
-
 function renderMultiples(d) {
   const host = $('#multiples');
   const W = 300;
-  host.innerHTML = d.sessions.slice(0, TOP_MULTIPLES).map(s => `<article class="mini ${s.session === selected ? 'selected' : ''}" data-session="${esc(s.session)}">
-    <h3><b>${esc(s.short)}</b><span>${esc(s.day)}</span></h3><div class="proj" title="${esc(s.project)}">${esc(s.project)}</div>${sessionSvg(s, d.settings, W, MINI_HEIGHT, false)}
+  const shown = d.sessions.slice(0, TOP_MULTIPLES);
+  host.innerHTML = shown.map(s => `<article class="mini ${s.session === selected ? 'selected' : ''}" data-session="${esc(s.session)}" title="session ${esc(s.short)} · ${esc(s.project)}">
+    <h3><b>${esc(projectTail(s.project))}</b><span>${esc(s.day)}</span></h3>${sessionSvg(s, d.settings, W, MINI_HEIGHT, false)}
     <dl class="kv"><dt>prompts</dt><dd>${s.prompts}</dd><dt>steps</dt><dd>${s.steps}</dd><dt>peak</dt><dd>${fmtK(s.peak)}</dd><dt>bill</dt><dd>${fmtM(s.bill)}</dd></dl></article>`).join('') || emptyLine('sessions');
   host.querySelectorAll('.mini').forEach(el => el.addEventListener('click', () => select(el.dataset.session)));
   bindTips(host);
+  const legend = host.parentElement && host.parentElement.querySelector('.legend');
+  if (legend) legend.innerHTML = markLegend(shown);
+}
+
+// Only the marks that actually appear in the cards shown, so the legend never explains a symbol that is not on the page.
+function markLegend(sessions) {
+  const has = kind => sessions.some(s => (s.series || []).some(p => (p.marks || []).includes(kind)));
+  return '<span><i class="tick"></i>prompt</span>'
+    + (has('compaction') ? '<span><i class="ring"></i>compaction</span>' : '')
+    + (has('pruned') ? '<span><i class="ring pruned"></i>pruned compaction</span>' : '')
+    + (has('check') ? '<span><i class="amber"></i>re-read check</span>' : '')
+    + (has('stop') ? '<span><i class="red"></i>turn stopped</span>' : '')
+    + '<span><i class="line"></i>warning</span><span><i class="line warn"></i>hard limit</span>';
 }
 
 let openAction = null;
@@ -110,24 +123,6 @@ function renderDetail(d) {
   finishPanelContent();
 }
 
-let showAll = false;
-function renderTable(d) {
-  const all = d.sessions.filter(s => s.steps >= SMALL_SESSION_STEPS || s.session === selected);
-  const rows = showAll ? d.sessions : all.slice(0, SESSION_ROWS);
-  const hit = d.sessions.find(s => s.session === selected);
-  if (hit && !rows.includes(hit)) rows.push(hit);
-  const skipped = (d.totals || {}).synthetic_skipped;
-  $('#sessions-more').innerHTML = (d.sessions.length > rows.length || showAll ? `<a href="#sessions" id="toggle-all">${showAll ? `show the first ${SESSION_ROWS}` : `show all ${d.sessions.length} sessions`}</a>` : '')
-    + (skipped ? `<span class="hist-note"> ${syntheticNote(skipped, (d.totals || {}).synthetic_kinds)}</span>` : '');
-  const toggle = $('#toggle-all');
-  if (toggle) toggle.addEventListener('click', e => { e.preventDefault(); showAll = !showAll; renderTable(d); });
-  const maxBill = Math.max(...rows.map(s => s.bill)) || 1;
-  $('#sessions').innerHTML = `<table><thead><tr><th>session</th><th>project</th><th>day</th><th class="num">steps</th><th class="num">mean ctx</th><th class="num">compactions</th><th class="num">tokens cut</th><th>bill</th></tr></thead><tbody>${rows.map(s => `
-    <tr class="click ${s.session === selected ? 'selected' : ''}" data-session="${esc(s.session)}"><td class="mono">${esc(s.short)}${s.runaway ? ` <span class="badge-runaway" title="peak context ${fmtK(s.peak)}">past 200k · ${fmtK(s.peak)}</span>` : ''}</td><td>${esc(s.project.slice(0, 40))}</td><td class="mono">${esc(s.day)}${s.partial ? `<br><span class="hist-note" title="Counted from ${esc(s.first_day || s.day)}">resumed, earlier part not shown</span>` : ''}</td><td class="num">${s.steps}</td><td class="num${s.mean_context >= d.settings.warn_tokens ? ' warn' : ''}">${fmtK(s.mean_context)}<br><span class="hist-note">med ${fmtK(s.median_context)} · p90 ${fmtK(s.p90_context)}</span></td><td class="num">${s.compactions}</td><td class="num">${s.kept_out ? fmtM(s.kept_out) : ''}</td>
-    <td><div class="fillbar" title="${fmtM(s.bill)}"><i class="${s.mean_context >= d.settings.warn_tokens ? 'warn' : ''}" style="width:${(s.bill / maxBill * 100).toFixed(1)}%"></i></div></td></tr>`).join('')}</tbody></table>`;
-  $('#sessions').querySelectorAll('tr.click').forEach(el => el.addEventListener('click', () => select(el.dataset.session)));
-}
-
 function select(session, keep) {
   selected = selected === session && !keep ? '' : session;
   openAction = null;
@@ -135,7 +130,6 @@ function select(session, keep) {
   setViewParam(selected ? selected.slice(0, 8) : '');
   renderMultiples(data);
   renderDetail(data);
-  renderTable(data);
 }
 
 registerView('sessions', d => {
@@ -144,6 +138,5 @@ registerView('sessions', d => {
   if (wanted && !(selected || '').startsWith(wanted)) selected = (d.sessions.find(s => s.session.startsWith(wanted)) || {}).session || selected;
   renderMultiples(d);
   renderDetail(d);
-  renderTable(d);
 });
 })();
