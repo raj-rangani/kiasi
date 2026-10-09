@@ -9,6 +9,8 @@ Kiasi is a Claude Code plugin that keeps that noise out: fixed rules, on your ma
 
 [**Website**](https://raj-rangani.github.io/kiasi/) · [Benchmark](BENCHMARK.md) · [Settings](docs/settings.md) · [Changelog](CHANGELOG.md) · MIT
 
+<img src="docs/demo.gif" alt="A 116,179-character npm output, then the 2,940 characters Kiasi lets into the context, then the dashboard" width="720">
+
 ## Quick start
 
 In the Claude Code terminal:
