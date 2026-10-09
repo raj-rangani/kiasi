@@ -6,516 +6,444 @@
 <title>Kiasi · Make your Claude Code weekly limit last</title>
 <meta name="description" content="Your Claude Code weekly limit is spent re-reading. Kiasi keeps the noise out of every step, and your own dashboard shows the days it bought back. Local, fixed rules, no model calls.">
 <meta property="og:title" content="Kiasi · Make your Claude Code weekly limit last">
-<meta property="og:description" content="Every step of Claude Code re-sends the whole conversation. Kiasi keeps the noise out, and the next day your own dashboard shows the days of weekly limit it bought back. Local, no model calls.">
+<meta property="og:description" content="Every step of Claude Code re-sends the whole conversation. Kiasi keeps the noise out, and the next day your own dashboard shows the days of weekly limit it bought back.">
 <meta property="og:type" content="website">
+<meta property="og:image" content="https://raj-rangani.github.io/kiasi/demo-poster.jpg">
 <link rel="icon" href="mark.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
 :root {
-  --paper: #f6f2ea;
-  --ink: #1d1a16;
-  --muted: #6b6560;
-  --rule: #d9d2c5;
-  --card: #fbf8f2;
-  --code: #efe9dd;
-  --accent: #f2b632;
-  --accent-ink: #8a5a00;
-  --bad: #b4452f;
-  --good: #2f7a4f;
-  --link: #1f63b5;
-  --term: #1d1a16;
-  --term-ink: #efe9dd;
-  --term-dim: #8f877b;
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --serif: Georgia, "Times New Roman", serif;
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --bg: #0e0d0b; --bg2: #141210; --card: #191714; --card2: #1f1c18; --rule: #2b2823; --rule2: #38342d;
+  --ink: #f3eee4; --ink2: #c9c2b5; --muted: #8f8779; --accent: #f2b632; --accent-ink: #0e0d0b;
+  --good: #6cc28f; --bad: #e0795f; --blue: #6ea1ea;
+  --term: #15120f; --term-ink: #efe9dd; --term-dim: #8a8174;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --display: "Inter Tight", "Inter", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --ease: cubic-bezier(.2,.7,.2,1);
+  --r: 18px;
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --bg: #f7f4ee; --bg2: #f1ede5; --card: #ffffff; --card2: #f6f2ea; --rule: #e6e0d4; --rule2: #d6cfc0;
+  --ink: #1b1813; --ink2: #3b362e; --muted: #6f685d; --accent: #d99a0b; --accent-ink: #1b1813;
+  --good: #2f8f5b; --bad: #c4553a; --blue: #2e63c2;
   color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --paper: #171411; --ink: #efe9dd; --muted: #a39b8f; --rule: #3a342c; --card: #1f1b17;
-    --code: #26211c; --accent-ink: #f2b632; --bad: #e0795f; --good: #6cc28f; --link: #6ea1ea;
-    --term: #0f0d0b; color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --paper: #171411; --ink: #efe9dd; --muted: #a39b8f; --rule: #3a342c; --card: #1f1b17;
-  --code: #26211c; --accent-ink: #f2b632; --bad: #e0795f; --good: #6cc28f; --link: #6ea1ea;
-  --term: #0f0d0b; color-scheme: dark;
-}
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; scroll-padding-top: 72px; }
-body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
-a { color: var(--link); text-decoration: none; }
-a:hover { text-decoration: underline; }
-code { font-family: var(--mono); font-size: 0.88em; background: var(--code); padding: 1px 6px; border-radius: 5px; overflow-wrap: anywhere; }
-pre { margin: 0; font-family: var(--mono); font-size: 13.5px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
-pre code { background: none; padding: 0; font-size: inherit; }
-.wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
-.narrow { max-width: 720px; margin-left: auto; margin-right: auto; }
-.kicker { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-ink); margin: 0 0 10px; }
-h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(40px, 7vw, 72px); line-height: 1.02; letter-spacing: -0.02em; margin: 0 0 20px; }
-h1 em { font-style: italic; color: var(--accent-ink); }
-h2 { font-family: var(--serif); font-weight: 400; font-size: clamp(28px, 4vw, 40px); line-height: 1.12; margin: 0 0 12px; letter-spacing: -0.01em; }
-h3 { font-family: var(--serif); font-weight: 400; font-size: 20px; margin: 0 0 6px; }
-p { margin: 0 0 14px; }
-body { overflow-x: clip; }
-.lede { font-size: 19px; color: var(--muted); max-width: 54ch; margin: 0 auto 36px; }
-.centered { text-align: center; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+a { color: inherit; text-decoration: none; }
+a:hover { text-decoration: underline; text-underline-offset: 3px; }
+code { font-family: var(--mono); font-size: .92em; background: var(--card2); border: 1px solid var(--rule); border-radius: 6px; padding: 1px 6px; }
+.wrap { width: min(1120px, calc(100% - 32px)); margin: 0 auto; }
 
-.top { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--paper) 86%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid transparent; transition: border-color .3s; }
+/* background grid */
+.bgfx { position: fixed; inset: 0; z-index: -1; pointer-events: none; background:
+  radial-gradient(900px 500px at 50% -10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%),
+  linear-gradient(var(--rule) 1px, transparent 1px) 0 0 / 100% 64px,
+  linear-gradient(90deg, var(--rule) 1px, transparent 1px) 0 0 / 64px 100%; opacity: .45;
+  -webkit-mask-image: linear-gradient(#000 0, #000 60vh, transparent 110vh); mask-image: linear-gradient(#000 0, #000 60vh, transparent 110vh); }
+
+/* top bar */
+.top { position: sticky; top: 0; z-index: 20; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); background: color-mix(in srgb, var(--bg) 78%, transparent); border-bottom: 1px solid transparent; transition: border-color .3s; }
 .top.scrolled { border-color: var(--rule); }
-.top .wrap { display: flex; align-items: center; gap: 14px; height: 60px; }
-.brand { display: flex; align-items: center; gap: 10px; color: var(--ink); font-family: var(--serif); font-size: 22px; }
-.brand img { width: 26px; height: 26px; }
-.nav { display: flex; gap: 18px; margin-left: auto; font-family: var(--mono); font-size: 13px; }
-.nav a { color: var(--muted); }
+.top .wrap { display: flex; align-items: center; gap: 22px; height: 64px; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 600; font-size: 19px; letter-spacing: -0.01em; }
+.brand img { width: 24px; height: 24px; }
+.nav { display: flex; gap: 22px; margin-left: 14px; font-size: 14px; color: var(--muted); }
 .nav a:hover { color: var(--ink); text-decoration: none; }
-.iconbtn { width: 36px; height: 36px; border: 1px solid var(--rule); border-radius: 10px; background: var(--card); color: var(--ink); cursor: pointer; display: grid; place-items: center; margin-left: auto; }
-.nav + .iconbtn { margin-left: 0; }
-.iconbtn svg { width: 18px; height: 18px; }
-.sun { display: none; } .moon { display: block; }
-:root[data-theme="dark"] .sun { display: block; } :root[data-theme="dark"] .moon { display: none; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .sun { display: block; } :root:not([data-theme="light"]) .moon { display: none; } }
+.topright { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.ghbtn { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border: 1px solid var(--rule2); border-radius: 10px; font-size: 13px; font-weight: 500; background: var(--card); }
+.ghbtn:hover { text-decoration: none; border-color: var(--ink2); }
+.ghbtn svg { width: 16px; height: 16px; fill: currentColor; }
+.ghbtn b { font-family: var(--mono); font-weight: 500; color: var(--muted); }
+.iconbtn { width: 36px; height: 36px; border: 1px solid var(--rule2); border-radius: 10px; background: var(--card); color: var(--ink); cursor: pointer; display: grid; place-items: center; }
+.iconbtn svg { width: 17px; height: 17px; }
+.sun { display: none; }
+:root[data-theme="light"] .sun { display: block; } :root[data-theme="light"] .moon { display: none; }
+@media (max-width: 760px) { .nav { display: none; } .ghbtn span { display: none; } }
 
-.hero { text-align: center; padding: 72px 0 0; }
-.pill { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; color: var(--accent-ink); border: 1px solid var(--rule); border-radius: 999px; padding: 5px 12px; margin-bottom: 26px; background: var(--card); }
-.pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
-.cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 18px; }
-.btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 12px; font-family: var(--mono); font-size: 14px; border: 1px solid var(--rule); color: var(--ink); background: var(--card); transition: transform .2s var(--ease); }
-.btn:hover { text-decoration: none; transform: translateY(-1px); }
-.btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-.fine { font-family: var(--mono); font-size: 12px; color: var(--muted); margin: 0; }
+/* hero */
+.hero { padding: 92px 0 36px; text-align: center; }
+.pill { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12.5px; color: var(--ink2); border: 1px solid var(--rule2); background: var(--card); border-radius: 999px; padding: 6px 14px 6px 10px; }
+.pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
+h1 { font-family: var(--display); font-weight: 700; font-size: clamp(44px, 8.2vw, 104px); line-height: .98; letter-spacing: -0.035em; margin: 26px auto 0; max-width: 14ch; }
+h1 em { font-style: normal; color: var(--accent); }
+.lede { font-size: clamp(17px, 2vw, 20px); color: var(--ink2); max-width: 58ch; margin: 24px auto 0; }
+.cta { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin-top: 32px; }
+.btn { display: inline-flex; align-items: center; gap: 8px; height: 48px; padding: 0 22px; border-radius: 12px; border: 1px solid var(--rule2); background: var(--card); color: var(--ink); font-weight: 500; font-size: 15px; transition: transform .2s var(--ease), border-color .2s, box-shadow .2s; }
+.btn:hover { text-decoration: none; transform: translateY(-1px); border-color: var(--ink2); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); box-shadow: 0 10px 30px -12px var(--accent); }
+.btn svg { width: 16px; height: 16px; fill: currentColor; }
+.cmd { margin: 22px auto 0; display: inline-flex; align-items: center; gap: 14px; max-width: 100%; background: var(--term); color: var(--term-ink); border: 1px solid var(--rule2); border-radius: 12px; padding: 10px 10px 10px 16px; font-family: var(--mono); font-size: 13.5px; }
+.cmd span { overflow: auto; white-space: nowrap; scrollbar-width: none; }
+.cmd span::before { content: "❯ "; color: var(--accent); }
+.copy { white-space: nowrap; font: 500 12px/1 var(--sans); padding: 8px 11px; border-radius: 8px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.04); color: var(--term-ink); cursor: pointer; }
+.copy:hover { background: rgba(255,255,255,.1); }
+.copy.ok { color: var(--good); border-color: var(--good); }
+.fine { font-size: 13px; color: var(--muted); margin: 14px 0 0; }
 
-.stage { margin: 44px auto 0; max-width: 860px; text-align: left; }
-.term { background: var(--term); color: var(--term-ink); border-radius: 16px; box-shadow: 0 30px 70px -34px rgba(29, 26, 22, .7); overflow: hidden; border: 1px solid rgba(255,255,255,.06); }
-.term .bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,.08); font-family: var(--mono); font-size: 12px; color: var(--term-dim); }
+/* product shot */
+.stage { margin: 48px auto 0; max-width: 980px; }
+.term { background: var(--term); color: var(--term-ink); border-radius: 16px; overflow: hidden; border: 1px solid var(--rule2); box-shadow: 0 40px 90px -40px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.03) inset; }
+.term .bar { display: flex; align-items: center; gap: 8px; padding: 11px 16px; border-bottom: 1px solid rgba(255,255,255,.08); font-family: var(--mono); font-size: 12px; color: var(--term-dim); }
 .term .bar i { width: 10px; height: 10px; border-radius: 50%; background: #3d3731; }
 .term .bar i:first-child { background: #e0795f; } .term .bar i:nth-child(2) { background: #f2b632; } .term .bar i:nth-child(3) { background: #6cc28f; }
-.term .bar span { margin-left: auto; } .term .bar .lbl { font-style: normal; }
-.term .bar span b { color: var(--accent); font-weight: 400; font-variant-numeric: tabular-nums; }
+.term .bar .lbl { font-style: normal; margin-left: 6px; }
+.term .bar span { margin-left: auto; }
 .term .rec { display: block; width: 100%; height: auto; }
-.term .body { padding: 18px 20px 20px; font-family: var(--mono); font-size: 13.5px; line-height: 1.7; }
-.line { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; opacity: 0; transform: translateY(6px); transition: opacity .35s var(--ease), transform .35s var(--ease); }
-.line.on { opacity: 1; transform: none; }
-.line .cmd { color: var(--term-ink); }
-.line .cmd::before { content: "● "; color: var(--term-dim); font-size: 11px; vertical-align: 1px; }
-.line .what { color: var(--term-dim); }
-.line .what b { color: var(--accent); font-weight: 400; }
-.line .num { color: var(--good); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.line.plain .num { color: var(--term-dim); }
-@media (max-width: 560px) { .line { grid-template-columns: 1fr; gap: 0; } .line .num { text-align: left; padding-left: 18px; } .term .bar .lbl { display: none; } .pill { font-size: 11px; white-space: nowrap; } }
 
-.trust { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; border-top: 1px solid var(--rule); padding-top: 22px; margin-top: 56px; }
-.trust div { padding: 0; }
-.trust b { display: block; font-family: var(--serif); font-weight: 400; font-size: 32px; line-height: 1; margin-bottom: 6px; letter-spacing: -0.01em; white-space: nowrap; }
-.trust b small { font-size: 16px; color: var(--muted); margin-left: 2px; }
-.trust span { font-family: var(--mono); font-size: 12px; color: var(--muted); }
-@media (max-width: 760px) { .trust { grid-template-columns: repeat(2, 1fr); } .trust b { font-size: 26px; } }
+/* numbers belt */
+.belt { margin-top: 36px; display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); overflow: hidden; }
+.belt > div { padding: 22px 24px; border-right: 1px solid var(--rule); min-width: 0; }
+.belt > div:last-child { border-right: 0; }
+.belt b { display: block; font-family: var(--display); font-weight: 600; font-size: clamp(28px, 3.4vw, 40px); line-height: 1; letter-spacing: -0.03em; }
+.belt b small { font-size: .5em; color: var(--muted); font-weight: 500; margin-left: 2px; }
+.belt span { display: block; margin-top: 8px; font-size: 13px; color: var(--muted); line-height: 1.4; }
+.belt .live b { color: var(--accent); }
+.beltnote { font-family: var(--mono); font-size: 12px; color: var(--muted); margin: 12px 4px 0; }
+@media (max-width: 760px) { .belt { grid-template-columns: 1fr 1fr; } .belt > div:nth-child(2) { border-right: 0; } .belt > div:nth-child(-n+2) { border-bottom: 1px solid var(--rule); } }
 
+/* sections */
+section { padding: 96px 0 0; }
+.head { max-width: 760px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin: 0 0 14px; }
+.h2 { font-family: var(--display); font-weight: 600; font-size: clamp(32px, 4.6vw, 52px); line-height: 1.02; letter-spacing: -0.03em; margin: 0; }
+.h2 em { font-style: normal; color: var(--muted); }
+.sub { font-size: 17px; color: var(--ink2); margin: 18px 0 0; max-width: 60ch; }
 
-/* ---- below the hero ---- */
-.below { position: relative; }
-.below section { padding: 120px 0 0; position: relative; }
-.fig { font-family: var(--mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent-ink); margin: 0 0 14px; display: flex; align-items: center; gap: 10px; }
-.fig::before { content: ""; width: 22px; height: 1px; background: var(--accent); }
-.h2 { font-family: var(--serif); font-weight: 400; font-size: clamp(36px, 5.2vw, 64px); line-height: 1.02; letter-spacing: -0.02em; margin: 0; max-width: 14ch; }
-.h2 em { font-style: italic; color: var(--accent-ink); }
-.sub { font-size: 18px; line-height: 1.55; color: var(--muted); max-width: 52ch; margin: 18px 0 0; }
-.head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 64px; align-items: start; }
-.head > div { display: contents; }
-.head .fig { grid-column: 1 / -1; }
-.head .sub { margin-top: 0; padding-top: clamp(4px, 0.9vw, 12px); }
+/* how: three steps */
+.how { margin-top: 40px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.how > div { position: relative; padding: 24px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); display: flex; flex-direction: column; }
+.how .n { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+.how h3 { font-family: var(--display); font-weight: 600; font-size: 22px; letter-spacing: -0.02em; margin: 10px 0 8px; }
+.how p { margin: 0; color: var(--ink2); font-size: 15px; }
+.how .ex { margin-top: auto; padding-top: 16px; }
+.how .ex pre { margin: 0; padding: 12px 14px; border-radius: 10px; background: var(--term); color: var(--term-ink); font-family: var(--mono); font-size: 12.5px; line-height: 1.6; white-space: pre-wrap; border: 1px solid var(--rule2); overflow-wrap: anywhere; }
+.how .ex .k { color: var(--term-dim); } .how .ex .g { color: var(--good); } .how .ex .y { color: var(--accent); }
+@media (max-width: 860px) { .how { grid-template-columns: 1fr; } }
+
+/* bento */
+.bento { margin-top: 40px; display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; }
+.tile { position: relative; padding: 24px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); min-width: 0; display: flex; flex-direction: column; overflow: hidden; transition: border-color .25s; }
+.tile:hover { border-color: var(--rule2); }
+.tile h3 { font-family: var(--display); font-weight: 600; font-size: 20px; letter-spacing: -0.02em; margin: 0 0 8px; }
+.tile p { margin: 0; color: var(--ink2); font-size: 14.5px; }
+.tile code { display: inline-block; margin-top: auto; padding: 16px 0 0; background: none; border: 0; font-size: 12px; color: var(--muted); }
+.tile .ic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); margin-bottom: 16px; }
+.tile .ic svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.t-sim { grid-column: span 4; }
+.t-dash { grid-column: span 2; padding: 0; }
+.t-dash .in { padding: 24px 24px 0; }
+.t-dash img { display: block; width: 130%; max-width: none; margin: 18px 0 0 24px; border-radius: 10px 0 0 0; border: 1px solid var(--rule2); border-right: 0; border-bottom: 0; box-shadow: 0 20px 60px -30px rgba(0,0,0,.8); }
+.t-2 { grid-column: span 2; }
+.t-3 { grid-column: span 3; }
+@media (max-width: 960px) { .t-sim { grid-column: span 6; } .t-dash, .t-2, .t-3 { grid-column: span 3; } }
+@media (max-width: 640px) { .bento { grid-template-columns: 1fr; } .t-sim, .t-dash, .t-2, .t-3 { grid-column: span 1; } }
 
 /* week simulator */
-.sim { margin-top: 56px; position: relative; border-radius: 22px; padding: 32px 36px 28px; background: var(--card); box-shadow: 0 1px 0 var(--rule), 0 30px 80px -40px rgba(0,0,0,.35); overflow: hidden; }
-.sim::before { content: ""; position: absolute; inset: 0; background: radial-gradient(600px 300px at var(--mx, 70%) var(--my, 0%), color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%); pointer-events: none; transition: opacity .4s; }
-.simtop { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap; position: relative; }
-.big { font-family: var(--serif); font-size: clamp(56px, 8vw, 104px); line-height: .95; letter-spacing: -0.03em; margin: 0; }
-.big small { font-size: .42em; color: var(--muted); letter-spacing: -0.01em; margin-left: 10px; font-family: var(--sans); }
-.bigcap { color: var(--muted); font-size: 15px; margin: 10px 0 0; }
-.modes { display: inline-flex; background: var(--code); border-radius: 999px; padding: 4px; gap: 2px; }
-.mode { font: 500 13px/1 var(--sans); padding: 9px 16px; border-radius: 999px; border: 0; background: transparent; color: var(--muted); cursor: pointer; transition: color .2s, background .2s, transform .2s var(--ease); }
+.sim { position: relative; }
+.simtop { display: flex; justify-content: space-between; align-items: flex-end; gap: 18px; flex-wrap: wrap; }
+.big { font-family: var(--display); font-weight: 700; font-size: clamp(48px, 6vw, 84px); line-height: .95; letter-spacing: -0.04em; margin: 0; }
+.big small { font-size: .3em; color: var(--muted); letter-spacing: -0.01em; margin-left: 10px; font-weight: 500; }
+.bigcap { color: var(--muted); font-size: 14px; margin: 10px 0 0; }
+.modes { display: inline-flex; background: var(--bg); border: 1px solid var(--rule); border-radius: 999px; padding: 3px; gap: 2px; }
+.mode { font: 500 13px/1 var(--sans); padding: 8px 14px; border-radius: 999px; border: 0; background: transparent; color: var(--muted); cursor: pointer; transition: color .2s, background .2s; }
 .mode:hover { color: var(--ink); }
-.mode.on { background: var(--paper); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
-.tracks { margin-top: 36px; display: grid; gap: 22px; position: relative; }
-.track { display: grid; grid-template-columns: 150px minmax(0, 1fr) 190px; gap: 18px; align-items: center; }
-.track .who { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
-.track .who b { display: block; font: 500 15px/1.2 var(--sans); color: var(--ink); margin-bottom: 4px; }
-.rail { position: relative; height: 34px; border-radius: 10px; background: var(--code); overflow: hidden; }
-.rail .fill { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 10px; transition: width .42s var(--ease); }
+.mode.on { background: var(--card2); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.tracks { margin-top: 28px; display: grid; gap: 18px; position: relative; }
+.track { display: grid; grid-template-columns: 130px minmax(0, 1fr) 170px; gap: 14px; align-items: center; }
+.track .rwho { font-family: var(--mono); font-size: 11.5px; color: var(--muted); line-height: 1.35; }
+.track .rwho b { display: block; font: 500 14px/1.2 var(--sans); color: var(--ink); margin-bottom: 3px; }
+.rail { position: relative; height: 30px; border-radius: 8px; background: var(--bg); border: 1px solid var(--rule); overflow: hidden; }
+.rail .fill { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 8px; transition: width .42s var(--ease); }
 .track.a .fill { background: linear-gradient(90deg, color-mix(in srgb, var(--bad) 55%, var(--accent)), var(--bad)); }
 .track.b .fill { background: linear-gradient(90deg, color-mix(in srgb, var(--good) 60%, var(--accent)), var(--good)); }
-.rail .tick { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--paper); opacity: .7; }
 .rail.hit { animation: hit .5s var(--ease); }
-@keyframes hit { 0%, 100% { transform: none; } 30% { transform: translateX(-3px); } 60% { transform: translateX(3px); } }
-.out { font: 500 15px/1.3 var(--sans); }
-.out small { display: block; font: 12.5px/1.4 var(--mono); color: var(--muted); margin-top: 3px; }
+@keyframes hit { 0% { transform: translateX(0); } 30% { transform: translateX(-3px); } 60% { transform: translateX(3px); } 100% { transform: translateX(0); } }
+.out { font: 500 14px/1.3 var(--sans); }
+.out small { display: block; font: 11.5px/1.4 var(--mono); color: var(--muted); margin-top: 3px; }
 .track.a .out { color: var(--bad); } .track.b .out { color: var(--good); }
-.days { display: grid; grid-template-columns: 150px minmax(0, 1fr) 190px; gap: 18px; margin-top: 10px; }
-.days ol { grid-column: 2; list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(7, 1fr); font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.days { display: grid; grid-template-columns: 130px minmax(0, 1fr) 170px; gap: 14px; margin-top: 8px; }
+.days ol { grid-column: 2; list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(7, 1fr); font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
 .days li { transition: color .2s; }
 .days li.now { color: var(--ink); }
 .cursor { position: absolute; top: -8px; bottom: -8px; width: 1px; background: var(--accent); left: 0; opacity: 0; transition: left .42s var(--ease), opacity .3s; pointer-events: none; }
 .cursor::after { content: ""; position: absolute; top: -4px; left: -3.5px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
-.simfoot { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 26px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.simfoot { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 22px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
 .simfoot p { margin: 0; max-width: 60ch; }
-.play { display: inline-flex; align-items: center; gap: 8px; font: 500 13px/1 var(--sans); padding: 10px 16px; border-radius: 999px; border: 1px solid var(--rule); background: var(--paper); color: var(--ink); cursor: pointer; transition: transform .2s var(--ease), border-color .2s; }
-.play:hover { transform: translateY(-1px); border-color: var(--ink); }
+.play { display: inline-flex; align-items: center; gap: 8px; font: 500 13px/1 var(--sans); padding: 10px 16px; border-radius: 999px; border: 1px solid var(--rule2); background: var(--bg); color: var(--ink); cursor: pointer; }
+.play:hover { border-color: var(--ink2); }
 .play svg { width: 12px; height: 12px; fill: currentColor; }
-
-/* one step */
-.step2 { margin-top: 56px; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, .75fr); gap: 48px; align-items: start; }
-.log { background: var(--term); color: var(--term-ink); border-radius: 16px; font-family: var(--mono); font-size: 12.5px; line-height: 1.6; overflow: hidden; box-shadow: 0 30px 70px -40px rgba(0,0,0,.6); }
-.log .lbar { display: flex; justify-content: space-between; padding: 12px 16px; font-size: 11.5px; color: var(--term-dim); border-bottom: 1px solid rgba(255,255,255,.08); }
-.log .lbar b { color: var(--term-ink); font-weight: 500; }
-.log .lbar .count { transition: color .3s; }
-.log .lbar .count.done { color: var(--accent); }
-.log pre { margin: 0; padding: 14px 16px 16px; white-space: pre-wrap; word-break: break-word; }
-.log .l { display: block; max-height: 24px; overflow: hidden; transition: max-height .45s var(--ease), opacity .45s, color .3s, padding .45s; }
-.log .l.cut { color: var(--term-dim); }
-.log.on .l.cut { max-height: 0; opacity: 0; }
-.log .l.keep { color: var(--term-ink); }
-.log .l.note { color: var(--accent); max-height: 0; opacity: 0; }
-.log.on .l.note { max-height: 48px; opacity: 1; }
-.facts { display: grid; gap: 0; }
-.fact { padding: 22px 0; border-top: 1px solid var(--rule); }
-.fact:last-child { border-bottom: 1px solid var(--rule); }
-.fact b { display: block; font-family: var(--serif); font-weight: 400; font-size: 40px; line-height: 1; letter-spacing: -0.02em; }
-.fact b i { font-style: normal; color: var(--muted); font-size: 22px; margin: 0 8px; }
-.fact b .to { color: var(--good); }
-.fact > span { display: block; color: var(--muted); font-size: 14.5px; line-height: 1.5; margin-top: 8px; }
-
-/* rules marquee + grid */
-.sl { margin-top: 44px; border: 1px solid var(--rule); border-radius: 14px; background: var(--term); color: var(--term-ink); overflow: hidden; }
-.sl .slbar { display: flex; justify-content: space-between; padding: 12px 16px; font-size: 11.5px; color: var(--term-dim); border-bottom: 1px solid rgba(255,255,255,.08); font-family: var(--mono); }
-.sl .slbar b { color: var(--term-ink); font-weight: 500; }
-.slline { font-family: var(--mono); font-size: 13px; line-height: 1.7; padding: 16px 18px; white-space: nowrap; overflow-x: auto; }
-.slline i { font-style: normal; color: var(--term-dim); margin: 0 7px; }
-.slline .l { color: var(--term-dim); } .slline .d { color: var(--term-dim); opacity: .75; }
-.slline .m { color: var(--term-ink); } .slline .k { color: var(--accent); }
-.slline .ok { color: #7cc48a; } .slline .warn { color: #e3a73a; }
-.slkey { list-style: none; margin: 0; padding: 14px 18px 16px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 24px; border-top: 1px solid rgba(255,255,255,.08); font-size: 12.5px; line-height: 1.5; color: var(--term-dim); }
-.slkey b { display: block; font-family: var(--mono); font-weight: 500; color: var(--term-ink); margin-bottom: 2px; }
-.slkey em { font-style: normal; color: #e3a73a; }
-.slnote { margin: 28px 0 0; font-size: 14px; color: var(--muted); }
-.slnote code { font-size: 12.5px; }
-.mq { margin-top: 48px; overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); }
-.mq ul { display: flex; gap: 12px; width: max-content; margin: 0; padding: 0; list-style: none; animation: slide 36s linear infinite; }
-.mq:hover ul { animation-play-state: paused; }
-@keyframes slide { to { transform: translateX(-50%); } }
-.mq li { font-family: var(--mono); font-size: 13px; padding: 10px 16px; border-radius: 999px; background: var(--code); color: var(--ink); white-space: nowrap; }
-.mq li b { color: var(--accent-ink); font-weight: 500; margin-right: 8px; }
-.rgrid { margin-top: 40px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 48px; }
-.rule { padding: 26px 0; border-top: 1px solid var(--rule); position: relative; }
-.rule .n { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); }
-.rule h3 { font: 500 17px/1.3 var(--sans); margin: 10px 0 8px; }
-.rule p { margin: 0; color: var(--muted); font-size: 14.5px; line-height: 1.55; }
-.rule code { font-family: var(--mono); font-size: 12px; color: var(--muted); display: inline-block; margin-top: 12px; padding: 4px 8px; border-radius: 6px; background: var(--code); }
-.rule::after { content: ""; position: absolute; left: 0; top: -1px; width: 0; height: 1px; background: var(--accent); transition: width .5s var(--ease); }
-.rule:hover::after { width: 100%; }
+@media (max-width: 640px) { .track, .days { grid-template-columns: 1fr; gap: 6px; } .days ol { grid-column: 1; } .cursor { display: none; } }
 
 /* proof */
-.shot { margin-top: 56px; perspective: 1400px; }
-.shot .frame { border-radius: 16px; overflow: hidden; box-shadow: 0 40px 100px -50px rgba(0,0,0,.6), 0 0 0 1px var(--rule); transform: rotateX(var(--rx, 6deg)); transform-origin: 50% 0; transition: transform .8s var(--ease); background: var(--card); }
-.shot.in .frame { --rx: 0deg; }
+.proof { margin-top: 40px; display: grid; grid-template-columns: 1.4fr 1fr; gap: 24px; align-items: center; }
+.shot { border-radius: var(--r); overflow: hidden; border: 1px solid var(--rule2); box-shadow: 0 40px 90px -40px rgba(0,0,0,.8); background: var(--card); }
 .shot img { display: block; width: 100%; height: auto; }
-.proof3 { margin-top: 36px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 48px; }
-.proof3 div { padding: 22px 0; border-top: 1px solid var(--rule); }
-.proof3 b { display: block; font-family: var(--serif); font-weight: 400; font-size: 34px; letter-spacing: -0.02em; line-height: 1; }
-.proof3 span { display: block; margin-top: 8px; color: var(--muted); font-size: 14.5px; line-height: 1.5; }
+.proof3 { display: grid; gap: 14px; }
+.proof3 > div { padding: 18px 20px; border: 1px solid var(--rule); border-radius: 14px; background: var(--card); }
+.proof3 b { display: block; font-family: var(--display); font-weight: 600; font-size: 17px; letter-spacing: -0.01em; }
+.proof3 span { display: block; color: var(--ink2); font-size: 14px; margin-top: 4px; }
+@media (max-width: 860px) { .proof { grid-template-columns: 1fr; } }
+
+/* results */
+.counts { margin-top: 28px; display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.counts b { color: var(--ink); font-weight: 600; }
+.results { margin-top: 28px; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.rcard { background: var(--card); border: 1px solid var(--rule); border-radius: var(--r); padding: 22px 22px 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.rcard .rmeta { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-family: var(--mono); font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.rcard .rhead b { display: block; font-family: var(--display); font-weight: 600; font-size: 40px; line-height: 1; letter-spacing: -0.03em; color: var(--good); }
+.rcard .rhead.flat b { color: var(--ink); }
+.rcard .rhead span { display: block; margin-top: 6px; font-size: 14.5px; color: var(--ink2); }
+.rcard .rrows { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; border-top: 1px solid var(--rule); padding-top: 14px; }
+.rcard .rrows div { min-width: 0; }
+.rcard .rrows em { display: block; font-style: normal; font-family: var(--mono); font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.rcard .rrows b { display: block; font-family: var(--display); font-weight: 600; font-size: 19px; line-height: 1.15; margin-top: 3px; overflow-wrap: anywhere; letter-spacing: -0.01em; }
+.rcard .rrows small { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+.rcard .rnote { font-size: 14px; line-height: 1.5; color: var(--ink2); margin: 0; }
+.rcard .rwho { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: auto; }
+.rcard.add { border-style: dashed; background: transparent; justify-content: center; gap: 10px; }
+.rcard.add:hover { text-decoration: none; border-color: var(--accent); }
+.rcard.add b { font-family: var(--display); font-weight: 600; font-size: 22px; letter-spacing: -0.02em; }
+.rcard.add span { font-size: 14px; line-height: 1.5; color: var(--muted); }
+
+/* faq */
+.faq { margin-top: 36px; border-top: 1px solid var(--rule); max-width: 820px; }
+.faq details { border-bottom: 1px solid var(--rule); }
+.faq summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 4px; font-family: var(--display); font-weight: 600; font-size: 19px; letter-spacing: -0.015em; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; font-family: var(--mono); color: var(--muted); font-size: 20px; transition: transform .25s var(--ease); flex: none; }
+.faq details[open] summary::after { transform: rotate(45deg); }
+.faq .a { padding: 0 4px 22px; color: var(--ink2); font-size: 15.5px; max-width: 66ch; }
+.faq .a p { margin: 0 0 10px; } .faq .a p:last-child { margin: 0; }
 
 /* install */
-.inst { margin-top: 56px; display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 48px; align-items: start; }
-.steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
-.steps li { position: relative; padding: 0 0 26px 44px; }
-.steps li::before { counter-increment: s; content: counter(s); position: absolute; left: 0; top: -2px; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font: 500 12px/1 var(--mono); background: var(--accent); color: var(--term); }
-.steps li::after { content: ""; position: absolute; left: 13.5px; top: 30px; bottom: 0; width: 1px; background: var(--rule); }
-.steps li:last-child::after { display: none; }
-.steps b { display: block; font: 500 17px/1.3 var(--sans); }
-.steps p { margin: 6px 0 0; color: var(--muted); font-size: 14.5px; line-height: 1.55; }
-.steps code { font-family: var(--mono); font-size: 12.5px; background: var(--code); padding: 2px 6px; border-radius: 5px; }
-.tty { background: var(--term); color: var(--term-ink); border-radius: 16px; font-family: var(--mono); font-size: 13px; line-height: 1.7; box-shadow: 0 30px 70px -40px rgba(0,0,0,.6); position: sticky; top: 90px; }
-.tty .lbar > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 12px; }
-.tty .lbar { display: flex; gap: 8px; justify-content: space-between; align-items: center; padding: 10px 14px; font-size: 11.5px; color: var(--term-dim); border-bottom: 1px solid rgba(255,255,255,.08); }
-.tty pre { margin: 0; padding: 16px 18px 18px; white-space: pre-wrap; min-height: 230px; }
+.inst { margin-top: 40px; display: grid; grid-template-columns: 1fr 1.15fr; gap: 28px; align-items: start; }
+.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; display: grid; gap: 18px; }
+.steps li { position: relative; padding-left: 48px; counter-increment: s; }
+.steps li::before { content: counter(s, decimal-leading-zero); position: absolute; left: 0; top: 2px; width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; font-family: var(--mono); font-size: 12px; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.steps b { display: block; font-family: var(--display); font-weight: 600; font-size: 18px; letter-spacing: -0.015em; }
+.steps p { margin: 6px 0 0; color: var(--ink2); font-size: 15px; }
+.tty { background: var(--term); color: var(--term-ink); border-radius: 16px; font-family: var(--mono); font-size: 13px; line-height: 1.7; border: 1px solid var(--rule2); box-shadow: 0 30px 70px -40px rgba(0,0,0,.8); }
+.tty .lbar { display: flex; gap: 8px; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.tty pre { margin: 0; padding: 16px 18px 18px; white-space: pre-wrap; min-height: 230px; font-family: inherit; }
 .tty .tabs { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: rgba(255,255,255,.06); }
-.tty .tab { font: 500 11.5px/1 var(--sans); padding: 6px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--term-dim); cursor: pointer; transition: background .2s, color .2s; }
+.tty .tab { font: 500 11.5px/1 var(--sans); padding: 6px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--term-dim); cursor: pointer; }
 .tty .tab.on { background: rgba(255,255,255,.12); color: var(--term-ink); }
 .tty .pane { display: none; } .tty .pane.on { display: block; }
-.vsbtn { display: flex; align-items: center; gap: 12px; margin: 18px 18px 0; padding: 12px 16px; border-radius: 10px; background: var(--accent); color: var(--term); text-decoration: none; font: 500 14px/1.2 var(--sans); transition: transform .25s var(--ease), box-shadow .25s; }
-.vsbtn:hover { transform: translateY(-1px); box-shadow: 0 10px 30px -12px var(--accent); }
+.vsbtn { display: flex; align-items: center; gap: 12px; margin: 18px 18px 0; padding: 12px 16px; border-radius: 10px; background: var(--accent); color: #0e0d0b; font: 500 14px/1.3 var(--sans); }
+.vsbtn:hover { text-decoration: none; }
 .vsbtn svg { width: 22px; height: 22px; flex: none; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .vsbtn small { display: block; font-size: 11.5px; font-weight: 400; opacity: .8; margin-top: 3px; }
-#pane-vsc pre { min-height: 0; padding-top: 14px; }
 .tty .k { color: var(--term-dim); }
 .tty .t { display: block; opacity: 0; transform: translateY(4px); transition: opacity .3s, transform .3s var(--ease); }
 .tty .t.on { opacity: 1; transform: none; }
 .tty .ok { color: var(--good); }
-.copy { white-space: nowrap; font: 500 12px/1 var(--sans); padding: 7px 11px; border-radius: 8px; border: 1px solid rgba(255,255,255,.14); background: transparent; color: var(--term-ink); cursor: pointer; transition: background .2s; }
-.copy:hover { background: rgba(255,255,255,.08); }
-.copy.ok { color: var(--good); border-color: var(--good); }
-.counts { margin-top: 36px; display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 13px; color: var(--muted); }
-.counts b { color: var(--ink); font-weight: 600; }
-.results { margin-top: 28px; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
-.rcard { background: var(--card); border: 1px solid var(--rule); border-radius: 16px; padding: 22px 22px 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-.rcard .rmeta { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-family: var(--mono); font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
-.rcard .rhead b { display: block; font-family: var(--serif); font-weight: 400; font-size: 40px; line-height: 1; letter-spacing: -0.02em; color: var(--good); }
-.rcard .rhead.flat b { color: var(--ink); }
-.rcard .rhead span { display: block; margin-top: 6px; font-size: 14.5px; color: var(--ink); }
-.rcard .rrows { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; border-top: 1px solid var(--rule); padding-top: 14px; }
-.rcard .rrows div { min-width: 0; }
-.rcard .rrows em { display: block; font-style: normal; font-family: var(--mono); font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
-.rcard .rrows b { display: block; font-family: var(--serif); font-weight: 400; font-size: 20px; line-height: 1.15; margin-top: 3px; overflow-wrap: anywhere; }
-.rcard .rrows small { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
-.rcard .rnote { font-size: 14px; line-height: 1.5; color: var(--muted); margin: 0; }
-.rcard .rwho { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: auto; }
-.rcard.add { border-style: dashed; background: transparent; justify-content: center; gap: 10px; }
-.rcard.add b { font-family: var(--serif); font-weight: 400; font-size: 24px; letter-spacing: -0.01em; }
-.rcard.add span { font-size: 14px; line-height: 1.5; color: var(--muted); }
-.trust2 { margin-top: 56px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 32px; border-top: 1px solid var(--rule); }
-.trust2 div { padding: 22px 0 0; }
-.trust2 svg { width: 20px; height: 20px; stroke: var(--accent-ink); fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-.trust2 b { display: block; font: 500 15px/1.3 var(--sans); margin-top: 12px; }
-.trust2 span { display: block; color: var(--muted); font-size: 13.5px; line-height: 1.5; margin-top: 4px; }
+.trust2 { margin-top: 28px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.trust2 > div { padding: 18px; border: 1px solid var(--rule); border-radius: 14px; background: var(--card); }
+.trust2 svg { width: 20px; height: 20px; fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.trust2 b { display: block; margin-top: 10px; font-family: var(--display); font-weight: 600; font-size: 15.5px; letter-spacing: -0.01em; }
+.trust2 span { display: block; margin-top: 4px; font-size: 13.5px; color: var(--ink2); }
+@media (max-width: 860px) { .inst { grid-template-columns: 1fr; } .trust2 { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 520px) { .trust2 { grid-template-columns: 1fr; } }
 
 /* final */
-.fin { text-align: center; padding: 140px 0 120px !important; position: relative; }
-.fin::before { content: ""; position: absolute; left: 50%; top: 40%; width: 900px; height: 500px; transform: translate(-50%, -50%); background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 18%, transparent), transparent); pointer-events: none; }
-.fin .h2 { max-width: none; margin: 0 auto; font-size: clamp(44px, 7vw, 92px); }
-.fin .sub { margin: 20px auto 0; }
-.cmdbox { margin: 36px auto 0; max-width: 560px; display: flex; align-items: center; justify-content: space-between; gap: 14px; background: var(--term); color: var(--term-ink); font-family: var(--mono); font-size: 14px; padding: 14px 14px 14px 20px; border-radius: 14px; box-shadow: 0 30px 70px -40px rgba(0,0,0,.6); position: relative; }
-.cmdbox span::before { content: "$ "; color: var(--term-dim); }
-.fin .cta { margin-top: 22px; justify-content: center; }
-.foot { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 28px 0 40px; border-top: 1px solid var(--rule); font-size: 13px; color: var(--muted); }
-.foot a { color: inherit; }
+.fin { margin-top: 96px; padding: 72px 24px; text-align: center; border: 1px solid var(--rule); border-radius: 24px; background: radial-gradient(700px 300px at 50% 0%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%), var(--card); }
+.fin .h2 { margin: 0 auto; max-width: 16ch; }
+.fin .sub { margin: 16px auto 0; }
+.fin .cmd { margin-top: 28px; }
+.foot { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 40px 0 48px; font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
 
-.reveal { opacity: 0; transform: translateY(16px); transition: opacity .7s var(--ease), transform .7s var(--ease); transition-delay: calc(var(--d, 0) * 90ms); }
-.reveal.in, .no-js .reveal { opacity: 1; transform: none; }
+/* reveal */
+.reveal { opacity: 0; transform: translateY(14px); transition: opacity .6s var(--ease), transform .6s var(--ease); transition-delay: calc(var(--d, 0) * 90ms); }
+.reveal.in { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
-  .reveal, .line, .tty .t, .log .l { opacity: 1; transform: none; }
-  .shot .frame { transform: none; }
+  .reveal, .tty .t { opacity: 1; transform: none; transition: none; }
+  .rail .fill, .cursor { transition: none; }
 }
-@media (max-width: 760px) {
-  .nav { display: none; } .hero { padding-top: 48px; }
-  .below section { padding-top: 88px; }
-  .head, .step2, .inst { grid-template-columns: minmax(0, 1fr); gap: 24px; }
-  .sim { padding: 24px 18px 22px; border-radius: 16px; }
-  .track, .days { grid-template-columns: minmax(0, 1fr); gap: 8px; }
-  .track .out { order: 3; } .days ol { grid-column: 1; }
-  .rgrid, .proof3 { grid-template-columns: 1fr; gap: 0; }
-  .slkey { grid-template-columns: 1fr 1fr; } .slline { font-size: 12.5px; padding: 14px; white-space: normal; }
-  .trust2 { grid-template-columns: 1fr 1fr; gap: 0 20px; }
-  .tty { position: static; }
-  .fact b { font-size: 32px; }
-  .cmdbox { font-size: 12.5px; }
-}
-
 </style>
 </head>
-<body class="no-js">
+<body>
+<div class="bgfx" aria-hidden="true"></div>
 
 <header class="top">
   <div class="wrap">
     <a class="brand" href="#"><img src="mark.svg" alt="">Kiasi</a>
     <nav class="nav" aria-label="Sections">
-      <a href="#week">A week</a>
-      <a href="#step">One step</a>
-      <a href="#rules">The rules</a>
-      <a href="#daily">Every day</a>
+      <a href="#how">How it works</a>
+      <a href="#features">What it does</a>
+      <a href="#results">Results</a>
+      <a href="#faq">FAQ</a>
       <a href="#install">Install</a>
     </nav>
-    <button class="iconbtn" id="theme" type="button" aria-label="Toggle dark mode">
-      <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
-      <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
-    </button>
+    <div class="topright">
+      <a class="ghbtn" href="https://github.com/raj-rangani/kiasi" aria-label="Kiasi on GitHub"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg><span>GitHub</span><b id="stars" hidden></b></a>
+      <button class="iconbtn" id="theme" type="button" aria-label="Toggle light mode">
+        <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+    </div>
   </div>
 </header>
 
 <main class="wrap">
   <div class="hero">
-    <div class="pill"><i></i>Claude Code plugin · local · no model calls</div>
-    <h1>Your weekly limit is spent<br><em>re-reading.</em></h1>
-    <p class="lede">Every step of Claude Code re-sends the whole conversation, so one noisy test log is paid for on every step after it. Kiasi keeps the noise out. Install it, and tomorrow your own dashboard shows the days of weekly limit it bought back.</p>
+    <div class="pill"><i></i>Claude Code plugin · runs locally · no model calls</div>
+    <h1>Your weekly limit is spent <em>re-reading.</em></h1>
+    <p class="lede">Every step of Claude Code re-sends the whole conversation, so one noisy test log is paid for on every step after it. Kiasi keeps the noise out with fixed rules. Install it, and tomorrow your own dashboard shows the days of weekly limit it bought back.</p>
     <div class="cta">
-      <a class="btn primary" href="#install">Install, see your number tomorrow</a>
-      <a class="btn" href="https://github.com/raj-rangani/kiasi">GitHub</a>
+      <a class="btn primary" href="#install">Install in a minute</a>
+      <a class="btn" href="https://github.com/raj-rangani/kiasi"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>View on GitHub</a>
     </div>
-    <p class="fine">Fixed rules, Python standard library, nothing sent anywhere.</p>
+    <div class="cmd"><span>/plugin marketplace add raj-rangani/kiasi</span><button class="copy" data-copy="/plugin marketplace add raj-rangani/kiasi&#10;/plugin install kiasi@kiasi">Copy both lines</button></div>
+    <p class="fine">Python standard library only. Nothing is sent anywhere. Uninstall in one line.</p>
 
     <div class="stage">
-      <div class="term" id="demo" aria-label="A recorded Claude Code session: npm ls --all returns 3,009 lines; Claude reports that a few dozen lines reached it and the rest is saved to disk">
+      <div class="term" id="demo">
         <div class="bar"><i></i><i></i><i></i><em class="lbl">claude · with kiasi</em> <span>recorded, not mocked</span></div>
-        <video class="rec" src="demo.mp4" poster="demo-poster.jpg" width="1100" height="620" autoplay loop muted playsinline preload="metadata" aria-label="A real Claude Code session with Kiasi: npm ls --all returns 3,009 lines, Claude reports that a few dozen lines reached it and names the file holding the rest; then the dashboard">
-          <img class="rec" src="demo.gif" alt="A real Claude Code session with Kiasi: npm ls --all returns 3,009 lines, Claude reports that a few dozen lines reached it and names the file holding the rest; then the dashboard" width="1100" height="620">
+        <video class="rec" src="demo.mp4" poster="demo-poster.jpg" width="1100" height="620" autoplay loop muted playsinline preload="metadata" aria-label="A real Claude Code session with Kiasi: npm ls --all returns 3,016 lines, Claude reports that a few dozen lines reached it and names the file holding the rest; then the dashboard">
+          <img class="rec" src="demo.gif" alt="A real Claude Code session with Kiasi: npm ls --all returns 3,016 lines, Claude reports that a few dozen lines reached it and names the file holding the rest; then the dashboard" width="1100" height="620">
         </video>
       </div>
     </div>
 
-    <div class="trust reveal">
-      <div><b>6.5<small>×</small></b><span>less re-read per step</span></div>
-      <div><b>201k → 31k</b><span>context re-sent per step</span></div>
+    <div class="belt reveal">
+      <div><b>6.5<small>×</small></b><span>less context re-read per step</span></div>
+      <div><b>201k → 31k</b><span>tokens re-sent per step</span></div>
       <div><b>52% → 0%</b><span>steps over 200k context</span></div>
-      <div><b>0</b><span>network calls, model calls</span></div>
+      <div class="live"><b id="clones">—</b><span id="clones-cap">machines installed it in the last 14 days</span></div>
     </div>
-    <p class="fine" style="margin-top:10px">One machine, measured from its own transcripts: 16 days before, 7 days after. Yours is the number that matters, and Kiasi measures it the same way.</p>
+    <p class="beltnote reveal">One machine, measured from its own transcripts: 16 days before, 7 days after. Yours is the number that matters, and Kiasi measures it the same way.</p>
   </div>
 
-  <div class="below">
-
-  <section id="week">
+  <section id="how">
     <div class="head">
-      <div>
-        <p class="fig reveal">Fig. 01 · a week on your plan</p>
-        <h2 class="h2 reveal">Same work. <em>More week.</em></h2>
-      </div>
-      <p class="sub reveal" style="--d:1">Your weekly limit is a tank. Every step of Claude Code drains it by the size of the whole conversation. Kiasi keeps the conversation small, so the same week of work drains less of the tank.</p>
+      <p class="eyebrow reveal">How it works</p>
+      <h2 class="h2 reveal">Three fixed rules, <em>no model in the loop.</em></h2>
+      <p class="sub reveal" style="--d:1">Kiasi hooks into Claude Code's tool calls. Every rule is a threshold, not a judgement, so what Claude sees is predictable and the full text is always on disk.</p>
     </div>
-    <div class="sim reveal" id="sim" style="--d:2">
-      <div class="simtop">
-        <div>
-          <p class="big"><span id="mult">1.0</span>×<small>further on the same limit</small></p>
-          <p class="bigcap" id="bigcap">Press play, or pick how noisy your sessions are.</p>
-        </div>
-        <div class="modes" role="tablist" aria-label="Session noise">
-          <button class="mode" data-mode="0" role="tab">Light</button>
-          <button class="mode on" data-mode="1" role="tab" aria-selected="true">Typical</button>
-          <button class="mode" data-mode="2" role="tab">Heavy</button>
-        </div>
-      </div>
-      <div class="tracks">
-        <div class="cursor" id="cur"></div>
-        <div class="track a">
-          <div class="rwho"><b>Without Kiasi</b>raw tool output, long turns</div>
-          <div class="rail" id="railA"><div class="fill" id="fillA"></div></div>
-          <div class="out" id="outA">&nbsp;</div>
-        </div>
-        <div class="track b">
-          <div class="rwho"><b>With Kiasi</b>capped, cleaned, stopped at 60</div>
-          <div class="rail" id="railB"><div class="fill" id="fillB"></div></div>
-          <div class="out" id="outB">&nbsp;</div>
-        </div>
-      </div>
-      <div class="days"><ol id="days"><li>Mon</li><li>Tue</li><li>Wed</li><li>Thu</li><li>Fri</li><li>Sat</li><li>Sun</li></ol></div>
-      <div class="simfoot">
-        <p>A model week, not a promise: each day burns a fixed share of the limit, and Kiasi's share is the per-step saving measured on the reference turn mix. Your own dashboard shows your own number.</p>
-        <button class="play" id="play"><svg viewBox="0 0 12 12"><path d="M2 1l9 5-9 5z"/></svg>Play the week</button>
-      </div>
+    <div class="how">
+      <div class="reveal"><span class="n">01 · Cut</span><h3>Big outputs become a digest</h3><p>Over 12,000 chars is cut after progress bars, spinners and repeated lines are stripped. The whole thing is saved with a path.</p><div class="ex"><pre><span class="k">npm ci · 38,412 chars</span>
+<span class="g">[kiasi kept 2,100]</span> head, error lines, tail
+<span class="k">full output:</span> ~/.claude/plugins/data/…/run-104.txt</pre></div></div>
+      <div class="reveal" style="--d:1"><span class="n">02 · Skip</span><h3>Unchanged files are not re-read</h3><p>The same file, unchanged, returns a pointer to the copy already in context instead of the file again. Big pastes go to disk and come back as a path.</p><div class="ex"><pre><span class="k">Read src/app.ts (unchanged)</span>
+<span class="g">[kiasi skipped]</span> already in context, step 14
+<span class="k">saved:</span> 9,420 tokens</pre></div></div>
+      <div class="reveal" style="--d:2"><span class="n">03 · Stop</span><h3>Runaway turns are paused</h3><p>Warned at 50 steps, paused at 60 with the task written to a file. The same call failing three times tells Claude to rethink instead of retrying.</p><div class="ex"><pre><span class="k">step 60/60</span>
+<span class="y">[kiasi paused]</span> task saved to .kiasi/checkpoints
+<span class="k">continue here, hand off, or stop?</span></pre></div></div>
     </div>
   </section>
 
-  <section id="step">
+  <section id="features">
     <div class="head">
-      <div>
-        <p class="fig reveal">Fig. 02 · one tool output</p>
-        <h2 class="h2 reveal">What one step <em>looks like</em> after Kiasi.</h2>
+      <p class="eyebrow reveal">What it does</p>
+      <h2 class="h2 reveal">Same work. <em>More week.</em></h2>
+      <p class="sub reveal" style="--d:1">Your weekly limit is a tank, and every step drains it by the size of the whole conversation. Kiasi keeps the conversation small. Pick how noisy your sessions are and watch a model week.</p>
+    </div>
+    <div class="bento">
+      <div class="tile t-sim reveal" id="sim">
+        <div class="sim">
+          <div class="simtop">
+            <div>
+              <p class="big"><span id="mult">1.0</span>×<small>further on the same limit</small></p>
+              <p class="bigcap" id="bigcap">Press play, or pick how noisy your sessions are.</p>
+            </div>
+            <div class="modes" role="tablist" aria-label="Session noise">
+              <button class="mode" data-mode="0" role="tab" aria-selected="false">Light</button>
+              <button class="mode on" data-mode="1" role="tab" aria-selected="true">Typical</button>
+              <button class="mode" data-mode="2" role="tab" aria-selected="false">Heavy</button>
+            </div>
+          </div>
+          <div class="tracks">
+            <div class="cursor" id="cur"></div>
+            <div class="track a">
+              <div class="rwho"><b>Without Kiasi</b>raw tool output, long turns</div>
+              <div class="rail" id="railA"><div class="fill" id="fillA"></div></div>
+              <div class="out" id="outA">&nbsp;</div>
+            </div>
+            <div class="track b">
+              <div class="rwho"><b>With Kiasi</b>capped, cleaned, stopped at 60</div>
+              <div class="rail" id="railB"><div class="fill" id="fillB"></div></div>
+              <div class="out" id="outB">&nbsp;</div>
+            </div>
+          </div>
+          <div class="days"><ol id="days"><li>Mon</li><li>Tue</li><li>Wed</li><li>Thu</li><li>Fri</li><li>Sat</li><li>Sun</li></ol></div>
+          <div class="simfoot">
+            <p>A model week, not a promise: each day burns a fixed share of the limit, and Kiasi's share is the per-step saving measured on the reference turn mix. Your dashboard shows your own number.</p>
+            <button class="play" id="play"><svg viewBox="0 0 12 12"><path d="M2 1l9 5-9 5z"/></svg>Play the week</button>
+          </div>
+        </div>
       </div>
-      <p class="sub reveal" style="--d:1">A package install prints thousands of lines. Claude reads two of them. Without Kiasi the whole log is re-sent on every later step of the turn.</p>
-    </div>
-    <div class="step2">
-      <div class="log reveal" id="log" style="--d:1">
-        <div class="lbar"><b>npm ci</b><span class="count" id="count">38,412 chars</span></div>
-        <pre id="loglines"></pre>
+      <div class="tile t-dash reveal" style="--d:1">
+        <div class="in"><h3>A dashboard that is yours</h3><p>Every cut, skip and stop, the tokens kept off your limit, and when your weekly limit runs out at this pace. On 127.0.0.1, rebuilt every 30 minutes.</p></div>
+        <img src="overview.webp" alt="The Kiasi dashboard overview: days of weekly limit bought back and the burn chart" loading="lazy">
       </div>
-      <div class="facts reveal" style="--d:2">
-        <div class="fact"><b>38k<i>→</i><span class="to">2.1k</span></b><span>chars that enter the context. Progress bars, repeated warnings and padding are stripped, the rest is cut at 12,000 and saved in full.</span></div>
-        <div class="fact"><b>67<i>×</i></b><span>fewer times the long version is re-sent. Every later step of the turn carries the short one instead.</span></div>
-        <div class="fact"><b>0</b><span>lines lost. The full output is on disk with a path, searchable, and Claude is told where it is.</span></div>
-      </div>
+      <div class="tile t-2 reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h7"/><path d="M17 15l3 3-3 3"/></svg></div><h3>Run, distill, fetch</h3><p>A build, a test run, a web page or a big file goes through a tool that saves the full text and returns only the digest or the matching lines.</p><code>mcp__kiasi__run · distill · fetch · search</code></div>
+      <div class="tile t-2 reveal" style="--d:1"><div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 15h4M7 9l3 3-3 3"/></svg></div><h3>Status line and limits</h3><p>One command adds your 5-hour and weekly limits, context size and step count to the status line, after whatever you already had.</p><code>/kiasi:limits setup</code></div>
+      <div class="tile t-2 reveal" style="--d:2"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg></div><h3>Compaction that keeps the task</h3><p>At compaction your prompts and Claude's replies stay word for word. Old tool output goes. The task, edited files and failing commands come back.</p><code>session.compact</code></div>
+      <div class="tile t-3 reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg></div><h3>Paste manager</h3><p>A paste over 4,000 chars is saved to disk and replaced by a path Claude can search. Over 40,000 is refused with the path to resend, so one stray log never fills the window.</p><code>UserPromptSubmit</code></div>
+      <div class="tile t-3 reveal" style="--d:1"><div class="ic"><svg viewBox="0 0 24 24"><path d="M3 6h18l-2 13H5z"/><path d="M9 10v5M15 10v5"/></svg></div><h3>Cleans up after itself</h3><p>Saved outputs and pastes older than seven days are compressed, then dropped. The data folder stays small on its own, and a restore command brings a day back.</p><code>daily, at session start</code></div>
     </div>
-  </section>
-
-  <section id="rules">
-    <div class="head">
-      <div>
-        <p class="fig reveal">Fig. 03 · six leaks, six rules</p>
-        <h2 class="h2 reveal">Fixed thresholds. <em>No model</em> in the loop.</h2>
-      </div>
-      <p class="sub reveal" style="--d:1">Each rule is a Claude Code hook with a plain constant you can change. Nothing is summarised by an AI, nothing is guessed.</p>
-    </div>
-    <div class="mq reveal" style="--d:2"><ul id="mq">
-      <li><b>01</b>output cap at 12,000 chars</li><li><b>02</b>progress bars stripped</li><li><b>03</b>same file read twice → pointer</li><li><b>04</b>paste over 4,000 chars → disk</li><li><b>05</b>warn at 30 calls, stop at 60</li><li><b>06</b>same failure ×3 → rethink</li><li><b>07</b>old output pruned at compaction</li><li><b>08</b>task state re-injected</li><li><b>09</b>every cut saved in full</li>
-    </ul></div>
-    <div class="rgrid">
-      <div class="rule reveal"><span class="n">01</span><h3>Output cap and cleaning</h3><p>Over 12,000 chars is cut. Progress bars, spinners and repeated lines are stripped first. The full text is saved.</p><code>PostToolUse</code></div>
-      <div class="rule reveal" style="--d:1"><span class="n">02</span><h3>Turn budget and loop check</h3><p>Warned at 50 steps, paused at 60. The same call failing three times tells Claude to rethink.</p><code>PostToolUse · PostToolUseFailure · PostToolBatch</code></div>
-      <div class="rule reveal" style="--d:2"><span class="n">03</span><h3>Re-read skip</h3><p>The same file, unchanged, returns a pointer to the copy already in context instead of the file again.</p><code>PreToolUse</code></div>
-      <div class="rule reveal"><span class="n">04</span><h3>Paste manager</h3><p>Over 4,000 chars is saved to disk and replaced by a path. Over 40,000 is refused with the path to resend.</p><code>UserPromptSubmit</code></div>
-      <div class="rule reveal" style="--d:1"><span class="n">05</span><h3>Pruner and state</h3><p>At compaction your prompts and Claude's replies stay word for word. Old tool output goes. Task, edited files and failing commands come back.</p><code>session.compact</code></div>
-      <div class="rule reveal" style="--d:2"><span class="n">06</span><h3>Local dashboard</h3><p>Every action Kiasi took, the tokens it kept off your limit, and your 5-hour and weekly limits, on 127.0.0.1.</p><code>SessionStart</code></div>
-    </div>
-  </section>
-
-  <section id="daily">
-    <div class="head">
-      <div>
-        <p class="fig reveal">Fig. 04 · the everyday</p>
-        <h2 class="h2 reveal">Always on. <em>Never</em> in the way.</h2>
-      </div>
-      <p class="sub reveal" style="--d:1">The parts you see every session: a status line with your real limits, and tools Claude reaches for instead of flooding the conversation.</p>
-    </div>
-    <div class="sl reveal" style="--d:2" aria-label="Kiasi status line">
-      <div class="slbar"><b>status line</b><span>what Kiasi adds after your own</span></div>
-      <div class="slline"><span class="l">ctx</span> <span class="ok">███</span><span class="d">░░░░░░░</span> <span class="ok">31%</span> <span class="d">62k</span><i>│</i><span class="l">turn</span> <span class="k">12/60</span><i>│</i><span class="l">5h</span> <span class="ok">████</span><span class="d">░░░░░░</span> <span class="ok">42%</span> <span class="d">⟳ 4:30 pm</span><i>│</i><span class="l">wk</span> <span class="warn">██████</span><span class="d">░░░░</span> <span class="warn">61%</span> <span class="d">⟳ Mon 9:00 am</span> <span class="warn">▲3</span><i>│</i><span class="k">kiasi −1.9M</span></div>
-      <ul class="slkey">
-        <li><b>ctx</b>how much of the context window this turn carries</li>
-        <li><b>turn</b>steps of the 60 before Kiasi pauses the turn</li>
-        <li><b>5h · wk</b>your plan limits, when they reset, and <em>▲</em> when you are ahead of the week's pace</li>
-        <li><b>kiasi −</b>tokens kept off your limit this session</li>
-      </ul>
-    </div>
-    <div class="rgrid">
-      <div class="rule reveal"><span class="n">01</span><h3>Status line</h3><p>One command writes the two settings Kiasi needs and adds Kiasi to your status line, after whatever you already had. The status line is the only place your 5-hour and weekly limits are read from.</p><code>/kiasi:limits setup</code></div>
-      <div class="rule reveal" style="--d:1"><span class="n">02</span><h3>Run</h3><p>A build, a test run or a long log goes through a tool that saves the full output and returns a digest. The whole text never enters the conversation.</p><code>mcp__kiasi__run</code></div>
-      <div class="rule reveal" style="--d:2"><span class="n">03</span><h3>Distill</h3><p>A short Python or Node script runs over big files on disk. Only what it prints comes back, so counting and parsing cost almost nothing.</p><code>mcp__kiasi__distill</code></div>
-      <div class="rule reveal"><span class="n">04</span><h3>Fetch and search</h3><p>A web page is saved and searched; only its head and the matching lines come back. Search finds a line in any saved output, paste or note.</p><code>mcp__kiasi__fetch · mcp__kiasi__search</code></div>
-      <div class="rule reveal" style="--d:1"><span class="n">05</span><h3>Dashboard from login</h3><p>One command registers the dashboard with your system's login starter, so it runs with no Claude Code session open. Linux, macOS and Windows.</p><code>/kiasi:dashboard autostart on</code></div>
-      <div class="rule reveal" style="--d:2"><span class="n">06</span><h3>Cleanup</h3><p>Saved outputs and pastes older than seven days are compressed, then dropped. The data folder stays small on its own, and a restore command brings a day back.</p><code>daily, at session start</code></div>
-    </div>
-    <p class="slnote reveal">The run, distill, fetch and search tools need <code>CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1</code>, which <code>/kiasi:limits setup</code> writes for you.</p>
   </section>
 
   <section id="proof">
     <div class="head">
-      <div>
-        <p class="fig reveal">Fig. 05 · your own before and after</p>
-        <h2 class="h2 reveal">The receipt is <em>yours.</em></h2>
-      </div>
-      <p class="sub reveal" style="--d:1">The days before you installed Kiasi are the baseline. Every cut, skip and stop is a row with the saved file beside it. Rebuilt every 30 minutes by a small local server.</p>
+      <p class="eyebrow reveal">Your own before and after</p>
+      <h2 class="h2 reveal">The receipt <em>is yours.</em></h2>
+      <p class="sub reveal" style="--d:1">The days before you installed Kiasi are the baseline. Every cut, skip and stop is a row with the saved file beside it. Nothing here is a benchmark machine.</p>
     </div>
-    <div class="shot reveal" id="shot" style="--d:1"><div class="frame"><img src="overview.webp" alt="The Kiasi dashboard: each step costs less than before, with avoided tokens per day" loading="lazy"></div></div>
-    <div class="proof3">
-      <div class="reveal"><b>Your transcripts</b><span>The comparison is your own history, not a benchmark machine.</span></div>
-      <div class="reveal" style="--d:1"><b>Every action</b><span>Each cut, skip and stop names the saved file and what it kept out.</span></div>
-      <div class="reveal" style="--d:2"><b>Both limits</b><span>With the status line set up, the 5-hour and weekly limits show how much is left.</span></div>
+    <div class="proof">
+      <div class="shot reveal"><img src="overview.webp" alt="The Kiasi dashboard: each step costs less than before, with avoided tokens per day" loading="lazy"></div>
+      <div class="proof3">
+        <div class="reveal" style="--d:1"><b>Your transcripts</b><span>The comparison is your own history, measured the same way before and after.</span></div>
+        <div class="reveal" style="--d:2"><b>Every action named</b><span>Each cut, skip and stop shows the saved file and what it kept out.</span></div>
+        <div class="reveal" style="--d:3"><b>Both limits</b><span>With the status line set up, the 5-hour and weekly limits show how much is left and when they run out at this pace.</span></div>
+      </div>
     </div>
   </section>
 
   <section id="results">
     <div class="head">
-      <div>
-        <p class="fig reveal">Fig. 06 · results</p>
-        <h2 class="h2 reveal">Other people's <em>numbers.</em></h2>
-      </div>
-      <p class="sub reveal" style="--d:1">Each card is one machine's last 30 days, posted by its owner from the dashboard's <b>Your month</b> panel, with the plan and the kind of work beside it. Every card is read before it goes up. <a href="https://github.com/raj-rangani/kiasi/issues/new?template=share-your-month.yml">Add yours</a>.</p>
+      <p class="eyebrow reveal">Results</p>
+      <h2 class="h2 reveal">Other people's <em>numbers.</em></h2>
+      <p class="sub reveal" style="--d:1">Each card is one machine's last 30 days, posted by its owner from the dashboard's <b>Your month</b> panel, with the plan and the kind of work beside it. Every card is read before it goes up.</p>
     </div>
     <p class="counts reveal" id="counts" hidden></p>
     <div class="results reveal" id="results-grid" style="--d:1"></div>
   </section>
 
+  <section id="faq">
+    <div class="head">
+      <p class="eyebrow reveal">Questions</p>
+      <h2 class="h2 reveal">What developers <em>ask first.</em></h2>
+    </div>
+    <div class="faq reveal">
+      <details><summary>Does Claude lose information it needs?</summary><div class="a"><p>No text is thrown away. A cut output is saved in full with a path, and Claude is told where it is and how to search it. A skipped re-read points at the copy already in context. If Claude needs more, it reads the file by path.</p></div></details>
+      <details><summary>Does anything leave my machine?</summary><div class="a"><p>No. Kiasi is Python standard library with no dependencies and makes no network calls. Reports hold counts and sizes, never what you typed. The dashboard listens on 127.0.0.1 only and refuses other host names.</p></div></details>
+      <details><summary>Does it slow Claude Code down?</summary><div class="a"><p>Each hook runs in milliseconds on the tool output it is given. Long commands are the ones that get faster, because a 3,000-line log no longer rides along on every later step of the turn.</p></div></details>
+      <details><summary>What does it change in my settings?</summary><div class="a"><p>Two keys in <code>~/.claude/settings.json</code>: the compaction window at 200k and the pruner switch, plus a status line entry added after whatever you had. <code>/plugin uninstall kiasi@kiasi</code> puts both back.</p></div></details>
+      <details><summary>Which plans and versions does it need?</summary><div class="a"><p>Claude Code 2.1.283 or newer and Python 3.8 or newer. Any plan: the weekly-limit readout works on Pro and Max, and the context savings apply to API billing too.</p></div></details>
+      <details><summary>How do I know it worked for me?</summary><div class="a"><p>Open the dashboard the next day. The overview reads one line: days of weekly limit bought back, against your own days before Kiasi. The <b>Your month</b> panel makes a card you can post on this page.</p></div></details>
+    </div>
+  </section>
+
   <section id="install">
     <div class="head">
-      <div>
-        <p class="fig reveal">Fig. 07 · install</p>
-        <h2 class="h2 reveal">Three lines. <em>About a minute.</em></h2>
-      </div>
-      <p class="sub reveal" style="--d:1">Nothing to build, nothing to sign up for. Requires Claude Code 2.1.283 or newer and Python 3.8 or newer, standard library only.</p>
+      <p class="eyebrow reveal">Install</p>
+      <h2 class="h2 reveal">Three lines. <em>About a minute.</em></h2>
+      <p class="sub reveal" style="--d:1">Nothing to build, nothing to sign up for. Terminal or VS Code, your pick.</p>
     </div>
     <div class="inst">
       <ol class="steps reveal" style="--d:1">
-        <li><b>Install the plugin</b><p>In a terminal, two lines. In the VS Code extension, one button, or <code>/plugins</code> in the prompt box. Both ways are beside this.</p></li>
-        <li><b>Restart, then one command</b><p>Run <code>/kiasi:limits setup</code> once. It writes the two settings Kiasi needs to <code>~/.claude/settings.json</code>, the compaction window at 200k and the pruner switch, and adds your plan limits to the status line. The dashboard starts itself with every session at <code>127.0.0.1:8787</code>.</p></li>
+        <li><b>Install the plugin</b><p>In a terminal, two lines. In the VS Code extension, one button, or <code>/plugins</code> in the prompt box. Both are beside this.</p></li>
+        <li><b>Restart, then one command</b><p>Run <code>/kiasi:limits setup</code> once. It writes the two settings Kiasi needs and adds your plan limits to the status line. The dashboard starts itself with every session at <code>127.0.0.1:8787</code>.</p></li>
+        <li><b>Come back tomorrow</b><p>The first before-and-after needs a day of sessions. The overview then reads one line: how many days of weekly limit Kiasi bought back.</p></li>
       </ol>
       <div class="tty reveal" id="tty" style="--d:2">
         <div class="lbar"><div class="tabs" role="tablist" aria-label="Install method"><button class="tab on" role="tab" aria-selected="true" data-tab="cli">Terminal</button><button class="tab" role="tab" aria-selected="false" data-tab="vsc">VS Code</button></div><button class="copy" id="ttycopy" data-copy="/plugin marketplace add raj-rangani/kiasi&#10;/plugin install kiasi@kiasi" data-cli="/plugin marketplace add raj-rangani/kiasi&#10;/plugin install kiasi@kiasi" data-vsc="vscode://anthropic.claude-code/install-plugin?plugin=kiasi&amp;marketplace=raj-rangani/kiasi">Copy install</button></div>
@@ -537,40 +465,39 @@ body { overflow-x: clip; }
   </section>
 
   <section class="fin">
-    <p class="fig reveal" style="justify-content:center">Fig. 08 · the ask</p>
-    <h2 class="h2 reveal">Make this week's <em>limit last.</em></h2>
+    <p class="eyebrow reveal">The ask</p>
+    <h2 class="h2 reveal">Make this week's limit last.</h2>
     <p class="sub reveal" style="--d:1">One minute to install. Your first before-and-after shows up the next day.</p>
-    <div class="cmdbox reveal" style="--d:2"><span>/plugin marketplace add raj-rangani/kiasi</span><button class="copy" data-copy="/plugin marketplace add raj-rangani/kiasi&#10;/plugin install kiasi@kiasi">Copy</button></div>
-    <div class="cta reveal" style="--d:3"><a class="btn" href="https://github.com/raj-rangani/kiasi#readme">Read the README</a></div>
+    <div class="cmd reveal" style="--d:2"><span>/plugin marketplace add raj-rangani/kiasi</span><button class="copy" data-copy="/plugin marketplace add raj-rangani/kiasi&#10;/plugin install kiasi@kiasi">Copy both lines</button></div>
+    <div class="cta reveal" style="--d:3"><a class="btn" href="https://github.com/raj-rangani/kiasi#readme">Read the README</a><a class="btn" href="https://github.com/raj-rangani/kiasi/blob/main/docs/benchmark.md">See the benchmark</a></div>
   </section>
 
   <footer class="foot">
     <span>Kiasi · a Claude Code plugin · MIT</span>
     <span><a href="https://github.com/raj-rangani/kiasi">GitHub</a> · <a href="https://github.com/raj-rangani/kiasi/blob/main/CHANGELOG.md">Changelog</a> · <a href="https://github.com/raj-rangani/kiasi/issues">Issues</a></span>
   </footer>
-  </div>
-
 </main>
-
 <script>
-  // Reduced motion: leave the poster up and let the viewer press play.
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { var v = document.querySelector('.term video'); if (v) { v.removeAttribute('autoplay'); v.pause(); v.controls = true; } }
 (function () {
-  var root = document.documentElement;
-  var still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  document.body.classList.remove('no-js');
-  try { var saved = localStorage.getItem('kiasi-theme'); if (saved) root.dataset.theme = saved; } catch (e) {}
+  var root = document.documentElement, still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* theme: dark by default, light when chosen */
+  try { if (localStorage.getItem('kiasi-theme') === 'light') root.dataset.theme = 'light'; } catch (e) {}
   document.getElementById('theme').addEventListener('click', function () {
-    var dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
-    root.dataset.theme = dark ? 'light' : 'dark';
-    try { localStorage.setItem('kiasi-theme', root.dataset.theme); } catch (e) {}
+    var light = root.dataset.theme === 'light';
+    if (light) delete root.dataset.theme; else root.dataset.theme = 'light';
+    try { localStorage.setItem('kiasi-theme', light ? 'dark' : 'light'); } catch (e) {}
   });
 
+  /* reduced motion: leave the poster up and let the viewer press play */
+  if (still) { var v = document.querySelector('.term video'); if (v) { v.removeAttribute('autoplay'); v.pause(); v.controls = true; } }
+
+  /* top bar */
   var top = document.querySelector('.top');
   var onScroll = function () { top.classList.toggle('scrolled', scrollY > 8); };
-  addEventListener('scroll', onScroll, { passive: true });
-  onScroll();
+  addEventListener('scroll', onScroll, { passive: true }); onScroll();
 
+  /* reveal on scroll */
   var reveals = document.querySelectorAll('.reveal');
   if (still || !('IntersectionObserver' in window)) {
     reveals.forEach(function (el) { el.classList.add('in'); });
@@ -580,18 +507,13 @@ body { overflow-x: clip; }
     }, { rootMargin: '0px 0px -8% 0px' });
     reveals.forEach(function (el) { io.observe(el); });
   }
-
-  var STOP = 60, WARN = 30, CPT = 4, BASE = 2000, STEPS = 70, NS = 'http://www.w3.org/2000/svg';
-  var EVENTS = { 3: [40000, 2100], 6: [8000, 8000], 9: [60000, 12000], 12: [8000, 300], 15: [25000, 12000], 24: [60000, 12000], 27: [60000, 12000], 30: [60000, 12000], 41: [8000, 300], 48: [60000, 12000], 55: [30000, 12000], 62: [60000, 12000] };
-
-  /* ---- below the hero ---- */
   var seen = function (el, fn, margin) {
     if (!el) return;
     if (still || !('IntersectionObserver' in window)) { fn(); return; }
-    var io = new IntersectionObserver(function (es) {
-      es.forEach(function (e) { if (e.isIntersecting) { io.disconnect(); fn(); } });
+    var o = new IntersectionObserver(function (es) {
+      es.forEach(function (e) { if (e.isIntersecting) { o.disconnect(); fn(); } });
     }, { rootMargin: margin || '0px 0px -20% 0px' });
-    io.observe(el);
+    o.observe(el);
   };
 
   /* week simulator */
@@ -601,11 +523,12 @@ body { overflow-x: clip; }
     { burn: 19, save: 0.55, cap: 'Typical: long turns, installs, test runs, logs.' },
     { burn: 27, save: 0.62, cap: 'Heavy: all day in Claude Code, big pastes, failing tests.' }
   ];
-  var sim = document.getElementById('sim'), mode = 1, timer = null, played = false;
+  var sim = document.getElementById('sim'), mode = 1, timer = null;
   var fillA = document.getElementById('fillA'), fillB = document.getElementById('fillB');
   var railA = document.getElementById('railA'), railB = document.getElementById('railB');
   var outA = document.getElementById('outA'), outB = document.getElementById('outB');
-  var cur = document.getElementById('cur'), dayEls = document.querySelectorAll('#days li');
+  var cur = document.getElementById('cur'), dayEls;
+  dayEls = document.querySelectorAll('#days li');
   var mult = document.getElementById('mult'), bigcap = document.getElementById('bigcap');
   var hitText = function (burn) {
     var d = CAP / burn;
@@ -627,7 +550,7 @@ body { overflow-x: clip; }
   };
   var runWeek = function () {
     var m = MODES[mode], burnA = m.burn, burnB = m.burn * (1 - m.save), day = 0;
-    clearTimeout(timer); played = true;
+    clearTimeout(timer);
     fillA.style.width = fillB.style.width = '0%';
     railA.classList.remove('hit'); railB.classList.remove('hit');
     outA.innerHTML = outB.innerHTML = '&nbsp;';
@@ -661,48 +584,6 @@ body { overflow-x: clip; }
   });
   document.getElementById('play').addEventListener('click', runWeek);
   seen(sim, runWeek, '0px 0px -30% 0px');
-  if (!still) sim.addEventListener('mousemove', function (e) {
-    var r = sim.getBoundingClientRect();
-    sim.style.setProperty('--mx', ((e.clientX - r.left) / r.width * 100) + '%');
-    sim.style.setProperty('--my', ((e.clientY - r.top) / r.height * 100) + '%');
-  });
-
-  /* one tool output */
-  var LOG = [
-    ['keep', 'npm warn deprecated inflight@1.0.6: This module is not supported'],
-    ['cut', '[####........] \\ idealTree:kiasi-app: sill idealTree buildDeps'],
-    ['cut', '[######......] | idealTree:kiasi-app: sill idealTree buildDeps'],
-    ['cut', '[########....] / idealTree:kiasi-app: sill idealTree buildDeps'],
-    ['cut', '[##########..] - reify:lodash: timing reifyNode:node_modules/react'],
-    ['cut', '[############] \\ reify:esbuild: timing reifyNode:node_modules/vite'],
-    ['cut', 'npm warn deprecated glob@7.2.3: Glob versions prior to v9 are no longer supported'],
-    ['cut', 'npm warn deprecated glob@7.2.3: Glob versions prior to v9 are no longer supported'],
-    ['cut', 'npm warn deprecated glob@7.2.3: Glob versions prior to v9 are no longer supported'],
-    ['cut', 'npm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported'],
-    ['cut', 'npm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported'],
-    ['cut', 'npm http fetch GET 200 https://registry.npmjs.org/react/-/react-19.2.0.tgz 412ms'],
-    ['cut', 'npm http fetch GET 200 https://registry.npmjs.org/vite/-/vite-7.1.0.tgz 388ms'],
-    ['cut', 'npm http fetch GET 200 https://registry.npmjs.org/esbuild/-/esbuild-0.25.0.tgz 901ms'],
-    ['cut', 'npm http fetch GET 200 https://registry.npmjs.org/typescript/-/typescript-5.9.0.tgz 1204ms'],
-    ['cut', '… 2,318 more lines like these …'],
-    ['keep', 'added 1,412 packages, and audited 1,413 packages in 41s'],
-    ['keep', '3 vulnerabilities (1 moderate, 2 high)'],
-    ['keep', 'To address all issues, run: npm audit fix'],
-    ['note', '[kiasi kept 2,100 of 38,412 chars; full output: ~/.claude/kiasi/outputs/npm-ci-1402.txt]']
-  ];
-  var pre = document.getElementById('loglines');
-  LOG.forEach(function (l) { var s = document.createElement('span'); s.className = 'l ' + l[0]; s.textContent = l[1]; pre.appendChild(s); });
-  var log = document.getElementById('log'), count = document.getElementById('count');
-  seen(log, function () {
-    setTimeout(function () {
-      log.classList.add('on');
-      setTimeout(function () { count.textContent = '2,100 chars · 36,312 on disk'; count.classList.add('done'); }, still ? 0 : 500);
-    }, still ? 0 : 900);
-  });
-
-  /* marquee: double the list for a seamless loop */
-  var mq = document.getElementById('mq');
-  if (mq) mq.innerHTML += mq.innerHTML;
 
   /* install terminal */
   var tty = document.getElementById('tty'), ttycopy = document.getElementById('ttycopy');
@@ -715,19 +596,16 @@ body { overflow-x: clip; }
       showLines(document.getElementById('pane-' + b.dataset.tab));
     });
   });
-  seen(tty, function () {
-    showLines(document.getElementById('pane-cli'));
-  });
+  seen(tty, function () { showLines(document.getElementById('pane-cli')); });
 
   /* copy buttons */
   document.querySelectorAll('.copy').forEach(function (b) {
     b.addEventListener('click', function () {
-      var text = b.dataset.copy.replace(/\\n/g, '\n');
+      var text = b.dataset.copy;
       var done = function () { var was = b.textContent; b.textContent = 'Copied'; b.classList.add('ok'); setTimeout(function () { b.textContent = was; b.classList.remove('ok'); }, 1400); };
       if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, done); else done();
     });
   });
-
 })();
 </script>
 <script>
@@ -759,14 +637,17 @@ body { overflow-x: clip; }
     grid.innerHTML = list.slice().reverse().map(card).join('') + add;
   }).catch(function () { grid.innerHTML = add; });
   fetch('stats.json').then(function (r) { return r.json(); }).then(function (st) {
-    var parts = [];
-    if (st.stars != null) parts.push('<span><b>' + esc(st.stars) + '</b> star' + (st.stars === 1 ? '' : 's') + ' on GitHub</span>');
-    if (st.unique_clones_14d != null) parts.push('<span><b>' + esc(st.unique_clones_14d) + '</b> machines cloned it in 14 days <span title="Installing the plugin clones the repository, so unique clones are the closest public count of installs.">(unique clones, how the plugin installs)</span></span>');
+    var parts = [], stars = document.getElementById('stars'), clones = document.getElementById('clones'), cap = document.getElementById('clones-cap');
+    if (st.stars != null) { parts.push('<span><b>' + esc(st.stars) + '</b> star' + (st.stars === 1 ? '' : 's') + ' on GitHub</span>'); stars.textContent = st.stars; stars.hidden = false; }
+    if (st.unique_clones_14d != null) {
+      parts.push('<span><b>' + esc(st.unique_clones_14d) + '</b> machines cloned it in 14 days <span title="Installing the plugin clones the repository, so unique clones are the closest public count of installs.">(unique clones, how the plugin installs)</span></span>');
+      clones.textContent = st.unique_clones_14d; cap.title = 'Unique clones of the repository in the last 14 days, the closest public count of installs.';
+    } else { clones.parentNode.hidden = true; }
     if (st.traffic_as_of || st.updated) parts.push('<span>counted ' + esc(st.traffic_as_of || st.updated) + '</span>');
     if (!parts.length) return;
     counts.innerHTML = parts.join(' · ');
     counts.hidden = false;
-  }).catch(function () {});
+  }).catch(function () { var c = document.getElementById('clones'); if (c) c.parentNode.hidden = true; });
 })();
 </script>
 </body>
