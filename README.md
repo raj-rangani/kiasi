@@ -46,13 +46,15 @@ Or type `/plugins` in the prompt box, add `raj-rangani/kiasi` in the Marketplace
 
 Every number Kiasi shows is measured. The benchmark replays shape-realistic tool outputs through the same handlers that run in a session, and the dashboard measures your own sessions the same way, against the days before you installed.
 
-| Scenario | Chars in | Chars entered | Saved over 10 later steps |
-|---|---:|---:|---:|
-| GitHub issue list via MCP | 105,223 | 6,181 | 247,605 tokens |
-| npm install --loglevel=warn --no-fund --no-audit log | 42,800 | 3,569 | 98,077 tokens |
-| Test run through `mcp__kiasi__run` | 64,578 | 2,082 | 156,240 tokens |
+Each row is compared with what Claude Code alone puts in context under its documented output limits, in characters, not with the raw output.
 
-The full table and how to rerun it are in [BENCHMARK.md](BENCHMARK.md). On the machine Kiasi was built on, 16 days before against 7 days after: context re-sent per step 201k → 31k tokens, 6.5× less; steps over 200k context 52% → 0%. That is one machine. Yours is the number that matters, and it is on your dashboard the day after you install.
+| Scenario | Claude Code alone | With Kiasi | Kept off 10 later steps |
+|---|---:|---:|---:|
+| Unchanged source file read a second time | 29,029 | 245 | 71,960 tokens |
+| Mid-size build log (ANSI, progress redraws) | 20,034 | 2,929 | 42,762 tokens |
+| Test run through `mcp__kiasi__run` | 10,000 | 2,082 | 19,795 tokens |
+
+Claude Code alone sends less on three of the nine scenarios: a succeeding npm install, and two very large MCP results that Claude Code saves to a file and replaces with a path. The full table and how to rerun it are in [BENCHMARK.md](BENCHMARK.md). On the machine Kiasi was built on, 16 days before against 7 days after: context re-sent per step 201k → 31k tokens, 6.5× less; steps over 200k context 52% → 0%. That is one machine. Yours is the number that matters, and it is on your dashboard the day after you install.
 
 <img src="docs/overview.webp" alt="Kiasi dashboard overview" width="720">
 

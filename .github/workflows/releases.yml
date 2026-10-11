@@ -1,0 +1,33 @@
+name: Releases
+
+on:
+  release:
+    types: [published, edited, deleted]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  feed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Fetch releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api repos/${{ github.repository }}/releases --paginate > "$RUNNER_TEMP/releases.json"
+      - name: Write docs/releases.json and docs/releases.xml
+        run: python3 scripts/site_releases.py "$RUNNER_TEMP/releases.json" docs
+      - name: Commit and push
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/releases.json docs/releases.xml
+          if git diff --cached --quiet; then echo "nothing to commit"; exit 0; fi
+          git commit -m "Releases: ${TAG:-refresh}"
+          git push

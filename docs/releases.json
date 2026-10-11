@@ -1,0 +1,733 @@
+{
+ "updated": "2026-10-09",
+ "releases": [
+  {
+   "version": "0.8.0",
+   "tag": "v0.8.0",
+   "date": "2026-10-09",
+   "title": "Kiasi 0.8.0",
+   "url": "https://github.com/raj-rangani/kiasi/releases/tag/v0.8.0",
+   "latest": true,
+   "summary": "Install is now one command after the plugin, the Overview says what the re-reads Kiasi avoided are worth in dollars, and the README leads with the weekly limit and a comparison. Details in the <a href=\"https://github.com/raj-rangani/kiasi/blob/main/CHANGELOG.md#080---2026-10-09\">0.8.0 changelog</a>.",
+   "compare": "https://github.com/raj-rangani/kiasi/compare/v0.7.0...v0.8.0",
+   "sections": [
+    {
+     "heading": "Highlights",
+     "items": [
+      {
+       "lead": "One-step install.",
+       "html": "<b>One-step install.</b> <code>/kiasi:limits setup</code> now writes the two settings Kiasi needs, <code>CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000</code> and <code>CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1</code>, into the <code>env</code> block of <code>~/.claude/settings.json</code> along with the status line. Your other env keys stay, and the command says which settings it added. The session-start reminder for a missing setting names the command instead of a JSON snippet."
+      },
+      {
+       "lead": "Worth in dollars.",
+       "html": "<b>Worth in dollars.</b> The Overview&#x27;s Bought back line adds what the avoided re-reads would have cost at public API rates, priced at the cache-read rate of the models you used in the window, weighted by their reads. The tooltip shows the rate. On an API key it is money; on a flat plan it is what the limit would have spent."
+      },
+      {
+       "lead": "A README that starts with the problem.",
+       "html": "<b>A README that starts with the problem.</b> The pain in bytes, Quick start first, four things it cuts, three benchmark rows, a comparison with RTK, Context Mode and the compaction window alone, and the rules with the turn-budget trade-off stated. Settings and development notes moved to <code>docs/</code>."
+      },
+      {
+       "lead": "Launch copy.",
+       "html": "<b>Launch copy.</b> <code>docs/launch.md</code> has the Show HN post, the reply for weekly-limit threads and the awesome-list PR text, for anyone who wants to tell others."
+      }
+     ]
+    },
+    {
+     "heading": "Bug fixes",
+     "items": [
+      {
+       "lead": "",
+       "html": "None in this release."
+      }
+     ]
+    },
+    {
+     "heading": "Upgrade notes",
+     "items": [
+      {
+       "lead": "",
+       "html": "Update with <code>/plugin marketplace update kiasi</code> then <code>/plugin update kiasi</code>, or <code>git pull</code> in a local checkout, then restart Claude Code."
+      },
+      {
+       "lead": "",
+       "html": "Run <code>/kiasi:limits setup</code> once after updating. It now writes the two env settings, so you can delete them from your own settings if you prefer the command to own them; it leaves them alone if they are already set."
+      },
+      {
+       "lead": "",
+       "html": "The dollar line appears on the Overview at the next report build after restart. It is left out when no model in the window has a known price."
+      }
+     ]
+    },
+    {
+     "heading": "Known issues",
+     "items": [
+      {
+       "lead": "",
+       "html": "The dollar figure is an estimate of what tokens that were never sent would have cost, at today&#x27;s public rates; it is not read from a bill."
+      },
+      {
+       "lead": "",
+       "html": "The comparison table describes RTK and Context Mode from their READMEs at the time of writing; open an issue if either has changed."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "version": "0.7.0",
+   "tag": "v0.7.0",
+   "date": "2026-10-09",
+   "title": "Kiasi 0.7.0",
+   "url": "https://github.com/raj-rangani/kiasi/releases/tag/v0.7.0",
+   "latest": false,
+   "summary": "The Overview now tells you what to cut next and whether your last cut worked, and a new <code>/kiasi:floor</code> skill finds what to trim from the startup floor. Details in the <a href=\"https://github.com/raj-rangani/kiasi/blob/main/CHANGELOG.md#070---2026-10-09\">0.7.0 changelog</a>.",
+   "compare": "https://github.com/raj-rangani/kiasi/compare/v0.6.0...v0.7.0",
+   "sections": [
+    {
+     "heading": "Highlights",
+     "items": [
+      {
+       "lead": "One week on one axis.",
+       "html": "<b>One week on one axis.</b> The Overview leads with the runway in a sentence, then the weekly limit as a cumulative burn line and the context sent per day on the same Monday-to-Sunday axis, so used, pace, run-out and the days that caused it line up. The forecast continues dashed to the run-out or the reset."
+      },
+      {
+       "lead": "What to cut next, with trend.",
+       "html": "<b>What to cut next, with trend.</b> A tinted bar of what the context is made of, then three rows. Each row shows the change against the seven days before, names the biggest single piece behind it (the largest piece of your floor, the one file whose read cost most, the hook that attaches most) and opens its panel."
+      },
+      {
+       "lead": "Startup floor and system reminders panels.",
+       "html": "<b>Startup floor and system reminders panels.</b> The floor per project with its pieces and a per-day line that shows a settings change as a step. The reminders split by the hook or notice that attached them, with how often each fired."
+      },
+      {
+       "lead": "/kiasi:floor.",
+       "html": "**<code>/kiasi:floor</code>.** Audits the last 30 days for skills, MCP servers, agents and hooks that sessions were offered but never used, prints what each costs, and writes a fix script for you to read and run. <code>scripts/once.py</code> makes a prompt hook attach its text once per session instead of on every prompt."
+      },
+      {
+       "lead": "Session receipt, weekly digest and month card.",
+       "html": "<b>Session receipt, weekly digest and month card.</b> A desktop notification at session end with what the session sent and what it would have sent without Kiasi; a weekly digest at startup; and &quot;Share your month&quot; on the Overview as text or an SVG image."
+      }
+     ]
+    },
+    {
+     "heading": "Bug fixes",
+     "items": [
+      {
+       "lead": "Overview chart:",
+       "html": "<b>Overview chart:</b> the now label no longer straddles the band&#x27;s floor, the runs-out label no longer runs into the reset label, and the ledger rows stay on one line."
+      },
+      {
+       "lead": "Panels:",
+       "html": "<b>Panels:</b> closing the Startup floor or System reminders panel clears it from the address, so a refresh no longer reopens it."
+      },
+      {
+       "lead": "Rules:",
+       "html": "<b>Rules:</b> the breakdown column wrapped again after a shared class name leaked the Overview ledger&#x27;s grid onto it."
+      },
+      {
+       "lead": "Timestamps:",
+       "html": "<b>Timestamps:</b> event-log stamps (local time) and transcript stamps (UTC) are read through one parser, so a cut is no longer shifted against its session&#x27;s steps by the local offset."
+      }
+     ]
+    },
+    {
+     "heading": "Upgrade notes",
+     "items": [
+      {
+       "lead": "",
+       "html": "Update with <code>/plugin marketplace update</code> then <code>/plugin update kiasi</code>, or <code>git pull</code> in a local checkout. No settings change is needed."
+      },
+      {
+       "lead": "",
+       "html": "The trend on each &quot;What to cut next&quot; row appears once the share history is a week old; before that the rows show no change figure."
+      },
+      {
+       "lead": "",
+       "html": "The per-day floor line and the share history live in <code>floor-history.json</code> and <code>share-history.json</code> next to the other Kiasi data."
+      },
+      {
+       "lead": "",
+       "html": "Run <code>/kiasi:floor</code> to get the audit and its fix script. The script backs every file up and only moves things the audit saw unused; read it before running it."
+      }
+     ]
+    },
+    {
+     "heading": "Known issues",
+     "items": [
+      {
+       "lead": "",
+       "html": "The floor audit counts a skill or server as used only when a transcript in the window shows it; a tool you use rarely can be listed as unused. The fix script only moves such things to project scope, it deletes nothing."
+      },
+      {
+       "lead": "",
+       "html": "Image files read with the Read tool count as file reads in the attribution."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "version": "0.6.0",
+   "tag": "v0.6.0",
+   "date": "2026-10-07",
+   "title": "Kiasi 0.6.0",
+   "url": "https://github.com/raj-rangani/kiasi/releases/tag/v0.6.0",
+   "latest": false,
+   "summary": "Rule outcomes on the dashboard, a holdout experiment, and a ready subagent brief when kiasi says delegate. Full list in the <a href=\"https://github.com/raj-rangani/kiasi/blob/main/CHANGELOG.md#060---2026-10-07\">changelog</a>.",
+   "compare": "",
+   "sections": [
+    {
+     "heading": "Highlights",
+     "items": [
+      {
+       "lead": "Every rule gets an outcome.",
+       "html": "<b>Every rule gets an outcome.</b> The Rules tab shows how often each rule fired, how often Claude followed it, and the measured effect: re-read paid against the estimate for delegated turns, steps after a turn warning, the restored session&#x27;s first context after a handoff notice, and whether a compact nudge or task-switch notice was acted on within three prompts. Each figure carries a note on how it was judged."
+      },
+      {
+       "lead": "Holdout experiment.",
+       "html": "<b>Holdout experiment.</b> Set <code>holdout</code> in <code>.kiasi.json</code> or <code>CLAUDE_PLUGIN_OPTION_HOLDOUT</code> to <code>reread_check</code>, <code>turn_budget</code>, <code>context_notices</code>, <code>output_cap</code> or <code>sandbox</code>. Sessions whose id hashes odd run with that rule off, and an Experiment section on the Rules tab compares the two halves on context, re-read and steps per prompt once each side has ten sessions."
+      },
+      {
+       "lead": "Delegating is one call.",
+       "html": "<b>Delegating is one call.</b> When the re-read check says delegate, kiasi writes the task file and hands Claude a ready brief with the path, goal, working directory, step budget and report format. The turn-budget pause and the &quot;hand to a subagent&quot; choice carry the same brief."
+      }
+     ]
+    },
+    {
+     "heading": "Upgrade notes",
+     "items": [
+      {
+       "lead": "",
+       "html": "No settings change is needed. The holdout is off until you set it."
+      },
+      {
+       "lead": "",
+       "html": "Outcome lines appear as data accumulates. On a fresh install the re-read and handoff outcomes stay empty until a delegate-mode check or a task-file restore happens."
+      }
+     ]
+    },
+    {
+     "heading": "Known issues",
+     "items": [
+      {
+       "lead": "",
+       "html": "The handoff outcome is judged by a task-file restore in the same project within 60 minutes. A handoff to a different machine or a restore after a longer break counts as ignored."
+      },
+      {
+       "lead": "",
+       "html": "The compact nudge and task-switch outcomes are open-ended when fewer than three prompts follow the notice."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "version": "0.5.0",
+   "tag": "v0.5.0",
+   "date": "2026-10-07",
+   "title": "Kiasi 0.5.0",
+   "url": "https://github.com/raj-rangani/kiasi/releases/tag/v0.5.0",
+   "latest": false,
+   "summary": "",
+   "compare": "",
+   "sections": [
+    {
+     "heading": "Highlights",
+     "items": [
+      {
+       "lead": "One task file per task.",
+       "html": "<b>One task file per task.</b> The pause, the compaction note, the stop note and the new <code>/kiasi:handoff</code> skill all write it under <code>.kiasi/checkpoints/</code>, and the next session restores it. <code>/clear</code> no longer loses the task."
+      },
+      {
+       "lead": "Context notices.",
+       "html": "<b>Context notices.</b> At 150k tokens Kiasi says &quot;run <code>/kiasi:handoff</code>, then <code>/clear</code>&quot; and names the floor the session would restart from. On return after the cache has gone cold with a large context, it says the next prompt rewrites all of it. A task-switch notice fires once when a prompt after a break shares few words with the task file&#x27;s goal."
+      },
+      {
+       "lead": "Smaller floor.",
+       "html": "<b>Smaller floor.</b> The SessionStart block is 7 lines instead of about 40; <code>/kiasi:rules</code> loads the full rules on demand. The compaction pruner keeps the last three exchanges verbatim and reduces older ones to prompt, outcome and archive pointer."
+      },
+      {
+       "lead": "Context meter in the status line.",
+       "html": "<b>Context meter in the status line.</b> <code>ctx 118k (floor 46k) · turn 12/60 1.4M · cache warm 52m · idle 3m</code>, amber at 150k and red at 200k."
+      },
+      {
+       "lead": "Dashboard.",
+       "html": "<b>Dashboard.</b> Median and p90 context beside the mean, a &quot;past 200k&quot; flag with the auto-compact window recommendation, a per-project floor audit, a per-day context chart, cache-gap and model-switch rewrites, and an effort comparison that controls for difficulty and recommends a lower effort only when output per step, extra tokens and steps per prompt all clear named thresholds."
+      },
+      {
+       "lead": "",
+       "html": "Synthetic transcript entries are classified and the replay cause is confirmed from every transcript on this machine: 99.8% are history replayed on resume, with zero usage."
+      }
+     ]
+    },
+    {
+     "heading": "Bug fixes",
+     "items": [
+      {
+       "lead": "",
+       "html": "The turn-budget warning, pause and resume name the task file instead of Claude&#x27;s own checklist, and writing it is allowed at the pause."
+      },
+      {
+       "lead": "",
+       "html": "The shared temp checklist folder is per user and private. Cleanup removes stale pause records after 14 days. A failed <code>run</code> no longer counts as saved tokens."
+      },
+      {
+       "lead": "",
+       "html": "Session state and report writes retry briefly on Windows when a file is held open. Sandbox outputs from a session with no id are cleaned up."
+      },
+      {
+       "lead": "",
+       "html": "A file a subagent read, or a Kiasi search returned, counts as read back. Resumed sessions are marked &quot;earlier part not shown&quot;."
+      },
+      {
+       "lead": "",
+       "html": "Compaction no longer leaves a long result uncut because its last line starts with <code>[kiasi </code>; every saved-file pointer in a dropped part is kept, up to five. Searching for a bare <code>--</code> works."
+      },
+      {
+       "lead": "",
+       "html": "Report tests use local days and pass in four time zones at both midnights."
+      }
+     ]
+    },
+    {
+     "heading": "Upgrade notes",
+     "items": [
+      {
+       "lead": "",
+       "html": "The status line script changed (context meter). It is a copy under the data folder, so run <code>/kiasi:limits setup</code> again after updating to get the meter."
+      },
+      {
+       "lead": "",
+       "html": "Two Claude Code settings are worth setting: <code>CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000</code> and, on an API key, <code>CLAUDE_CODE_PROMPT_CACHE_TTL=1h</code>. The README&#x27;s Settings section explains both."
+      },
+      {
+       "lead": "",
+       "html": "The stored daily history is recounted once on the first dashboard build after updating."
+      }
+     ]
+    },
+    {
+     "heading": "Known issues",
+     "items": [
+      {
+       "lead": "",
+       "html": "The pruner&#x27;s 200k-character reduction gate was measured at one in twenty compactions below it and kept; it will be re-measured after a month of data."
+      },
+      {
+       "lead": "",
+       "html": "The effort recommendation is based on one week of prompts; a second week may change it."
+      },
+      {
+       "lead": "",
+       "html": "Windows has still not been run on a real machine."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "version": "0.4.2",
+   "tag": "v0.4.2",
+   "date": "2026-10-07",
+   "title": "Kiasi 0.4.2",
+   "url": "https://github.com/raj-rangani/kiasi/releases/tag/v0.4.2",
+   "latest": false,
+   "summary": "Bug-fix release. Closes the four known issues listed on 0.4.1. Full list in <a href=\"https://github.com/raj-rangani/kiasi/blob/main/CHANGELOG.md#042---2026-10-07\">CHANGELOG.md</a>.",
+   "compare": "https://github.com/raj-rangani/kiasi/compare/v0.4.1...v0.4.2",
+   "sections": [
+    {
+     "heading": "Highlights",
+     "items": [
+      {
+       "lead": "A paused turn is never ended by one response.",
+       "html": "<b>A paused turn is never ended by one response.</b> Parallel refused calls count as one refusal in every mode, matched by the response they belong to, so the three-refusal backstop only trips on three separate responses."
+      },
+      {
+       "lead": "Subagent reports survive compaction in every shape.",
+       "html": "<b>Subagent reports survive compaction in every shape.</b> A hand-back that arrives as an agent message or inside a system notice is kept whole or archived, like a task notification."
+      },
+      {
+       "lead": "Problems are visible.",
+       "html": "<b>Problems are visible.</b> The Rules tab shows a Problems block when a pause could not be saved, a lock timed out or a <code>.kiasi.json</code> value was ignored."
+      }
+     ]
+    },
+    {
+     "heading": "Bug fixes",
+     "items": [
+      {
+       "lead": "",
+       "html": "Refusals at a pause count once per response, by the response id from the transcript or by a 3-second window when there is none. Before the first tool batch of a session, three parallel refused calls used to end the turn."
+      },
+      {
+       "lead": "",
+       "html": "The backstop no longer depends on a tool batch arriving, so a response whose every call is refused is counted too."
+      },
+      {
+       "lead": "",
+       "html": "Agent-message hand-backs and task notifications wrapped in a system notice are detected and kept or archived. With no archive available, the head is kept and a final line says how many characters of the report were trimmed, instead of a silent cut to 200 characters."
+      },
+      {
+       "lead": "",
+       "html": "Error events are grouped by kind with a plain explanation, count, last seen and last message, in a block that is hidden when there are none."
+      },
+      {
+       "lead": "",
+       "html": "The status line locks its limits files, so two sessions no longer log the same reading twice."
+      }
+     ]
+    },
+    {
+     "heading": "Upgrade notes",
+     "items": [
+      {
+       "lead": "Run /kiasi:limits setup again",
+       "html": "**Run <code>/kiasi:limits setup</code> again** if you use the status line. The script is a copy under the data folder and this release changed it."
+      },
+      {
+       "lead": "",
+       "html": "Behaviour change: in batched mode the third refused response ends the turn when its calls are refused, before the batch arrives. It used to wait for the batch."
+      },
+      {
+       "lead": "",
+       "html": "Update with <code>/plugin marketplace update kiasi</code> or <code>claude plugin update kiasi@kiasi</code>, then restart Claude Code."
+      }
+     ]
+    },
+    {
+     "heading": "Known issues",
+     "items": [
+      {
+       "lead": "",
+       "html": "The Problems block was tested on the report side only, not rendered in a browser before release."
+      },
+      {
+       "lead": "",
+       "html": "Windows support as a whole is still untested on a real Windows machine."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "version": "0.4.1",
+   "tag": "v0.4.1",
+   "date": "2026-10-07",
+   "title": "Kiasi 0.4.1",
+   "url": "https://github.com/raj-rangani/kiasi/releases/tag/v0.4.1",
+   "latest": false,
+   "summary": "Bug-fix release. Three audit rounds swept the plugin for the bug classes fixed in 0.4.0 and reviewed the fixes. Full list in <a href=\"https://github.com/raj-rangani/kiasi/blob/main/CHANGELOG.md#041---2026-10-07\">CHANGELOG.md</a>.",
+   "compare": "https://github.com/raj-rangani/kiasi/compare/v0.4.0...v0.4.1",
+   "sections": [
+    {
+     "heading": "Highlights",
+     "items": [
+      {
+       "lead": "A paused turn keeps its work.",
+       "html": "<b>A paused turn keeps its work.</b> The checklist written at the warning is the one a stop, a subagent brief or a later &quot;continue&quot; points at, and Claude can now read and edit it at the pause instead of being refused."
+      },
+      {
+       "lead": "Pauses are per session.",
+       "html": "<b>Pauses are per session.</b> Two sessions in one project no longer overwrite each other&#x27;s pause record, a pause resumes once, and cleanup leaves alone any state a live pause still protects."
+      },
+      {
+       "lead": "Subagent reports survive compaction.",
+       "html": "<b>Subagent reports survive compaction.</b> A hand-back report is kept whole or archived with a pointer, never cut to a 200-character stub."
+      },
+      {
+       "lead": "Dashboard days are local days.",
+       "html": "<b>Dashboard days are local days.</b> Every figure now uses your local calendar day, with a one-time recount of stored history."
+      }
+     ]
+    },
+    {
+     "heading": "Bug fixes",
+     "items": [
+      {
+       "lead": "",
+       "html": "Three parallel refused calls in one response count as one refused response, not three."
+      },
+      {
+       "lead": "",
+       "html": "A pause that cannot be written to disk logs an error and still trips, instead of silently never pausing."
+      },
+      {
+       "lead": "",
+       "html": "Subagent turn entries from older prompts are dropped from session state instead of growing forever."
+      },
+      {
+       "lead": "",
+       "html": "The checklist fallback folder moved out of <code>~/.claude</code>, which Claude Code refuses to write."
+      },
+      {
+       "lead": "",
+       "html": "Session state, daily history, savings and sync status are written to a temp file and renamed, with a lock around the history merge. A rebuild overlapping a Sync click no longer resets history to one day."
+      },
+      {
+       "lead": "",
+       "html": "A bad value in a project <code>.kiasi.json</code> falls back for that key only, instead of silently turning every hook off."
+      },
+      {
+       "lead": "",
+       "html": "The pruner recognises every Kiasi digest marker, so an output the caps already cut is not cut again and its saved-file pointer survives."
+      },
+      {
+       "lead": "",
+       "html": "Nested tool inputs are shrunk too, and compaction archives are named per agent, so they no longer overwrite each other within a second."
+      },
+      {
+       "lead": "",
+       "html": "Quoted search phrases match as phrases, and words starting with <code>-</code> work."
+      },
+      {
+       "lead": "",
+       "html": "A failing command in the run tool is flagged as an error. The quiet-flag rewrite leaves quoted text alone."
+      },
+      {
+       "lead": "",
+       "html": "A session resumed today no longer brings its old steps and bill into today&#x27;s totals."
+      },
+      {
+       "lead": "",
+       "html": "Delegation is credited only when a subagent actually started; a retried skip and a read-back cap save nothing."
+      },
+      {
+       "lead": "",
+       "html": "Figures with too little data show a dash instead of &quot;0 k&quot; or &quot;−100%&quot;."
+      },
+      {
+       "lead": "",
+       "html": "The build survives a transcript deleted mid-read or a bad line, and marks stale or stuck rebuilds as such."
+      }
+     ]
+    },
+    {
+     "heading": "Upgrade notes",
+     "items": [
+      {
+       "lead": "Run /kiasi:limits setup again",
+       "html": "**Run <code>/kiasi:limits setup</code> again** if you use the status line. The script is a copy under the data folder and this release changed it."
+      },
+      {
+       "lead": "",
+       "html": "The history recount runs once on the first dashboard build. A stored day whose transcripts are already gone loses its row; on a 28-day test history that was one day with 2 steps."
+      },
+      {
+       "lead": "",
+       "html": "Update with <code>/plugin marketplace update kiasi</code> or <code>claude plugin update kiasi@kiasi</code>, then restart Claude Code."
+      }
+     ]
+    },
+    {
+     "heading": "Known issues",
+     "items": [
+      {
+       "lead": "",
+       "html": "Before the first tool batch of a session is seen, three parallel refused calls still end a paused turn."
+      },
+      {
+       "lead": "",
+       "html": "Hand-back reports delivered as an agent-message block, rather than a task notification, are still cut at compaction."
+      },
+      {
+       "lead": "",
+       "html": "Error events (pause record, lock timeout, bad setting) are logged but not yet shown on the dashboard."
+      },
+      {
+       "lead": "",
+       "html": "No Windows file lock for the status line&#x27;s limits files."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "version": "0.4.0",
+   "tag": "v0.4.0",
+   "date": "2026-10-07",
+   "title": "Kiasi 0.4.0",
+   "url": "https://github.com/raj-rangani/kiasi/releases/tag/v0.4.0",
+   "latest": false,
+   "summary": "Install or update: <code>/plugin marketplace update kiasi</code>, or <code>claude plugin update kiasi@kiasi</code>, then restart Claude Code.",
+   "compare": "",
+   "sections": [
+    {
+     "heading": "Changes",
+     "items": [
+      {
+       "lead": "",
+       "html": "The dashboard counts what the rules did over whole days. Rule events were counted over the last 168 hours while the token bill was counted by calendar day, so the first day of a period showed its bill but none, or only part, of what the rules did that day."
+      },
+      {
+       "lead": "",
+       "html": "The same question is put at the warning, before the pause: Claude follows the warning and so seldom reaches the pause, and used to choose between ending the turn and a subagent itself. Continue there renews the budget; stop or a subagent pauses the turn at that point, so replying continue later resumes it."
+      },
+      {
+       "lead": "",
+       "html": "At a pause Claude now asks how to go on, where it used to only end the turn: continue here with a fresh budget, hand the rest to a subagent, or stop. The checklist is written first, and Kiasi reads the answer. Continue renews the budget in place; the other two leave the turn paused, so replying continue later still resumes it. The question is asked in the terminal, the VS Code extension and the desktop app; a headless run and a subagent are paused as before. <code>pause_question</code> (auto, always or off; also in <code>.kiasi.json</code>) sets it."
+      },
+      {
+       "lead": "",
+       "html": "A desktop notification when Kiasi pauses a turn, and when it ends one after refused calls, in the VS Code extension and the desktop app. Their chat shows the pause as one grey line, which is easy to miss in a background window. It uses <code>notify-send</code> on Linux, <code>osascript</code> on macOS and a PowerShell toast on Windows; the terminal keeps its own notification and bell. The new <code>pause_notification</code> setting (auto, always, off) says where it shows."
+      },
+      {
+       "lead": "",
+       "html": "The turn budget counts steps, not tool calls. The tool calls Claude makes in one response are one step: the next request re-reads the context once for all of them. Each call used to count on its own and add the whole context to the re-read total, so a turn that worked in parallel reached its budget early. Kiasi counts at Claude Code&#x27;s <code>PostToolBatch</code> hook, which runs once per response. Until the first one arrives in a session the calls count one by one, and that batch gives the extra counts back. A batch of calls that were all refused at the pause is not a step. Subagent budgets count the same way. The notices, the session rules and the subagent briefs say &quot;steps&quot; and say that parallel calls count once."
+      },
+      {
+       "lead": "",
+       "html": "Dashboard: a delegation saving is credited only when an Agent call followed the instruction before the next prompt. It was credited whenever the instruction was shown, whether or not Claude delegated. An instruction that was not followed is listed with the checks shown, as &quot;delegate, no Agent call&quot;."
+      },
+      {
+       "lead": "",
+       "html": "Dashboard: &quot;Avoidable misses&quot; no longer counts a cache that expired while the session was idle; those misses are shown beside it. The extra cost still covers them, since they were paid for."
+      },
+      {
+       "lead": "",
+       "html": "Dashboard: the &quot;each step costs N× less than before&quot; headline waits for 300 steps both before and after the install, and until then says how many there are. It used to show a factor after a few dozen steps."
+      },
+      {
+       "lead": "",
+       "html": "When the dashboard&#x27;s sync reaches its timeout, the report scripts it started are stopped with it. Only the sync itself was stopped, so a hung report script kept running."
+      },
+      {
+       "lead": "",
+       "html": "When Claude keeps calling tools after a pause and Kiasi ends the turn, the developer is told so in a system message: &quot;Kiasi ended this turn: Claude kept calling tools after the pause&quot;, with both ways to resume. VS Code does not show a hook&#x27;s stop reason, so the turn ended there after three refused calls with no explanation."
+      },
+      {
+       "lead": "",
+       "html": "On Windows, a dashboard that an older version left running is replaced at the next session start. It had been started with no console, so it kept opening an empty window at every 30-minute rebuild until it was stopped by hand. Like the rest of the Windows support, this is untested on a real Windows machine."
+      },
+      {
+       "lead": "",
+       "html": "<code>tests/e2e_parallel_compact.py</code> resumes the session once more after the compaction and checks the batch again."
+      },
+      {
+       "lead": "",
+       "html": "Turn checklists are written to <code>.kiasi/checkpoints/</code> in the project, a folder that git ignores. Claude Code refuses Claude&#x27;s writes anywhere under <code>~/.claude</code> as edits to a sensitive file, so a checklist in Kiasi&#x27;s data folder was never saved in headless runs, and sessions that accept edits got a permission prompt at the pause. A session without a writable project folder still uses the data folder. Search and the state restored after compaction look in both. The daily cleanup moves idle project checklists to trash like the ones in the data folder, finding their folders through the turn events, which now name the checklist path; a restore puts them back in their project, and the storage tab counts them."
+      },
+      {
+       "lead": "",
+       "html": "A pause in a turn resumed with &quot;continue&quot; keeps the task and edited files of the pause it resumed, so resuming it again without a checklist still has them. A new task prompt drops them."
+      },
+      {
+       "lead": "",
+       "html": "The turn budget has a mode, <code>turn_budget_mode</code>: <code>pause</code> (the default) pauses the turn as before, <code>warn</code> only warns, before and at the budget, and refuses nothing, and <code>off</code> only counts calls. Subagent budgets, the session rules, subagent briefs and the status line follow it. The token budget is a setting too (<code>turn_token_budget</code>, 8M by default), and <code>.kiasi.json</code> can also set <code>turn_warn_tokens</code>. The session rules now state the configured budgets instead of the defaults."
+      },
+      {
+       "lead": "",
+       "html": "Replying &quot;continue&quot; after a pause resumes it. Kiasi adds the saved checklist (up to 2,000 characters) to that prompt, asks Claude to check <code>git status</code> first and to keep each item open until it is verified, and shows &quot;Kiasi: resuming from &lt;path&gt;&quot;. After <code>/clear</code>, or in a new session of the same project, the session start says that work is waiting, and the first &quot;continue&quot; there resumes it the same way. Any other first prompt is only told where the checklist is. If Claude never wrote the checklist, the resume starts from the paused turn&#x27;s task and the files it edited. The pause notice now says to reply &quot;continue&quot; after <code>/clear</code> as well."
+      },
+      {
+       "lead": "",
+       "html": "The turn budget warning now comes 10 calls before the pause (at 50 of 60) or at 80% of the token limit, instead of at 30 calls or half the tokens, so a turn keeps its working room. It says about how many calls are left, counting the tokens a wide context re-reads, and asks Claude to finish the item in progress and keep the checklist current. A subagent is warned 10 calls before its own limit (30 of 40). <code>turn_warn_steps</code> in <code>.kiasi.json</code> still sets the warning outright."
+      },
+      {
+       "lead": "",
+       "html": "When a paused turn ends and Claude&#x27;s last message does not name the checklist, the Stop hook asks Claude once to close with the pause line. Hook messages may not show in the desktop app or VS Code, but Claude&#x27;s reply does. The reminder is hook context, not a Stop block, so it never shows as an error, and it is skipped when the refused calls have already ended the turn."
+      },
+      {
+       "lead": "",
+       "html": "A turn that reaches its budget is paused instead of blocked. The developer gets a notice with the cause, where the remaining work is saved and both ways to resume (reply &quot;continue&quot;, or <code>/clear</code> and resume from the checklist), plus a desktop notification and a bell; the warning at 30 calls is shown to the developer too. Every call except Write and Agent is refused before it runs, and the third refused call ends the turn with the same notice. A paused subagent has its calls refused as well, but never ends the developer&#x27;s turn. Before, the stop was a PostToolUse block: the call had already run, nothing was stopped, and the terminal showed a hook error, so the chat looked dead."
+      },
+      {
+       "lead": "",
+       "html": "A subagent is held to its own budget of 40 tool calls, the figure its brief already gave it: it is warned at 20 and stopped at 40. Nothing enforced that figure, and since subagents got their own count they ran to the main turn&#x27;s 60. At the stop it is told to write its checklist and reply to its caller, since a subagent cannot start another subagent. The new <code>subagent_call_budget</code> option sets the figure; <code>turn_call_budget</code> no longer changes it. The dashboard leaves subagent warnings and stops out of the turn-budget figures, and the budget report counts them on their own lines."
+      },
+      {
+       "lead": "",
+       "html": "A session&#x27;s hooks no longer overwrite each other&#x27;s turn counts. Each hook loads the session&#x27;s state, changes it and saves it, and parallel tool calls and subagents run their hooks at the same time, so one save could drop the calls another hook had just counted, and the turn budget fired late or not at all. A hook now holds the session&#x27;s lock file, <code>sessions/&lt;session id&gt;.lock</code>, while it runs, on Windows too. It waits at most 3 seconds for the lock, then goes ahead without it, so a hook never hangs a tool call. Cleanup removes the lock file with the rest of the session&#x27;s state."
+      },
+      {
+       "lead": "",
+       "html": "On Windows, the dashboard counts saved outputs, pastes and checklists that were read back. It looked for <code>outputs/</code>, <code>pastes/</code> and <code>checkpoints/</code> with a forward slash, which a Windows path never contains, so Recall showed none read back and marked every row &quot;could be tighter&quot;, and Storage counted every saved file as unread."
+      },
+      {
+       "lead": "",
+       "html": "The before-and-after table shows &quot;–&quot; for re-read tokens per day until a full day has passed since the install. It showed 0 and −100% on the first day after it."
+      },
+      {
+       "lead": "",
+       "html": "A subagent&#x27;s tool calls count toward its own turn budget, not the turn that started it. Claude Code sends a subagent&#x27;s calls with the main session&#x27;s transcript path, so they were added to the parent turn&#x27;s call count and measured at the parent&#x27;s context size: parallel subagents used up the parent&#x27;s budget, and once a turn was stopped the general-purpose subagent its stop message hands the checklist to was told the budget was exhausted within its first five calls. Turns are now keyed by <code>agent_id</code>, a subagent&#x27;s re-read size comes from its own transcript, and a new prompt starts every count afresh."
+      },
+      {
+       "lead": "",
+       "html": "On Windows, the dashboard no longer opens an empty terminal window every 30 minutes. The server was started with no console at all (<code>DETACHED_PROCESS</code>), so each 30-minute rebuild, which starts <code>python sync.py</code>, made Windows give it a new visible console window, titled with the Python path and empty because the output goes to the log. Detached processes now get a hidden console that everything they start inherits. A dashboard that is already running keeps opening windows until it is stopped once."
+      },
+      {
+       "lead": "",
+       "html": "The sandbox tools no longer fail at their longest timeout. Claude Code&#x27;s <code>process.run</code> takes at most 600000 ms, and <code>run</code>, <code>distill</code> and <code>fetch</code> asked for their timeout plus 10 seconds of headroom, so <code>timeout_s: 600</code> asked for 610000 ms: the hook threw and the call failed with &quot;no tool.call hook answered this call&quot;. The longest timeout is now 590 seconds, derived from the host limit (<code>PROCESS_RUN_MAX_TIMEOUT_MS</code>), and the tool schemas advertise it."
+      },
+      {
+       "lead": "",
+       "html": "Compaction shortens a text that only mentions its marker. A text was left whole whenever it contained <code>[kiasi pruned</code> anywhere, so a large tool result showing Kiasi&#x27;s own source, its tests or a transcript was never shortened at any compaction. Only a text whose last line is a marker, which is how an earlier compaction leaves it, is now kept as it is."
+      },
+      {
+       "lead": "",
+       "html": "A second compaction keeps the sizes the first one wrote. The pruner replaces the content of older Write, Edit and NotebookEdit calls with its size, such as <code>[9000 chars]</code>, and the next compaction measured that marker as if it were the content, so <code>[9000 chars]</code> became <code>[12 chars]</code>. A value that is already a size marker is now kept as it is."
+      },
+      {
+       "lead": "",
+       "html": "Every turn checklist goes to a new file. Claude Code refuses to overwrite a file outside the working directory without a read record, and a hook compaction clears those records and restores none. After a compaction, a stop or reminder that named the turn&#x27;s existing checklist got &quot;File has not been read yet&quot;, and the stop rules out the Read that would get past it. <code>checkpoint_path</code> now names the next free <code>&lt;session&gt;-&lt;turn&gt;-&lt;n&gt;.md</code> once the turn&#x27;s file exists, and cleanup matches the numbered names."
+      },
+      {
+       "lead": "",
+       "html": "Compaction keeps every result of parallel tool calls. Claude Code writes a parallel batch as one assistant entry per call, sharing one message id, and the pruner rebuilt each entry as its own message with a fresh id, so the batch loaded as separate messages and every call but the last came back as <code>[Tool result missing due to internal error]</code>; on the maintainer&#x27;s machine that hit 46 of 61 compactions in 7 days and lost 488 results, mostly web searches, Bash and fetches. <code>hooks/prune.js</code> now rebuilds each batch as one message ahead of all its results, also when a result was written between two of its calls, and the recent messages it keeps unchanged never start inside a batch. New tests in <code>hooks/compact.test.ts</code> cover the layouts Claude Code writes, and <code>tests/e2e_parallel_compact.py</code> replays the case against a real session (about eight Haiku calls)."
+      },
+      {
+       "lead": "",
+       "html": "Landing page: a new Fig. 04 &quot;the everyday&quot; section between the rules and the dashboard, with a status line mock (ctx, turn, 5h, wk with reset time and pace, kiasi −kept) and a legend, then six cards for the status line, run, distill, fetch and search, the login-time dashboard autostart and cleanup; later figures renumbered. Section headings now put the figure label across both columns and top-align the lede with the heading. The limit cap line at the end of the simulator rails is gone."
+      },
+      {
+       "lead": "",
+       "html": "Windows support (untested on a real Windows machine): every hook command runs through <code>scripts/run.sh</code>, which picks <code>py -3</code>, <code>python</code> or <code>python3</code>, so the hard-coded <code>python3</code> is gone from hooks.json, the skills and the status line command (which now records the interpreter that ran setup); the function hooks try <code>python3</code>, <code>python</code> and <code>py -3</code> in turn; cleanup takes its lock with <code>msvcrt</code> where <code>fcntl</code> is missing and bails out from a timer thread where <code>SIGALRM</code> is missing; the dashboard and cleanup detach with <code>DETACHED_PROCESS</code> on Windows instead of <code>start_new_session</code>, which Windows ignored, so they no longer die with the session that started them."
+      },
+      {
+       "lead": "",
+       "html": "<code>/kiasi:dashboard autostart on|off|status</code>: the dashboard can run from login with no Claude Code session at all. <code>on</code> writes a small launcher to <code>~/.claude/kiasi</code> and registers it with the system&#x27;s login starter: a systemd user service on Linux (XDG autostart where there is no user systemd), a LaunchAgent on macOS, a script in the Startup folder on Windows. The launcher reads <code>plugin-root</code> and <code>data-dir</code> from <code>~/.claude/kiasi</code>, both recorded at every session start, so it survives plugin updates. The session-start hook keeps starting the dashboard when nothing answers, so a session alone is still enough."
+      },
+      {
+       "lead": "",
+       "html": "Landing page: everything below the hero re-imagined as six figures: an interactive week-on-your-plan simulator (light/typical/heavy, two rails racing to the limit), one tool output collapsing live from 38k to 2.1k chars, a rules marquee with six hook cards, a tilting dashboard screenshot, a three-step install beside a terminal that types itself with a copy button, a trust row and a closing command box. No external requests. The install terminal has a Terminal tab and a VS Code tab: the VS Code extension has no <code>/plugin</code> command, so that tab carries the extension&#x27;s <code>vscode://anthropic.claude-code/install-plugin</code> link as a button, the <code>/plugins</code> dialog path, and a copy-link button. README quick start gains the same link and the <code>claude plugin</code> shell commands."
+      },
+      {
+       "lead": "",
+       "html": "README rewritten to match the landing page: small logo, one number-led paragraph, key features, quick start, how it works, dashboard, privacy, settings, requirements. Landing page cost section gained presets, a per-step strip for each scenario, animated counts and a savings badge; the install section is a timeline that lights up on scroll with timed steps, an animated copy tick and a what-happens-next row."
+      },
+      {
+       "lead": "",
+       "html": "Landing page (docs/index.html) rebuilt around one story: hero with an animated session demo, a re-read cost calculator, six leaks and rules, dashboard proof, three-step install, privacy, and a collapsed reference. Same palette, no external requests. Dashboard screenshot refreshed."
+      },
+      {
+       "lead": "",
+       "html": "Per-day history: budget.py merges every build into <code>history.json</code> in the data dir, so days outlive the report window and Claude Code&#x27;s transcript retention; the Overview before-and-after block reads it and no longer disappears a week after install. Report window <code>BUDGET_DAYS</code> raised from 7 to 30 days and used by the dashboard&#x27;s rebuild too."
+      },
+      {
+       "lead": "",
+       "html": "Restructured the plugin layout, no behaviour change: <code>scripts/kiasi.py</code> is now a thin hook dispatcher over the <code>scripts/core/</code> package (constants, events, transcript, caps, prompt, turn, reads, session, launch); the report builders moved to <code>scripts/reports/</code> (<code>budget.py</code>, <code>lens.py</code>, <code>sync.py</code>); <code>limits.py</code> is <code>statusline_install.py</code> and <code>usage_limits.py</code> is <code>limits_data.py</code>; the slash commands became skills under <code>skills/</code> (still <code>/kiasi:dashboard</code>, <code>/kiasi:sync</code>, <code>/kiasi:limits</code>); the five redirect stubs in <code>dashboard/</code> are gone; <code>SHIPPING.md</code> moved to <code>docs/dev-notes.md</code>; <code>tests/test_kiasi.py</code> is split into one test file per module with a shared <code>tests/helpers.py</code>; <code>scripts/README.md</code> describes the scripts."
+      },
+      {
+       "lead": "",
+       "html": "Dashboard starts itself: the SessionStart hook probes <code>127.0.0.1:8787</code> (and the port recorded in the data directory&#x27;s <code>dashboard.json</code>) and, when no Kiasi dashboard answers, starts <code>dashboard.py</code> detached in its own session, so it outlives the Claude Code process and keeps the 30-minute rebuild running. Before this, nothing in the plugin started the server: <code>/kiasi:dashboard</code> ran it as a background shell that died with the session, so on any machine without a hand-made systemd unit the pages went dark after the session ended and the auto-rebuild never fired. <code>/kiasi:dashboard</code> now runs <code>dashboard.py --ensure</code> (same probe, returns at once with the URL). <code>KIASI_DASHBOARD=off</code> disables the autostart. The server also rebuilds the reports on start when they are missing or older than 30 minutes, records pid and port in <code>dashboard.json</code>, logs only failed requests to <code>dashboard.log</code> (truncated past 200 KB), and sends a <code>Server: kiasi-dashboard</code> header the probe recognises. The dashboard status line now says &quot;last rebuild failed&quot; with the error from <code>sync.json</code> instead of silently showing an old build time, and two stale error texts in <code>sync.js</code> that still named <code>sync.php</code> are gone."
+      },
+      {
+       "lead": "",
+       "html": "Sandbox routing: while the sandbox tools are registered (<code>CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1</code>), a PreToolUse hook on Bash and WebFetch refuses a raw call once and names the sandbox call to make instead — <code>mcp__kiasi__run</code> for a command whose output would only be scanned (tests, builds, installs, lint, curl, git log, docker logs, long tails; a command that already limits its output with <code>| head</code>, <code>-5</code>, <code>--oneline</code> or a redirect stays raw), <code>mcp__kiasi__fetch</code> for a page. The identical call repeated goes through, like the big-file Read nudge. Events <code>routed</code> and <code>route_retry</code> show in the dashboard under a new Sandbox routing rule, so compliance is visible. Context-mode reports this blocking step as the difference between prompting alone (~60% compliance) and routing (~98%); four days of this install&#x27;s logs showed the sandbox tools used zero times with prompting alone."
+      },
+      {
+       "lead": "",
+       "html": "New sandbox tool <code>mcp__kiasi__fetch</code>: downloads a URL, strips HTML to text, saves the whole page under <code>outputs/</code> (searchable, cleaned up like other saved outputs) and returns only the first 3,000 chars plus the lines matching the <code>find</code> words, with line numbers. Its saving is logged as a cap like the other sandbox tools."
+      },
+      {
+       "lead": "",
+       "html": "Dashboard empty states: a tab with nothing to show no longer renders its headings over blank charts. Before the first report exists each tab explains what it will show and offers a &quot;Build the report&quot; button that runs the sync; a report with no session in range says so and offers &quot;Rebuild now&quot;; the plan-limits strip stays visible on the Budget tab. Copy lives in <code>EMPTY_STATES</code> in <code>lens-constants.js</code>, the renderer in <code>lens-common.js</code>. The per-section &quot;No … in range yet&quot; lines share one wording."
+      },
+      {
+       "lead": "",
+       "html": "The Overview tab is rebuilt around what was measured, in three sections. &quot;What you paid&quot;: four figures, each with a line per day (re-read tokens paid, re-read per prompt, first-request context, cache hit rate), and the bill per day. &quot;Before and after Kiasi&quot;: a bar per day over the whole history with the switch-on day marked, and the comparison table; the &quot;N× less&quot; headline is gone, because the two periods are different work and nothing was held constant. &quot;What Kiasi did&quot;: counts from the log. The avoided estimate is no longer on the Overview. It multiplies every cut by all later steps of its session, as if no compaction came in between, and added up to several times the measured bill; the per-day chart no longer stacks it on the bill, and the rules show how often they fired and the tokens they cut. The rows on context and steps over the warning size say they are main-session figures. The report&#x27;s <code>since</code> block gains <code>series</code>, one point per history day, and <code>steps_per_day</code>. The detail of Cache and Recall moved to the Rules tab, and the mean steps after a pause is on the Turn budget rule too. Amber no longer marks a figure that got worse; that is red. The Rules tab lists each rule as one row: fired, tokens cut, a line of its fires per day with the count under each day, and the breakdown; the per-rule daily graphs moved there from the Overview. The steps chart there names the band its note and legend count (60+), where the note said 50+. The Overview now uses one colour per measure in both themes: re-read tokens blue, tokens per prompt violet, first-request context teal, cache hit rate orange, steps per day pink; the days before Kiasi stay grey, and green, red and amber keep their meaning of better, worse and warning. The Rules tab draws steps per prompt as paired bars, each band&#x27;s share of the prompts next to its share of the re-read tokens on one scale, with the cost of one prompt of that length. Fixed: the reports counted the messages a pruned compaction writes back into the transcript as new steps and prompts, which inflated steps, prompts and the 60+ band and lowered the mean context per step; those zero-usage entries are no longer steps, a prompt is counted once per prompt id, and prompts out of time order no longer give a negative step count. The stored daily history is recounted once after the upgrade, from the transcripts that still exist; a day whose transcripts are gone keeps its stored row. The summary of a built-in compaction is no longer a prompt, and a tool output replayed by a pruned compaction is listed once among the big outputs."
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
