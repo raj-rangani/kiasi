@@ -8,17 +8,17 @@ Reproduce it with:
 
     python3 scripts/benchmark.py
 
-| scenario | rule | chars in | Claude Code alone | chars entered | reduction | reduction vs Claude Code | tokens kept off 10 later steps |
+| scenario | rule | chars in | Claude Code alone | chars entered | reduction | Kiasi vs Claude Code alone | tokens kept off 10 later steps |
 |---|---|---:|---:|---:|---:|---:|---:|
-| Playwright page snapshot via MCP | MCP output cap | 55,999 | 215 | 6,180 | 89% | -2774% | -14,913 |
-| GitHub issue list via MCP | MCP output cap | 105,223 | 215 | 6,181 | 94% | -2775% | -14,915 |
-| npm install log (ANSI, progress bars) | Bash clean + cap | 42,800 | 2,215 | 3,569 | 92% | -61% | -3,385 |
-| Session transcript Read (.jsonl) | outside-read cap | 43,539 | 43,539 | 8,170 | 81% | 81% | 88,422 |
-| Test run through mcp__kiasi__run | sandbox digest | 64,578 | 10,000 | 2,082 | 97% | 79% | 19,795 |
-| Count items in a big JSON via mcp__kiasi__distill | think in code | 180,485 | 5 | 5 | 100% | 0% | 0 |
-| Unchanged source file read a second time | Read skip | 29,029 | 29,029 | 245 | 99% | 99% | 71,960 |
-| Mid-size build log (ANSI, progress redraws) | Bash clean | 20,034 | 20,034 | 2,929 | 85% | 85% | 42,762 |
-| Mid-size issue list via MCP | MCP output cap | 38,522 | 38,522 | 6,180 | 84% | 84% | 80,855 |
+| Playwright page snapshot via MCP | MCP output cap | 55,999 | 215 | 6,180 | 89% | 28.7× more | -14,913 |
+| GitHub issue list via MCP | MCP output cap | 105,223 | 215 | 6,181 | 94% | 28.7× more | -14,915 |
+| npm install log (ANSI, progress bars) | Bash clean + cap | 42,800 | 2,215 | 3,569 | 92% | 1.6× more | -3,385 |
+| Session transcript Read (.jsonl) | outside-read cap | 43,539 | 43,539 | 8,170 | 81% | 5.3× less | 88,422 |
+| Test run through mcp__kiasi__run | sandbox digest | 64,578 | 10,000 | 2,082 | 97% | 4.8× less | 19,795 |
+| Count items in a big JSON via mcp__kiasi__distill | think in code | 180,485 | 5 | 5 | 100% | same | 0 |
+| Unchanged source file read a second time | Read skip | 29,029 | 29,029 | 245 | 99% | 118× less | 71,960 |
+| Mid-size build log (ANSI, progress redraws) | Bash clean | 20,034 | 20,034 | 2,929 | 85% | 6.8× less | 42,762 |
+| Mid-size issue list via MCP | MCP output cap | 38,522 | 38,522 | 6,180 | 84% | 6.2× less | 80,855 |
 
 ## The baseline
 
@@ -26,8 +26,8 @@ Claude Code limits tool output itself, so counting the raw output as the
 saving overstates it. Each row therefore has two baselines: the raw output
 (`chars in`), and **Claude Code alone**, what the same output puts in context
 under Claude Code's documented defaults, through the tool path the scenario
-really uses without Kiasi. The headline reduction is against Claude Code
-alone, and it can be negative.
+really uses without Kiasi. The headline is against Claude Code alone, as a
+multiple, and on some rows Kiasi sends more.
 
 | path | default | setting | source |
 |---|---|---|---|

@@ -308,18 +308,26 @@ def percent(whole, part):
     return (200 * (whole - part) + whole) // (2 * max(1, whole))
 
 
+def versus(claude_code, kiasi):
+    if kiasi == claude_code:
+        return "same"
+    ratio = max(claude_code, kiasi) / max(1, min(claude_code, kiasi))
+    size = f"{ratio:,.0f}" if ratio >= 100 else f"{ratio:.1f}"
+    return f"{size}× {'less' if kiasi < claude_code else 'more'}"
+
+
 def tokens_kept_off(item, steps=LATER_STEPS):
     return (item["chars_claude_code"] - item["chars_kiasi"]) * steps // CHARS_PER_TOKEN
 
 
 def table(rows):
-    out = ["| scenario | rule | chars in | Claude Code alone | chars entered | reduction | reduction vs Claude Code "
+    out = ["| scenario | rule | chars in | Claude Code alone | chars entered | reduction | Kiasi vs Claude Code alone "
            f"| tokens kept off {LATER_STEPS} later steps |",
            "|---|---|---:|---:|---:|---:|---:|---:|"]
     for item in rows:
         out.append(f"| {item['name']} | {item['rule']} | {item['chars_in']:,} | {item['chars_claude_code']:,} "
                    f"| {item['chars_kiasi']:,} | {percent(item['chars_in'], item['chars_kiasi'])}% "
-                   f"| {percent(item['chars_claude_code'], item['chars_kiasi'])}% | {tokens_kept_off(item):,} |")
+                   f"| {versus(item['chars_claude_code'], item['chars_kiasi'])} | {tokens_kept_off(item):,} |")
     return "\n".join(out)
 
 
@@ -355,8 +363,8 @@ Claude Code limits tool output itself, so counting the raw output as the
 saving overstates it. Each row therefore has two baselines: the raw output
 (`chars in`), and **Claude Code alone**, what the same output puts in context
 under Claude Code's documented defaults, through the tool path the scenario
-really uses without Kiasi. The headline reduction is against Claude Code
-alone, and it can be negative.
+really uses without Kiasi. The headline is against Claude Code alone, as a
+multiple, and on some rows Kiasi sends more.
 
 {limits_table()}
 

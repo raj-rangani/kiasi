@@ -66,6 +66,10 @@
 .tablewrap th:nth-child(-n+2), .tablewrap td:nth-child(-n+2) { text-align: left; }
 .tablewrap th { font-family: var(--mono); font-size: 11.5px; font-weight: 500; color: var(--muted); }
 .tablewrap tr:last-child td { border-bottom: 0; }
+.tablewrap td.vs { font-family: var(--mono); font-size: 13px; }
+.tablewrap td.vs.less { color: var(--good); }
+.tablewrap td.vs.more { color: var(--bad); }
+.tablewrap td.vs.same { color: var(--muted); }
 .loadfail { color: var(--bad); }
 @media (max-width: 640px) { .bench-hero { padding-top: 56px; } .total { text-align: left; } .tablewrap { margin-left: 0; margin-right: 0; } }
 @media (prefers-reduced-motion: reduce) { .bar .fill { animation: none; } }
@@ -183,6 +187,11 @@
     if (r > MORE_RATIO) return { text: 'About the same as Claude Code alone', cls: ' none' };
     return { text: 'Claude Code alone sends less here', cls: ' worse' };
   };
+  var versus = function (cc, ki) {
+    if (cc === ki) return { text: 'same', cls: 'same' };
+    var r = Math.max(cc, ki) / Math.max(1, Math.min(cc, ki));
+    return { text: (r >= 100 ? fmt(r) : r.toFixed(1)) + '× ' + (ki < cc ? 'less' : 'more'), cls: ki < cc ? 'less' : 'more' };
+  };
 
   var bar = function (cls, label, value, max) {
     var b = el('div', 'bar ' + cls), t = el('span', 'track'), f = el('span', 'fill');
@@ -233,12 +242,13 @@
 
   var buildTable = function () {
     var grid = document.getElementById('grid'), head = el('tr');
-    ['scenario', 'rule', 'chars in', 'Claude Code alone', 'chars entered', 'reduction', 'reduction vs Claude Code'].forEach(function (h) { head.appendChild(el('th', '', h)); });
+    ['scenario', 'rule', 'chars in', 'Claude Code alone', 'chars entered', 'reduction', 'Kiasi vs Claude Code alone'].forEach(function (h) { head.appendChild(el('th', '', h)); });
     grid.appendChild(head);
     var pct = function (whole, part) { return Math.floor((200 * (whole - part) + whole) / (2 * Math.max(1, whole))) + '%'; };
     data.scenarios.forEach(function (s) {
-      var tr = el('tr');
-      [s.name, s.rule, fmt(s.chars_in), fmt(s.chars_claude_code), fmt(s.chars_kiasi), pct(s.chars_in, s.chars_kiasi), pct(s.chars_claude_code, s.chars_kiasi)].forEach(function (c) { tr.appendChild(el('td', '', c)); });
+      var tr = el('tr'), v = versus(s.chars_claude_code, s.chars_kiasi);
+      [s.name, s.rule, fmt(s.chars_in), fmt(s.chars_claude_code), fmt(s.chars_kiasi), pct(s.chars_in, s.chars_kiasi)].forEach(function (c) { tr.appendChild(el('td', '', c)); });
+      tr.appendChild(el('td', 'vs ' + v.cls, v.text));
       grid.appendChild(tr);
     });
   };

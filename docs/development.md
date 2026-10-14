@@ -38,16 +38,15 @@ ffmpeg -i docs/demo.mp4 -filter_complex "scale=1100:-2:flags=lanczos,fps=15,spli
 
 The reply is whatever that run produces, so look at the frames before committing and update the alt text in `README.md` and `docs/index.html` if the numbers changed. The session's Kiasi data lands in `docs/demo/env/home/.claude/plugins/data/`, not in yours. Do not commit `docs/demo/demo.mp4`, the raw render; `docs/demo.mp4` is the cut one.
 
-### Dashboard video
+### Dashboard screenshots
 
-The website's dashboard tile plays `docs/dash-dark.mp4` or `docs/dash-light.mp4` to match the page theme. Both are recorded from the running dashboard with Playwright, at 2200x1240 so they stay sharp on dense screens. Real project names and paths are rewritten to generic ones before anything is drawn; check the `RULES` list in the script covers yours.
+The website's dashboard tile shows `docs/dash-dark.webp` or `docs/dash-light.webp` to match the page theme. Both are stills of the running dashboard's Overview, taken with Playwright at 2x (a 1400x790 viewport, so 2800x1580 pixels) so text stays sharp on dense screens. Real project names and paths are rewritten to generic ones before anything is drawn; check the `RULES` list in the script covers yours, then look at both images before committing.
 
 ```bash
-python3 scripts/dashboard.py 8787 &      # the dashboard the recording walks through
-NODE_PATH=$(npm root -g) node docs/demo/record-dashboard.mjs light   # needs playwright with chromium
-NODE_PATH=$(npm root -g) node docs/demo/record-dashboard.mjs dark
+python3 scripts/dashboard.py 8787 &      # the dashboard the shots are taken from (skip if already on 8787)
+NODE_PATH=$(npm root -g) node docs/demo/shoot-dashboard.mjs light   # needs playwright with chromium, global or on NODE_PATH
+NODE_PATH=$(npm root -g) node docs/demo/shoot-dashboard.mjs dark
 for t in light dark; do
-  ffmpeg -y -ss 0.6 -i dash-$t.webm -an -vf "fps=30,format=yuv420p" -c:v libx264 -preset slow -crf 24 -movflags +faststart docs/dash-$t.mp4
-  ffmpeg -y -ss 1.2 -i docs/dash-$t.mp4 -frames:v 1 -q:v 4 docs/dash-$t-poster.jpg
+  python3 -c "import sys; from PIL import Image; Image.open(sys.argv[1]).save(sys.argv[2], quality=90, method=6)" shot-$t.png docs/dash-$t.webp   # Pillow; cwebp -q 90 -m 6 works too
 done
 ```
