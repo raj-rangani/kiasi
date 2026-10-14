@@ -60,7 +60,8 @@ def runway_sentence(r):
 def bought_back(saved, rate):
     """Days of the weekly limit the avoided re-reads amount to at the measured daily rate; None without a rate.
 
-    saved is the report's sum of kept-out tokens times the steps that followed each cut: the context that was not re-sent."""
+    saved is the report's sum of kept-out tokens times the steps that followed each cut up to the next compaction: the
+    context that was not re-sent."""
     if not rate or saved is None:
         return None
     return round(saved / rate, 1)

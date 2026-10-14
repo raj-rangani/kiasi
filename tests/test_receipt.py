@@ -18,7 +18,7 @@ class ReceiptCase(KiasiTestCase):
             module.notify_desktop = lambda title, body: self.shown.append((title, body))
         self.sid = "sess-receipt-1"
         self.cwd = str(self.tmp / "proj")
-        base = time.time() - 600
+        base = self.base = time.time() - 600
         self.transcript = self.tmp / "t.jsonl"
         self.transcript.write_text("".join(json.dumps({"type": kind, "timestamp": stamp(base + i * 60)}) + "\n"
                                            for i, kind in enumerate(["user", "assistant", "assistant", "assistant"])))
@@ -58,6 +58,12 @@ class TestBuildReceipt(ReceiptCase):
         self.assertIn("1.8 k kept out, 3.6 k of re-reads avoided", text)
         self.assertIn("Costliest output: Bash npm install (1.8 k tokens cut)", text)
         self.assertEqual([receipt.fmt_tokens(n) for n in (0, 950, 1800, 103_600, 6_900_000, 373_000_000, 2_844_918_291)], ["0", "950", "1.8 k", "104 k", "6.9 M", "373 M", "2.84 B"])
+
+    def test_re_reads_stop_at_the_next_compaction(self):
+        with open(self.transcript, "a") as fh:
+            fh.write(json.dumps({"type": "system", "subtype": "compact_boundary", "timestamp": stamp(self.base + 150)}) + "\n")
+        r = receipt.build_receipt(self.sid, str(self.transcript), self.cwd, events.load_session(self.sid))
+        self.assertEqual(r["avoided"], 1800, "only the step at +120 re-sent it; the compaction at +150 dropped it")
 
     def test_a_session_with_nothing_sent_has_no_receipt(self):
         r = receipt.build_receipt("other", None, self.cwd, {})

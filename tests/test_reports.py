@@ -130,6 +130,11 @@ class TestPostmortem(KiasiTestCase):
         self.assertIn("step 3 added 48k", labels[2])
         self.assertTrue(all(f["fix"] for f in findings))
 
+    def test_a_jump_costs_only_the_steps_before_the_next_compaction(self):
+        info = {"contexts": [8_000, 60_000, 61_000, 9_000, 9_500], "steps": [1, 2, 3, 4, 5], "compactions": [3.5], "prompts": [0]}
+        [jump] = [f for f in self.lens.postmortem(info, [], [5], 30_000) if "added" in f["label"]]
+        self.assertEqual(jump["cost"], 52_000, "52k carried by step 3 only, not by the steps after the compaction")
+
     def test_a_lean_session_has_no_findings(self):
         info = {"contexts": [8_000, 9_000], "steps": [1, 2], "prompts": [0]}
         self.assertEqual(self.lens.postmortem(info, [], [2], 8_500), [])
@@ -320,6 +325,15 @@ class TestLensReport(ReportTestCase):
             with_id(self.step("b", 3, 1000), "m1"), with_id(self.step("c", 4, 5000), "m2")])
         info = self.lens.scan_sessions(7)[0]["s1"]
         self.assertEqual(info["contexts"], [1100, 5100])
+
+    def test_compactions_are_read_from_the_transcripts(self):
+        boundary = {"type": "system", "subtype": "compact_boundary", "content": "Conversation compacted", "timestamp": self.stamp(3)}
+        summary = {**self.prompt(6, "This session is being continued from a previous conversation."), "isCompactSummary": True}
+        self.write(self.project / "s1.jsonl", [self.prompt(0), self.step("a", 1, 1000), self.step("b", 2, 1000), boundary, self.step("c", 4, 500)])
+        self.write(self.project / "s1" / "subagents" / "agent-a9.jsonl", [self.step("d", 5, 100), summary, self.step("e", 7, 100)])
+        sessions = self.lens.scan_sessions(7)[0]
+        self.assertEqual(sessions["s1"]["compactions"], [self.lens.epoch_iso(self.stamp(3))])
+        self.assertEqual(sessions.agent_compactions["a9"], [self.lens.epoch_iso(self.stamp(6))])
 
     def test_median_p90_and_the_runaway_flag_past_200k(self):
         steps = [self.prompt(0)] + [self.step(f"r{i}", i + 1, read) for i, read in enumerate([50000, 100000, 150000, 210000])]

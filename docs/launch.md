@@ -26,9 +26,9 @@ Show HN: Kiasi – Keep tool output out of Claude Code's context, measured per s
 **First comment** (post it within a minute of the submission, as the author):
 
 ```
-Author here. Claude Code re-sends the whole context on every step, so a 42,800-char
-npm log or a 105,000-char list of GitHub issues is paid for again on every later step
-of the session. Kiasi is a plugin that keeps that text out of the context in the first
+Author here. Claude Code re-sends the whole context on every step, so a 20,000-char
+build log or a 38,500-char issue list is paid for again on every later step until
+the session is compacted. Kiasi is a plugin that keeps that text out of the context in the first
 place: outputs over 12,000 chars are cut to head and tail with the full text saved to
 disk and named in the cut, re-reads of unchanged files come back as a pointer, big
 pastes go to disk, and runaway turns get a budget and a pause.

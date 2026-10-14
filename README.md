@@ -3,7 +3,7 @@
   <img src="docs/logo-light.svg" alt="Kiasi" width="150">
 </picture>
 
-Your weekly limit is spent re-reading. Every step of Claude Code re-sends the whole conversation, so one noisy test log is paid for again on every step after it, for the rest of the session. One `npm install` log is 42,800 characters. One Playwright snapshot through MCP is 56,000. Twenty GitHub issues are 105,000. Each one rides along on every step that follows.
+Your weekly limit is spent re-reading. Every step of Claude Code re-sends the whole conversation, so one noisy test log is paid for again on every step after it, until the conversation is compacted. One build log is 20,000 characters. A source file read a second time is 29,000. A mid-size issue list through MCP is 38,500. Each one rides along on the steps that follow.
 
 Kiasi is a Claude Code plugin that keeps that noise out: fixed rules, on your machine, no model calls, no network. The full text of everything it cuts is saved and searchable, so nothing is lost. Install it and work as usual. The next day a local dashboard shows your own before and after, built from your own transcripts: the context each step re-sends, and the days of weekly limit Kiasi bought back.
 
@@ -100,7 +100,7 @@ The days before you installed Kiasi are the baseline, built from your own transc
 
 ### Runway, receipt and digest
 
-The Overview leads with the runway: whether the weekly limit lasts to its reset at the current burn, from the status line readings. Under it, the days of that limit Kiasi bought back: the re-reads it avoided, divided by what you send a day. "Share your month" opens the last 30 days on one card, to copy as text or save as an image.
+The Overview leads with the runway: whether the weekly limit lasts to its reset at the current burn, from the status line readings. Under it, the days of that limit Kiasi bought back: the re-reads it avoided up to each compaction, divided by what you send a day. "Share your month" opens the last 30 days on one card, to copy as text or save as an image.
 
 Outside the dashboard, two notices and nothing else:
 
