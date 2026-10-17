@@ -130,6 +130,20 @@ class TestAuditReports(ReportTestCase):
         sessions["s"]["recalls"] = [(2, '{"file_path": "/x/out-1.txt"}')]
         self.assertEqual(lens.classify(0, cap, sessions)["saved"], 0, "the saved file was read back")
 
+    def test_a_cut_is_credited_only_up_to_the_next_compaction(self):
+        lens = self.lens
+        sessions = lens.Sessions()
+        sessions["s"] = {"steps": [1, 2, 3, 4, 5, 6, 7, 8], "compactions": [3.5], "prompts": [], "recalls": []}
+        sessions.agent_steps["a1"] = [10, 11, 12]
+        sessions.agent_compactions["a1"] = [10.5]
+        cap = {"event": "cap", "ts": "2026-10-06T10:00:00", "session_id": "s", "chars": 8000, "shown_chars": 0, "saved_path": "/x/out-1.txt"}
+        before = lens.classify(1.5, cap, sessions)
+        self.assertEqual((before["later_steps"], before["saved"]), (2, 4000), "steps 2 and 3 only: the compaction at 3.5 dropped the output")
+        self.assertIn("up to its next compaction", before["formula"])
+        self.assertEqual(lens.classify(4.5, cap, sessions)["later_steps"], 4, "no compaction after it: every later step")
+        skip = {"event": "read_skipped", "ts": "2026-10-06T10:00:00", "session_id": "s", "path": "/f", "chars": 4000, "agent_id": "a1"}
+        self.assertEqual(lens.classify(9, skip, sessions)["later_steps"], 1, "a subagent's own compaction bounds its skip")
+
     def test_unreadable_input_is_skipped_and_counted_not_fatal(self):
         bad_stamp = {**self.step("bad", 5, 100), "timestamp": "not a time"}
         path = self.project / "s1.jsonl"

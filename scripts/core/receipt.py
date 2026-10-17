@@ -2,16 +2,15 @@
 
 Written at SessionEnd, shown as a desktop notification then, and as one line at the next start in the same project.
 The counterfactual is the same sum the report uses: every token a cap kept out would have sat in the context on
-every later step of that session, so the avoided re-read is kept tokens times the steps that followed."""
+every later step of that session up to its next compaction, so the avoided re-read is kept tokens times those steps."""
 import json
 import os
-from bisect import bisect_right
 from pathlib import Path
 
 from core import constants
 from core.events import event_epoch, load_session, log_event, now_iso
 from core.notify import notify_desktop
-from core.transcript import entry_epoch
+from core.transcript import entry_epoch, is_compaction, steps_carried
 
 
 def fmt_tokens(n):
@@ -30,15 +29,17 @@ def fmt_tokens(n):
     return str(int(n))
 
 
-def assistant_times(transcript_path):
-    """Epoch of every assistant step in the transcript, oldest first. A whole-file scan, parsing only assistant lines."""
-    times = []
+def transcript_times(transcript_path):
+    """Epochs of every assistant step and every compaction in the transcript, each oldest first. A whole-file scan,
+    parsing only those lines."""
+    times, compactions = [], []
     if not transcript_path:
-        return times
+        return times, compactions
     try:
         with open(transcript_path, encoding="utf-8", errors="replace") as fh:
             for line in fh:
-                if '"type":"assistant"' not in line and '"type": "assistant"' not in line:
+                if ('"type":"assistant"' not in line and '"type": "assistant"' not in line and '"isCompactSummary"' not in line
+                        and '"compact_boundary"' not in line):
                     continue
                 try:
                     entry = json.loads(line)
@@ -46,10 +47,11 @@ def assistant_times(transcript_path):
                     continue
                 if entry.get("type") == "assistant":
                     times.append(entry_epoch(entry))
+                elif is_compaction(entry):
+                    compactions.append(entry_epoch(entry))
     except OSError:
         pass
-    times.sort()
-    return times
+    return sorted(times), sorted(compactions)
 
 
 def cap_records(session_id):
@@ -78,11 +80,11 @@ def build_receipt(session_id, transcript_path, cwd, state):
     turns = (state or {}).get("turns") or {}
     sent = sum(int(t.get("reread") or 0) for t in turns.values())
     steps = sum(int(t.get("steps") or 0) for t in turns.values())
-    times = assistant_times(transcript_path)
+    times, compactions = transcript_times(transcript_path)
     kept, avoided, top = 0, 0, None
     for record in cap_records(session_id):
         tokens = max(0, (int(record.get("chars") or 0) - int(record.get("shown_chars") or 0)) // constants.CHARS_PER_TOKEN)
-        later = len(times) - bisect_right(times, cap_epoch(record.get("ts", ""))) if times else 0
+        later = steps_carried(times, compactions, cap_epoch(record.get("ts", "")))
         kept += tokens
         avoided += tokens * later
         if top is None or tokens > top["tokens"]:

@@ -1,0 +1,174 @@
+{
+  "generated": "2026-10-11",
+  "command": "python3 scripts/benchmark.py",
+  "later_steps": 10,
+  "chars_per_token": 4,
+  "limits": [
+    {
+      "tool": "Bash",
+      "value": 30000,
+      "unit": "chars",
+      "setting": "BASH_MAX_OUTPUT_LENGTH",
+      "what": "A successful command (exit 0, or exit 1 for grep, rg, find, diff, test, git diff, git grep) is returned inline up to about this size.",
+      "source": "https://code.claude.com/docs/en/tools-reference"
+    },
+    {
+      "tool": "Bash",
+      "value": 2000,
+      "unit": "chars",
+      "setting": null,
+      "what": "Past that, a successful command arrives as a file path plus a preview of the first characters.",
+      "source": "https://code.claude.com/docs/en/tools-reference"
+    },
+    {
+      "tool": "Bash",
+      "value": 10000,
+      "unit": "chars",
+      "setting": null,
+      "what": "A failed command is returned inline up to about this size; past that, a head-and-tail excerpt of this size with no file path.",
+      "source": "https://code.claude.com/docs/en/tools-reference"
+    },
+    {
+      "tool": "MCP",
+      "value": 50000,
+      "unit": "chars",
+      "setting": null,
+      "what": "A text result over this size from a tool without anthropic/maxResultSizeChars is saved to a file and replaced by a message naming the path.",
+      "source": "https://code.claude.com/docs/en/mcp"
+    },
+    {
+      "tool": "MCP",
+      "value": 25000,
+      "unit": "tokens",
+      "setting": "MAX_MCP_OUTPUT_TOKENS",
+      "what": "The token limit past which an MCP result is saved to a file and replaced by a path message.",
+      "source": "https://code.claude.com/docs/en/mcp"
+    },
+    {
+      "tool": "MCP warning",
+      "value": 10000,
+      "unit": "tokens",
+      "setting": "MAX_MCP_OUTPUT_TOKENS",
+      "what": "Claude Code shows a warning above this size; the output is still passed through.",
+      "source": "https://code.claude.com/docs/en/mcp"
+    },
+    {
+      "tool": "Read",
+      "value": 25000,
+      "unit": "tokens",
+      "setting": "CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS",
+      "what": "One Read call returns the whole file up to this size; past it, the first page with a PARTIAL notice.",
+      "source": "https://code.claude.com/docs/en/tools-reference"
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "Playwright page snapshot via MCP",
+      "rule": "MCP output cap",
+      "tool": "MCP",
+      "exit_status": 0,
+      "chars_in": 55999,
+      "chars_claude_code": 215,
+      "chars_kiasi": 6180,
+      "claude_code_gets": "a file path",
+      "kiasi_gets": "the first 6,000 chars and a file path",
+      "note": "Over 50,000 chars Claude Code alone saves the result to a file and sends only a path message, so it sends less than Kiasi's capped head."
+    },
+    {
+      "name": "GitHub issue list via MCP",
+      "rule": "MCP output cap",
+      "tool": "MCP",
+      "exit_status": 0,
+      "chars_in": 105223,
+      "chars_claude_code": 215,
+      "chars_kiasi": 6181,
+      "claude_code_gets": "a file path",
+      "kiasi_gets": "the first 6,000 chars and a file path",
+      "note": "Over 50,000 chars Claude Code alone saves the result to a file and sends only a path message, so it sends less than Kiasi's capped head."
+    },
+    {
+      "name": "npm install log (ANSI, progress bars)",
+      "rule": "Bash clean + cap",
+      "tool": "Bash",
+      "exit_status": 0,
+      "chars_in": 42800,
+      "chars_claude_code": 2215,
+      "chars_kiasi": 3569,
+      "claude_code_gets": "a file path and the first 2,000 chars",
+      "kiasi_gets": "a cleaned head, the error lines and a tail, and a file path",
+      "note": "Exit 0, so Claude Code alone returns a file path and the first 2,000 chars; Kiasi cleans the log and keeps a head, the error lines and a tail, so it sends more here."
+    },
+    {
+      "name": "Session transcript Read (.jsonl)",
+      "rule": "outside-read cap",
+      "tool": "Read",
+      "exit_status": 0,
+      "chars_in": 43539,
+      "chars_claude_code": 43539,
+      "chars_kiasi": 8170,
+      "claude_code_gets": "the whole output",
+      "kiasi_gets": "the first 8,000 chars and a file path",
+      "note": "The file is under Claude Code's 25,000-token Read limit, so Claude Code alone sends all of it; Kiasi caps session transcripts and other files under ~/.claude."
+    },
+    {
+      "name": "Test run through mcp__kiasi__run",
+      "rule": "sandbox digest",
+      "tool": "Bash",
+      "exit_status": 1,
+      "chars_in": 64578,
+      "chars_claude_code": 10000,
+      "chars_kiasi": 2082,
+      "claude_code_gets": "a 10,000-char head and tail, no file path",
+      "kiasi_gets": "a digest with the failing lines and a file path",
+      "note": "A failing test run exits 1, which is a failure for Claude Code: past 10,000 chars it sends a blind head and tail with no path. Kiasi's digest keeps the failing lines and a path."
+    },
+    {
+      "name": "Count items in a big JSON via mcp__kiasi__distill",
+      "rule": "think in code",
+      "tool": "Bash",
+      "exit_status": 0,
+      "chars_in": 180485,
+      "chars_claude_code": 5,
+      "chars_kiasi": 5,
+      "claude_code_gets": "the count from a one-liner",
+      "kiasi_gets": "the count",
+      "note": "Without Kiasi, Claude would usually run a one-liner through Bash that prints just the count; the baseline is that tiny output, so there is no saving against it."
+    },
+    {
+      "name": "Unchanged source file read a second time",
+      "rule": "Read skip",
+      "tool": "Read",
+      "exit_status": 0,
+      "chars_in": 29029,
+      "chars_claude_code": 29029,
+      "chars_kiasi": 245,
+      "claude_code_gets": "the whole output",
+      "kiasi_gets": "a one-line pointer to the copy already in context",
+      "note": "Claude Code alone re-sends the whole unchanged file on every re-read in the same conversation; Kiasi answers with a pointer to the copy already in context."
+    },
+    {
+      "name": "Mid-size build log (ANSI, progress redraws)",
+      "rule": "Bash clean",
+      "tool": "Bash",
+      "exit_status": 0,
+      "chars_in": 20034,
+      "chars_claude_code": 20034,
+      "chars_kiasi": 2929,
+      "claude_code_gets": "the whole output",
+      "kiasi_gets": "the log without colour codes and repeated lines, and a file path",
+      "note": "Under 30,000 chars, so Claude Code alone sends all of it, colour codes and progress redraws included; Kiasi strips the noise."
+    },
+    {
+      "name": "Mid-size issue list via MCP",
+      "rule": "MCP output cap",
+      "tool": "MCP",
+      "exit_status": 0,
+      "chars_in": 38522,
+      "chars_claude_code": 38522,
+      "chars_kiasi": 6180,
+      "claude_code_gets": "the whole output",
+      "kiasi_gets": "the first 6,000 chars and a file path",
+      "note": "Under 50,000 chars, so Claude Code alone sends all of it; Kiasi keeps a head and a path to the full result."
+    }
+  ]
+}

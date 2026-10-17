@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kiasi · Benchmark</title>
+<meta name="description" content="Kiasi's benchmark, measured on the real handlers and compared against Claude Code's own output limits, not against raw output. Reproduce it with one command.">
+<meta property="og:title" content="Kiasi · Benchmark">
+<meta property="og:description" content="Measured on the handlers, not estimated. Savings are counted against what Claude Code alone would put in context, under its documented limits.">
+<meta property="og:type" content="website">
+<link rel="icon" href="../mark.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../site.css">
+<style>
+.bench-hero { padding: 84px 0 30px; text-align: center; }
+.bench-hero h1 { max-width: none; width: 100%; text-align: center; text-wrap: balance; font-family: var(--display); font-weight: 400; font-size: clamp(36px, 6vw, 68px); line-height: 1.02; letter-spacing: -0.03em; margin: 0; }
+.bench-hero h1 em { font-style: italic; color: var(--muted); }
+.bench-hero .lede { margin: 22px auto 0; }
+.bench section { padding: 40px 0; }
+.bench h2 { font-family: var(--display); font-weight: 400; font-size: clamp(26px, 3.4vw, 38px); line-height: 1.08; letter-spacing: -0.02em; margin: 0 0 14px; }
+.bench h2 em { font-style: italic; color: var(--muted); }
+.bench p, .bench li { color: var(--ink2); font-size: 16px; line-height: 1.6; }
+.bench ul { padding-left: 20px; margin: 12px 0 0; max-width: 70ch; }
+.bench li { margin: 6px 0; }
+.bench a { color: var(--accent); }
+
+.control { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; justify-content: space-between; background: var(--card); border: 1px solid var(--rule); border-radius: var(--r); padding: 18px 20px; margin-top: 8px; }
+.control label { font-family: var(--mono); font-size: 13px; color: var(--ink2); display: block; margin-bottom: 8px; }
+.control label b { color: var(--ink); }
+.control input[type=range] { width: min(420px, 100%); accent-color: var(--accent); }
+.total { text-align: right; }
+.total b { display: block; font-family: var(--display); font-weight: 400; font-size: clamp(28px, 4vw, 40px); letter-spacing: -0.02em; color: var(--ink); }
+.total span { font-size: 13px; color: var(--muted); }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 16px; margin-top: 16px; }
+.card { background: var(--card); border: 1px solid var(--rule); border-radius: var(--r); padding: 20px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.card .rule { font-family: var(--mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.card h3 { margin: 0; font-size: 16px; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.card .head { font-family: var(--display); font-size: clamp(24px, 3vw, 30px); letter-spacing: -0.02em; line-height: 1.1; color: var(--accent); }
+.card .head.none { color: var(--muted); }
+.card .head.worse { color: var(--bad); }
+.gets { margin: 0; display: grid; gap: 2px; font-size: 13px; }
+.gets dt { font-family: var(--mono); font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-top: 6px; }
+.gets dd { margin: 0; color: var(--ink2); }
+.bars { display: grid; gap: 10px; }
+.bar { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; }
+.bar .lab { font-size: 12.5px; color: var(--ink2); }
+.bar .val { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
+.bar .track { grid-column: 1 / -1; height: 10px; border-radius: 6px; background: var(--card2); overflow: hidden; }
+.bar .fill { display: block; height: 100%; min-width: 3px; width: var(--w); border-radius: 6px; transform-origin: left; animation: grow .9s var(--ease) both; }
+.bar.raw .fill { background: var(--rule2); }
+.bar.cc .fill { background: var(--blue); }
+.bar.ki .fill { background: var(--accent); }
+.card .note { font-size: 13.5px; color: var(--muted); line-height: 1.5; margin: 0; }
+.card .later { font-family: var(--mono); font-size: 12.5px; color: var(--ink2); border-top: 1px solid var(--rule); padding-top: 12px; margin-top: auto; }
+.card .later b { color: var(--ink); }
+@keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+.limits { list-style: none; padding: 0; }
+.limits li { font-size: 15px; }
+.limits code, .bench code { font-family: var(--mono); font-size: 13px; color: var(--ink); }
+.next { background: var(--card); border: 1px dashed var(--rule2); border-radius: var(--r); padding: 20px; margin-top: 12px; max-width: 70ch; }
+.next .tag { font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); }
+.tablewrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); margin-top: 12px; }
+.tablewrap table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 13.5px; }
+.tablewrap th, .tablewrap td { padding: 10px 12px; text-align: right; border-bottom: 1px solid var(--rule); white-space: nowrap; color: var(--ink2); }
+.tablewrap th:nth-child(-n+2), .tablewrap td:nth-child(-n+2) { text-align: left; }
+.tablewrap th { font-family: var(--mono); font-size: 11.5px; font-weight: 500; color: var(--muted); }
+.tablewrap tr:last-child td { border-bottom: 0; }
+.tablewrap td.vs { font-family: var(--mono); font-size: 13px; }
+.tablewrap td.vs.less { color: var(--good); }
+.tablewrap td.vs.more { color: var(--bad); }
+.tablewrap td.vs.same { color: var(--muted); }
+.loadfail { color: var(--bad); }
+@media (max-width: 640px) { .bench-hero { padding-top: 56px; } .total { text-align: left; } .tablewrap { margin-left: 0; margin-right: 0; } }
+@media (prefers-reduced-motion: reduce) { .bar .fill { animation: none; } }
+</style>
+</head>
+<body>
+<div class="bgfx" aria-hidden="true"></div>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="../"><img src="../mark.svg" alt="">Kiasi</a>
+    <nav class="nav" aria-label="Sections">
+      <a href="../#how">How it works</a>
+      <a href="../#evidence">Evidence</a>
+      <a class="on" href="./" aria-current="page">Benchmark</a>
+      <a href="../releases/">Releases</a>
+      <a href="../#faq">FAQ</a>
+      <a href="../#install">Install</a>
+    </nav>
+    <div class="topright">
+      <a class="ghbtn" href="https://github.com/raj-rangani/kiasi" aria-label="Kiasi on GitHub"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg><span>GitHub</span></a>
+      <button class="iconbtn" id="theme" type="button" aria-label="Toggle light mode">
+        <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap bench">
+  <div class="bench-hero">
+    <p class="eyebrow">Benchmark</p>
+    <h1>Measured on the handlers, <em>not estimated.</em></h1>
+    <p class="lede">Claude Code already limits long tool output, so counting the raw output as the saving overstates it. Every number here is measured against what Claude Code alone would put in context under its own documented limits, with the real Kiasi handlers on deterministic inputs. Where Claude Code alone sends less, the card says so.</p>
+    <div class="cmd"><span>python3 scripts/benchmark.py</span><button class="copy" data-copy="python3 scripts/benchmark.py">Copy</button></div>
+  </div>
+
+  <section aria-labelledby="steps-h">
+    <div class="control">
+      <div>
+        <label for="steps" id="steps-h">Later steps that re-send it: <b id="steps-out">10</b></label>
+        <input id="steps" type="range" min="1" max="50" value="10">
+      </div>
+      <div class="total"><b id="total">0</b><span>tokens kept off later steps, all scenarios, versus Claude Code alone (negative where Kiasi sends more)</span></div>
+    </div>
+    <div class="cards" id="cards" aria-live="polite"><p class="loadfail" id="status">Loading benchmark.json…</p></div>
+  </section>
+
+  <section id="method">
+    <h2>How it is <em>measured</em></h2>
+    <p>Each scenario is a shape-realistic tool output generated deterministically by <code>scripts/benchmark.py</code>, then replayed through the same handlers that run in a session: the caps and the Bash clean in <code>core/caps.py</code>, and the out-of-context run and distill tools in <code>sandbox.py</code>. Nothing is sampled and nothing is a model call, so the numbers repeat exactly.</p>
+    <p>Three numbers per scenario. Raw output is what the tool produced. Claude Code alone is the same output under Claude Code's documented limits, through the tool path the scenario really uses without Kiasi, with the exit status that fits the story. With Kiasi is what the handler put in context. The headline compares the last two.</p>
+    <ul class="limits" id="limits"></ul>
+    <p id="limitnote"></p>
+    <p><b>Far past Claude Code's limits, Claude Code alone already sends less.</b> It saves a huge MCP result or a long successful command to a file and sends a path, with a short preview at most, so on those rows Kiasi sends more. Kiasi differs where it does something else with the output: a failing run keeps the failing lines and a path instead of a blind head and tail, outputs under the limits are still trimmed and stripped of colour codes and redraws, session transcripts are capped, and an unchanged file read a second time is not sent again.</p>
+  </section>
+
+  <section id="not">
+    <h2>What this does <em>not measure</em></h2>
+    <ul>
+      <li>Claude Code's path message is modelled with a realistic length, not quoted from its own text.</li>
+      <li>The inputs are synthetic: shape-realistic and generated by the script, not recorded from real sessions.</li>
+      <li>The count of later steps is an assumption, not an observation. The slider above shows how much it matters.</li>
+      <li>There is no paired A/B on real tasks yet, so nothing here says the model finishes the same work with the shorter context.</li>
+      <li>How cached re-reads count toward plan limits is not modelled.</li>
+    </ul>
+  </section>
+
+  <section id="next">
+    <h2>Next: a paired A/B on <em>real tasks</em></h2>
+    <div class="next">
+      <span class="tag">Not run yet</span>
+      <p>The plan is to run the same tasks with and without Kiasi, compare tokens used and whether the task was completed, and publish the runs. Until that exists, this page is a measurement of the handlers, not of end-to-end outcomes.</p>
+    </div>
+  </section>
+
+  <section id="table">
+    <h2>The <em>full table</em></h2>
+    <div class="tablewrap"><table id="grid"></table></div>
+    <p>Generated <span id="generated"></span> from <a href="../benchmark.json">benchmark.json</a>. The same table is in <a href="https://github.com/raj-rangani/kiasi/blob/main/BENCHMARK.md">BENCHMARK.md</a>, and a test fails if the two drift.</p>
+  </section>
+
+  <footer class="foot">
+    <span>Kiasi · a Claude Code plugin · MIT</span>
+    <span><a href="https://github.com/raj-rangani/kiasi">GitHub</a> · <a href="https://github.com/raj-rangani/kiasi/blob/main/CHANGELOG.md">Changelog</a> · <a href="https://github.com/raj-rangani/kiasi/issues">Issues</a></span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  var LESS_RATIO = 1.5, MORE_RATIO = 0.67;
+  var data = null;
+
+  try { if (localStorage.getItem('kiasi-theme') === 'light') root.dataset.theme = 'light'; } catch (e) {}
+  document.getElementById('theme').addEventListener('click', function () {
+    var light = root.dataset.theme === 'light';
+    if (light) delete root.dataset.theme; else root.dataset.theme = 'light';
+    try { localStorage.setItem('kiasi-theme', light ? 'dark' : 'light'); } catch (e) {}
+  });
+
+  document.querySelectorAll('.copy').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var done = function () { b.classList.add('ok'); var t = b.textContent; b.textContent = 'Copied'; setTimeout(function () { b.classList.remove('ok'); b.textContent = t; }, 1400); };
+      if (navigator.clipboard) navigator.clipboard.writeText(b.dataset.copy).then(done, function () {}); else done();
+    });
+  });
+
+  var fmt = function (n) { return Math.round(n).toLocaleString('en-US'); };
+  var el = function (tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+  var kept = function (s, steps) { return (s.chars_claude_code - s.chars_kiasi) / data.chars_per_token * steps; };
+  var verdict = function (s) {
+    var r = s.chars_claude_code / Math.max(1, s.chars_kiasi);
+    if (r >= LESS_RATIO) return { text: (r >= 100 ? fmt(r) : r.toFixed(1)) + '× less than Claude Code alone', cls: '' };
+    if (r > MORE_RATIO) return { text: 'About the same as Claude Code alone', cls: ' none' };
+    return { text: 'Claude Code alone sends less here', cls: ' worse' };
+  };
+  var versus = function (cc, ki) {
+    if (cc === ki) return { text: 'same', cls: 'same' };
+    var r = Math.max(cc, ki) / Math.max(1, Math.min(cc, ki));
+    return { text: (r >= 100 ? fmt(r) : r.toFixed(1)) + '× ' + (ki < cc ? 'less' : 'more'), cls: ki < cc ? 'less' : 'more' };
+  };
+
+  var bar = function (cls, label, value, max) {
+    var b = el('div', 'bar ' + cls), t = el('span', 'track'), f = el('span', 'fill');
+    f.style.setProperty('--w', Math.max(0.5, value / max * 100) + '%');
+    t.appendChild(f);
+    b.appendChild(el('span', 'lab', label));
+    b.appendChild(el('span', 'val', fmt(value) + ' chars'));
+    b.appendChild(t);
+    return b;
+  };
+
+  var laters = [];
+  var buildCard = function (s) {
+    var card = el('article', 'card'), bars = el('div', 'bars'), v = verdict(s);
+    card.appendChild(el('span', 'rule', s.rule + ' · ' + s.tool));
+    card.appendChild(el('h3', '', s.name));
+    card.appendChild(el('div', 'head' + v.cls, v.text));
+    bars.appendChild(bar('raw', 'Raw output', s.chars_in, s.chars_in));
+    bars.appendChild(bar('cc', 'Claude Code alone', s.chars_claude_code, s.chars_in));
+    bars.appendChild(bar('ki', 'With Kiasi', s.chars_kiasi, s.chars_in));
+    card.appendChild(bars);
+    var gets = el('dl', 'gets');
+    [['Claude Code alone gets', s.claude_code_gets], ['Kiasi gets', s.kiasi_gets]].forEach(function (g) {
+      gets.appendChild(el('dt', '', g[0]));
+      gets.appendChild(el('dd', '', g[1]));
+    });
+    card.appendChild(gets);
+    card.appendChild(el('p', 'note', s.note));
+    var later = el('div', 'later');
+    laters.push({ node: later, s: s });
+    card.appendChild(later);
+    return card;
+  };
+
+  var update = function () {
+    var steps = parseInt(document.getElementById('steps').value, 10), total = 0;
+    document.getElementById('steps-out').textContent = steps;
+    laters.forEach(function (l) {
+      var v = kept(l.s, steps);
+      total += v;
+      l.node.textContent = '';
+      var b = el('b', '', fmt(v));
+      l.node.appendChild(b);
+      l.node.appendChild(document.createTextNode(' tokens kept off ' + steps + ' later step' + (steps === 1 ? '' : 's')));
+    });
+    document.getElementById('total').textContent = fmt(total);
+  };
+
+  var buildTable = function () {
+    var grid = document.getElementById('grid'), head = el('tr');
+    ['scenario', 'rule', 'chars in', 'Claude Code alone', 'chars entered', 'reduction', 'Kiasi vs Claude Code alone'].forEach(function (h) { head.appendChild(el('th', '', h)); });
+    grid.appendChild(head);
+    var pct = function (whole, part) { return Math.floor((200 * (whole - part) + whole) / (2 * Math.max(1, whole))) + '%'; };
+    data.scenarios.forEach(function (s) {
+      var tr = el('tr'), v = versus(s.chars_claude_code, s.chars_kiasi);
+      [s.name, s.rule, fmt(s.chars_in), fmt(s.chars_claude_code), fmt(s.chars_kiasi), pct(s.chars_in, s.chars_kiasi)].forEach(function (c) { tr.appendChild(el('td', '', c)); });
+      tr.appendChild(el('td', 'vs ' + v.cls, v.text));
+      grid.appendChild(tr);
+    });
+  };
+
+  var buildLimits = function () {
+    var ul = document.getElementById('limits');
+    data.limits.forEach(function (l) {
+      var li = el('li'), a = el('a', '', 'source');
+      a.href = l.source;
+      li.appendChild(el('b', '', l.tool + ' ' + fmt(l.value) + ' ' + l.unit + ': '));
+      li.appendChild(document.createTextNode(l.what + ' '));
+      if (l.setting) { li.appendChild(el('code', '', l.setting)); li.appendChild(document.createTextNode(' ')); }
+      li.appendChild(document.createTextNode('('));
+      li.appendChild(a);
+      li.appendChild(document.createTextNode(')'));
+      ul.appendChild(li);
+    });
+    document.getElementById('limitnote').textContent = 'Tokens are converted at ' + data.chars_per_token + ' characters per token.';
+  };
+
+  fetch('../benchmark.json').then(function (r) { return r.json(); }).then(function (d) {
+    data = d;
+    var cards = document.getElementById('cards');
+    cards.textContent = '';
+    var ratio = function (s) { return s.chars_claude_code / Math.max(1, s.chars_kiasi); };
+    d.scenarios.slice().sort(function (a, b) { return ratio(b) - ratio(a); }).forEach(function (s) { cards.appendChild(buildCard(s)); });
+    var slider = document.getElementById('steps');
+    slider.value = d.later_steps;
+    slider.addEventListener('input', update);
+    document.getElementById('generated').textContent = d.generated;
+    buildTable();
+    buildLimits();
+    update();
+  }).catch(function () {
+    document.getElementById('status').textContent = 'Could not load benchmark.json.';
+  });
+})();
+</script>
+</body>
+</html>

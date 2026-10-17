@@ -1,6 +1,7 @@
 import json
 import re
 import time
+from bisect import bisect_right
 from pathlib import Path
 
 from core import constants
@@ -42,6 +43,19 @@ def entry_epoch(entry):
         return time.mktime(time.strptime(stamp[:19], "%Y-%m-%dT%H:%M:%S")) - time.timezone if stamp else 0
     except ValueError:
         return 0
+
+
+def steps_carried(steps, compactions, t):
+    """The steps after t that still re-sent what entered the context at t, from sorted epochs. A compaction replaces the
+    old conversation with a summary or a pruned copy, so the count ends at the first compaction after t."""
+    index = bisect_right(compactions, t)
+    end = compactions[index] if index < len(compactions) else float("inf")
+    return bisect_right(steps, end) - bisect_right(steps, t)
+
+
+def is_compaction(entry):
+    """Claude Code's marks of a compaction: the boundary line, and the summary that follows it when one was written."""
+    return bool(entry.get("isCompactSummary")) or (entry.get("type") == "system" and entry.get("subtype") == "compact_boundary")
 
 
 def is_system_prompt(text):

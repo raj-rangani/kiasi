@@ -3,13 +3,13 @@
   <img src="docs/logo-light.svg" alt="Kiasi" width="150">
 </picture>
 
-Your weekly limit is spent re-reading. Every step of Claude Code re-sends the whole conversation, so one noisy test log is paid for again on every step after it, for the rest of the session. One `npm install` log is 42,800 characters. One Playwright snapshot through MCP is 56,000. Twenty GitHub issues are 105,000. Each one rides along on every step that follows.
+Your weekly limit is spent re-reading. Every step of Claude Code re-sends the whole conversation, so one noisy test log is paid for again on every step after it, until the conversation is compacted. One build log is 20,000 characters. A source file read a second time is 29,000. A mid-size issue list through MCP is 38,500. Each one rides along on the steps that follow.
 
 Kiasi is a Claude Code plugin that keeps that noise out: fixed rules, on your machine, no model calls, no network. The full text of everything it cuts is saved and searchable, so nothing is lost. Install it and work as usual. The next day a local dashboard shows your own before and after, built from your own transcripts: the context each step re-sends, and the days of weekly limit Kiasi bought back.
 
 [**Website**](https://raj-rangani.github.io/kiasi/) · [Results](https://raj-rangani.github.io/kiasi/#results) · [Benchmark](BENCHMARK.md) · [Settings](docs/settings.md) · [Changelog](CHANGELOG.md) · MIT
 
-<a href="https://raj-rangani.github.io/kiasi/#demo"><img src="docs/demo.gif" alt="A real Claude Code session with Kiasi: npm ls --all returns 3,009 lines, Claude reports that a few dozen lines reached it and names the file holding the rest; then the dashboard" width="720"></a>
+<a href="https://raj-rangani.github.io/kiasi/"><img src="docs/demo.gif" alt="A real Claude Code session with Kiasi: npm ls --all returns 3,009 lines, Claude reports that a few dozen lines reached it and names the file holding the rest; then the dashboard" width="720"></a>
 
 ## Quick start
 
@@ -46,13 +46,15 @@ Or type `/plugins` in the prompt box, add `raj-rangani/kiasi` in the Marketplace
 
 Every number Kiasi shows is measured. The benchmark replays shape-realistic tool outputs through the same handlers that run in a session, and the dashboard measures your own sessions the same way, against the days before you installed.
 
-| Scenario | Chars in | Chars entered | Saved over 10 later steps |
-|---|---:|---:|---:|
-| GitHub issue list via MCP | 105,223 | 6,181 | 247,605 tokens |
-| npm install --loglevel=warn --no-fund --no-audit log | 42,800 | 3,569 | 98,077 tokens |
-| Test run through `mcp__kiasi__run` | 64,578 | 2,082 | 156,240 tokens |
+Each row is compared with what Claude Code alone puts in context under its documented output limits, in characters, not with the raw output.
 
-The full table and how to rerun it are in [BENCHMARK.md](BENCHMARK.md). On the machine Kiasi was built on, 16 days before against 7 days after: context re-sent per step 201k → 31k tokens, 6.5× less; steps over 200k context 52% → 0%. That is one machine. Yours is the number that matters, and it is on your dashboard the day after you install.
+| Scenario | Claude Code alone | With Kiasi | Kept off 10 later steps |
+|---|---:|---:|---:|
+| Unchanged source file read a second time | 29,029 | 245 | 71,960 tokens |
+| Mid-size build log (ANSI, progress redraws) | 20,034 | 2,929 | 42,762 tokens |
+| Test run through `mcp__kiasi__run` | 10,000 | 2,082 | 19,795 tokens |
+
+Claude Code alone sends less on three of the nine scenarios: a succeeding npm install, and two very large MCP results that Claude Code saves to a file and replaces with a path. The full table and how to rerun it are in [BENCHMARK.md](BENCHMARK.md). On the machine Kiasi was built on, 16 days before against 7 days after: context re-sent per step 201k → 31k tokens, 6.5× less; steps over 200k context 52% → 0%. That is one machine. Yours is the number that matters, and it is on your dashboard the day after you install.
 
 <img src="docs/overview.webp" alt="Kiasi dashboard overview" width="720">
 
@@ -98,7 +100,7 @@ The days before you installed Kiasi are the baseline, built from your own transc
 
 ### Runway, receipt and digest
 
-The Overview leads with the runway: whether the weekly limit lasts to its reset at the current burn, from the status line readings. Under it, the days of that limit Kiasi bought back: the re-reads it avoided, divided by what you send a day. "Share your month" opens the last 30 days on one card, to copy as text or save as an image.
+The Overview leads with the runway: whether the weekly limit lasts to its reset at the current burn, from the status line readings. Under it, the days of that limit Kiasi bought back: the re-reads it avoided up to each compaction, divided by what you send a day. "Share your month" opens the last 30 days on one card, to copy as text or save as an image.
 
 Outside the dashboard, two notices and nothing else:
 

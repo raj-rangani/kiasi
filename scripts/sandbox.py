@@ -17,6 +17,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import uuid
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -41,7 +42,8 @@ def log_saving(tool, raw_chars, shown_chars, saved_path, label, session="", fail
 
 def save(kind, text):
     constants.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    path = constants.OUTPUT_DIR / f"{kind}-{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}.txt"
+    # a random suffix, not the pid: the MCP server is one process, so two saves in one second would share a name
+    path = constants.OUTPUT_DIR / f"{kind}-{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}.txt"
     path.write_text(text, errors="replace")
     return path
 

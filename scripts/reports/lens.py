@@ -14,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core import constants
 from core.events import event_epoch
+from core.transcript import is_compaction, steps_carried
 from reports.budget import SKIPPED, SYNTHETIC_MODEL, file_lock, first_ask, install_day, project_of, read_lines, reset_skips, skip, transcript_files, window_start, write_atomic
 
 SAVING_KINDS = ("cap", "paste_refused", "delegated", "pruned", "read_skipped")
@@ -398,6 +399,7 @@ class Sessions(dict):
     def __init__(self):
         super().__init__()
         self.agent_steps = {}
+        self.agent_compactions = defaultdict(list)  # agent -> when its transcript was compacted
         self.agent_starts = defaultdict(list)
         self.usage = defaultdict(lambda: defaultdict(Counter))  # day -> model -> read, write, input, output tokens of main and subagent steps
         self.day_steps = Counter()  # main-session steps a day
@@ -598,13 +600,15 @@ def scan_sessions(days):
     bill = Counter()
     main_bill, prompts = Counter(), Counter()
     for path in main:
-        info = {"session": Path(path).stem, "project": project_of(path), "steps": [], "contexts": [], "prompts": [], "reread": 0, "recalls": [], "new": None, "pieces": [], "partial": False, "first_day": None, "agents": [], "synthetic": 0, "synthetic_kinds": Counter(),
+        info = {"session": Path(path).stem, "project": project_of(path), "steps": [], "compactions": [], "contexts": [], "prompts": [], "reread": 0, "recalls": [], "new": None, "pieces": [], "partial": False, "first_day": None, "agents": [], "synthetic": 0, "synthetic_kinds": Counter(),
                 "floor": None, "attrib": Counter(), "hook_attrib": Counter(), "hook_fires": Counter(), "hook_chars": Counter(), "file_attrib": Counter()}
         asked, searches = set(), set()
         names, live, hooks, files = {}, Counter(), Counter(), Counter()
         for entry, usage in usage_entries(path):
             t = epoch_iso(entry["timestamp"])
             message = entry.get("message") or {}
+            if is_compaction(entry):
+                info["compactions"].append(t)
             if entry.get("isCompactSummary"):
                 live, hooks, files = Counter({"compaction summary": text_size(message.get("content"))}), Counter(), Counter()
             elif usage:
@@ -658,6 +662,8 @@ def scan_sessions(days):
         agent = stem[len("agent-"):] if stem.startswith("agent-") else stem
         owner = sessions.get(Path(path).parent.parent.name)
         for entry, usage in usage_entries(path):
+            if is_compaction(entry):
+                sessions.agent_compactions[agent].append(epoch_iso(entry["timestamp"]))
             if owner is not None and entry.get("type") == "assistant":
                 owner["recalls"].extend((epoch_iso(entry["timestamp"]), text) for text in recall_texts(entry.get("message") or {}))
             if usage:
@@ -671,10 +677,6 @@ def scan_sessions(days):
             sessions.agent_steps[agent].sort()
             sessions.agent_starts[Path(path).parent.parent.name].append(sessions.agent_steps[agent][0])
     return sessions, bill, main_bill, prompts
-
-
-def count_after(times, t):
-    return len(times) - bisect_right(times, t)
 
 
 def steps_until_next_prompt(steps, prompts, t):
@@ -766,20 +768,20 @@ def classify(t, record, sessions, logged=None):
     session = record.get("session_id", "")
     info = sessions.get(session, {"steps": [], "prompts": []})
     event = record.get("event")
-    later = count_after(info["steps"], t)
+    later = steps_carried(info["steps"], info.get("compactions", []), t)
     if event == "cap":
         kept = tokens(record.get("chars", 0) - record.get("shown_chars", 0))
         back = read_back(record, t, sessions)
         return action(record, "cap", f"{record.get('tool_name')} {record.get('kind')}: {record.get('label', '')}", kept, later, 0 if back else kept * later,
-                      "read back later in the session: nothing saved" if back else f"{kept:,} tokens kept out × {later} later steps in the session")
+                      "read back later in the session: nothing saved" if back else f"{kept:,} tokens kept out × {later} later steps in the session up to its next compaction")
     if event == "read_skipped":
         kept = tokens(record.get("chars", 0))
         agent = record.get("agent_id")
         # A subagent's skip saves its own later steps; the parent's steps say nothing about it, and an unknown agent is not credited.
-        later = count_after(getattr(sessions, "agent_steps", {}).get(agent, []), t) if agent else later
+        later = steps_carried(getattr(sessions, "agent_steps", {}).get(agent, []), getattr(sessions, "agent_compactions", {}).get(agent, []), t) if agent else later
         repeated = skip_repeated(t, record, logged)
         return action(record, "read_skipped", f"unchanged re-read of {record.get('path', '')} skipped" + (", then repeated and let through" if repeated else ""), kept, later, 0 if repeated else kept * later,
-                      "repeated and let through: nothing saved" if repeated else f"{kept:,} tokens not re-sent × {later} later steps in the {'subagent' if agent else 'session'}")
+                      "repeated and let through: nothing saved" if repeated else f"{kept:,} tokens not re-sent × {later} later steps in the {'subagent' if agent else 'session'} up to its next compaction")
     if event == "read_retry":
         return action(record, "read_retry", f"skipped read of {record.get('path', '')} repeated and let through")
     if event == "routed":
@@ -791,7 +793,7 @@ def classify(t, record, sessions, logged=None):
         if record.get("paste_blocked"):
             kept = tokens(record.get("prompt_chars", 0))
             return action(record, "paste_refused", f"prompt of {record.get('prompt_chars', 0):,} chars refused, saved to disk", kept, later, kept * later,
-                          f"{kept:,} tokens kept out × {later} later steps in the session")
+                          f"{kept:,} tokens kept out × {later} later steps in the session up to its next compaction")
         if check.get("mode") == "delegate":
             # The instruction alone saves nothing: the estimate is credited only when Claude went on to delegate.
             if not delegation_followed(t, (logged or {}).get(session) or {"prompts": [], "agents": []}):
@@ -969,7 +971,7 @@ def postmortem(info, acts, steps_per_prompt, mean_context):
     findings = []
     for i in range(1, len(contexts)):
         jump = contexts[i] - contexts[i - 1]
-        later = len(steps) - i - 1
+        later = steps_carried(steps, info.get("compactions", []), steps[i])
         if jump >= constants.PM_JUMP_TOKENS and later > 0:
             findings.append({"label": f"step {i + 1} added {jump // 1000}k tokens of context in one step",
                              "cost": jump * later,

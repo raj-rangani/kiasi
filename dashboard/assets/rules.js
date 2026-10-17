@@ -173,7 +173,7 @@ function renderDetail(d) {
     <h3 class="sub" data-jump="Per day">Fired per day</h3><div class="chart">${dayBars(d, rule, panelWidth(), RULE_CHART_HEIGHT)}</div>
     <p class="hist-note">${cut ? 'Bars count how often the rule fired; the figure above a bar is the tokens it cut that day.' : 'Bars count how often the rule fired that day.'}</p>
     ${evidence(d, rule)}
-    <h3 class="sub">Log</h3><p class="hist-note">Newest first. A saving is tokens kept out × later steps in the session. Open a row for the raw record.</p>
+    <h3 class="sub">Log</h3><p class="hist-note">Newest first. A saving is tokens kept out × the later steps up to the next compaction, which drops old output. Open a row for the raw record.</p>
     <div class="filters"><input id="log-filter" type="search" placeholder="filter by text, tool or path"><span class="count" id="log-count"></span></div><div id="log"></div>`;
   P('#log-filter').addEventListener('input', () => renderLog(d));
   P('#log').addEventListener('click', e => {
