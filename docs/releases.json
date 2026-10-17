@@ -1,13 +1,89 @@
 {
- "updated": "2026-10-09",
+ "updated": "2026-10-17",
  "releases": [
+  {
+   "version": "0.9.0",
+   "tag": "v0.9.0",
+   "date": "2026-10-17",
+   "title": "Kiasi 0.9.0",
+   "url": "https://github.com/raj-rangani/kiasi/releases/tag/v0.9.0",
+   "latest": true,
+   "summary": "The dashboard&#x27;s days bought back no longer overcount, the benchmark compares every cut with what Claude Code alone sends, and the README&#x27;s before-and-after line says where the smaller context comes from. Details in the <a href=\"https://github.com/raj-rangani/kiasi/blob/main/CHANGELOG.md#090---2026-10-17\">0.9.0 changelog</a>.",
+   "compare": "https://github.com/raj-rangani/kiasi/compare/v0.8.0...v0.9.0",
+   "sections": [
+    {
+     "heading": "Highlights",
+     "items": [
+      {
+       "lead": "An honest bought-back figure.",
+       "html": "<b>An honest bought-back figure.</b> A cut&#x27;s avoided re-reads now stop at the session&#x27;s next compaction, because after a compaction the cut output would not have been re-sent anyway. The days bought back, the Your month card, the weekly digest, the session receipt and the postmortem all used the old count. On one month of heavy use the figure drops from 9.3 days to 1.1."
+      },
+      {
+       "lead": "A benchmark against Claude Code alone.",
+       "html": "<b>A benchmark against Claude Code alone.</b> Every scenario is measured against what Claude Code alone sends under its documented output limits, not against the raw output. Kiasi sends more on three of the nine scenarios, and the tables say so. A benchmark page at <code>/benchmark/</code> renders the same data."
+      },
+      {
+       "lead": "Before and after, attributed.",
+       "html": "<b>Before and after, attributed.</b> The README gives the measured 232k → 108k tokens per step (2.1× less) instead of an unreproducible 201k → 31k (6.5×). It says that almost all of the drop comes from the 200k compaction window on a 1M-context model, and that Kiasi&#x27;s own cuts keep out about 5%. <code>docs/launch.md</code> now leads with the measurement and the free setting."
+      },
+      {
+       "lead": "A new website.",
+       "html": "<b>A new website.</b> The landing page is one scroll story with the Kiasi mark as the hero. It also has a releases page with an Atom feed, and a results section where users post their month cards through an issue form."
+      }
+     ]
+    },
+    {
+     "heading": "Bug fixes",
+     "items": [
+      {
+       "lead": "Dashboard",
+       "html": "<b>Dashboard</b>: days bought back and every figure built on them credited a cut on every later step of the session, past compactions. They now stop at the next compaction."
+      },
+      {
+       "lead": "Out-of-context tools",
+       "html": "<b>Out-of-context tools</b>: two <code>run</code>, <code>distill</code> or <code>fetch</code> saves in the same second no longer overwrite each other. Saved file names end in six random hex characters, and cleanup still recognises the old names."
+      }
+     ]
+    },
+    {
+     "heading": "Upgrade notes",
+     "items": [
+      {
+       "lead": "",
+       "html": "Update with <code>/plugin marketplace update kiasi</code> then <code>/plugin update kiasi</code>, or <code>git pull</code> in a local checkout, then restart Claude Code."
+      },
+      {
+       "lead": "",
+       "html": "Expect the days bought back, the Your month card and the session receipts to drop at the next report build. That is the fix, not a regression. The context-per-request factor is measured before and after install and does not change."
+      },
+      {
+       "lead": "",
+       "html": "No re-run of <code>/kiasi:limits setup</code> is needed; the status line is unchanged."
+      }
+     ]
+    },
+    {
+     "heading": "Known issues",
+     "items": [
+      {
+       "lead": "",
+       "html": "Counting stops at every compaction, including a prune that kept the cut output, so the bought-back figure leans low."
+      },
+      {
+       "lead": "",
+       "html": "Before and after is measured on your machine against the days before you installed. It is not a paired A/B on the same tasks, and nothing yet shows whether Claude finishes the same work with the smaller context."
+      }
+     ]
+    }
+   ]
+  },
   {
    "version": "0.8.0",
    "tag": "v0.8.0",
    "date": "2026-10-09",
    "title": "Kiasi 0.8.0",
    "url": "https://github.com/raj-rangani/kiasi/releases/tag/v0.8.0",
-   "latest": true,
+   "latest": false,
    "summary": "Install is now one command after the plugin, the Overview says what the re-reads Kiasi avoided are worth in dollars, and the README leads with the weekly limit and a comparison. Details in the <a href=\"https://github.com/raj-rangani/kiasi/blob/main/CHANGELOG.md#080---2026-10-09\">0.8.0 changelog</a>.",
    "compare": "https://github.com/raj-rangani/kiasi/compare/v0.7.0...v0.8.0",
    "sections": [
