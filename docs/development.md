@@ -36,11 +36,11 @@ ffmpeg -ss 0.5 -i docs/demo.mp4 -frames:v 1 -vf scale=1100:-2 -q:v 4 docs/demo-p
 ffmpeg -i docs/demo.mp4 -filter_complex "scale=1100:-2:flags=lanczos,fps=15,split[a][b];[a]palettegen=max_colors=256:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle" -loop 0 docs/demo.gif
 ```
 
-The reply is whatever that run produces, so look at the frames before committing and update the alt text in `README.md` and `docs/index.html` if the numbers changed. The session's Kiasi data lands in `docs/demo/env/home/.claude/plugins/data/`, not in yours. Do not commit `docs/demo/demo.mp4`, the raw render; `docs/demo.mp4` is the cut one.
+The reply is whatever that run produces, so look at the frames before committing and update the alt text in `README.md` if the numbers changed. The session's Kiasi data lands in `docs/demo/env/home/.claude/plugins/data/`, not in yours. Do not commit `docs/demo/demo.mp4`, the raw render; `docs/demo.mp4` is the cut one.
 
 ### Dashboard screenshots
 
-The website's dashboard tile shows `docs/dash-dark.webp` or `docs/dash-light.webp` to match the page theme. Both are stills of the running dashboard's Overview, taken with Playwright at 2x (a 1400x790 viewport, so 2800x1580 pixels) so text stays sharp on dense screens. Real project names and paths are rewritten to generic ones before anything is drawn; check the `RULES` list in the script covers yours, then look at both images before committing.
+The website's dashboard section sits on a dark band in both themes and shows `docs/dash-dark.webp`; `docs/dash-light.webp` is the light still, kept for other uses. Both are stills of the running dashboard's Overview, taken with Playwright at 2x (a 1400x790 viewport, so 2800x1580 pixels) so text stays sharp on dense screens. Real project names and paths are rewritten to generic ones before anything is drawn; check the `RULES` list in the script covers yours, then look at both images before committing.
 
 ```bash
 python3 scripts/dashboard.py 8787 &      # the dashboard the shots are taken from (skip if already on 8787)
