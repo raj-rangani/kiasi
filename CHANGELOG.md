@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+## 0.9.0 - 2026-10-17
+
 - README and launch copy: the before-and-after line no longer claims 201k → 31k tokens per step (6.5× less), which no definition on the current history reproduces. It now gives the measured 232k → 108k (2.1× less) and says that almost all of it comes from the 200k compaction window, with Kiasi's own cuts keeping out about 5%. `docs/launch.md` leads with the measurement and the free setting instead of a multiple, and drops the 6.5× Show HN title.
 - Out-of-context tools: two `run`, `distill` or `fetch` saves in the same second no longer overwrite each other. Saved file names end in six random hex characters instead of the MCP server's process id, and cleanup still recognises the old names. The benchmark's digest no longer changes length with the process id, so CI gets the published numbers.
 - Dashboard: a cut's avoided re-reads now stop at the session's next compaction. A compaction, summarised or pruned, replaces the old conversation, so the cut output would not have been re-sent after it, but the count credited every later step of the session. Counting at every compaction is the cautious side: a pruning that kept the cut output gets no credit after it. The days of the weekly limit bought back, the Your month card, the weekly digest, the session receipt and the session postmortem all used that count, and all drop with the fix: on one month of heavy use, from 9.3 days bought back to 1.1. The drop in context per request is measured before and after install and does not change.
