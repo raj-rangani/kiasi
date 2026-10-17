@@ -54,7 +54,7 @@ Each row is compared with what Claude Code alone puts in context under its docum
 | Mid-size build log (ANSI, progress redraws) | 20,034 | 2,929 | 42,762 tokens |
 | Test run through `mcp__kiasi__run` | 10,000 | 2,082 | 19,795 tokens |
 
-Claude Code alone sends less on three of the nine scenarios: a succeeding npm install, and two very large MCP results that Claude Code saves to a file and replaces with a path. The full table and how to rerun it are in [BENCHMARK.md](BENCHMARK.md). On the machine Kiasi was built on, 16 days before against 7 days after: context re-sent per step 201k → 31k tokens, 6.5× less; steps over 200k context 52% → 0%. That is one machine. Yours is the number that matters, and it is on your dashboard the day after you install.
+Claude Code alone sends less on three of the nine scenarios: a succeeding npm install, and two very large MCP results that Claude Code saves to a file and replaces with a path. The full table and how to rerun it are in [BENCHMARK.md](BENCHMARK.md). On the machine Kiasi was built on, 16 days before install against 17 days after: context re-sent per step 232k → 108k tokens, 2.1× less; steps over 200k context 53% → 0%. Almost all of that comes from the 200k compaction window on a 1M-context model, which you can set without Kiasi. Kiasi's own cuts kept out about 5% of what was re-sent, so on a 200k-context model, which already compacts near that point, expect a number closer to 5%. That is one machine. Yours is the number that matters, and it is on your dashboard the day after you install.
 
 <img src="docs/overview.webp" alt="Kiasi dashboard overview" width="720">
 
