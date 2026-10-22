@@ -7,5 +7,14 @@
     "workload": "Web apps",
     "note": "The machine Kiasi is built on. Long agentic sessions, most days of the week.",
     "card": "Kiasi, last 30 days (15 Sep – 14 Oct)\n2.1× less context per request than before Kiasi\nBought back: 1.1 days, of the weekly limit\nKept out: 15.5M tokens, 75.8M of re-reads avoided\nContext sent: 2.83 B, 2,154 prompts on 24 days\nBusiest day: 23 Sep, 238M sent\nHeaviest session: 99.4M re-read, 14 Oct\nMost cut: kiasi distill · sandbox, 8 outputs, 730k kept out"
+  },
+  {
+    "issue": 25,
+    "handle": "sachinsudani",
+    "date": "2026-10-21",
+    "plan": "Max 20x",
+    "workload": "Web apps",
+    "note": "",
+    "card": "Kiasi, last 30 days (Sep 22 – Oct 21)\n1× less context per request than before Kiasi\nBought back: 3.6 days, of the weekly limit\nKept out: 1.7 M tokens, 146 M of re-reads avoided\nContext sent: 1.90 B, 618 prompts on 22 days\nBusiest day: Oct 9, 283 M sent\nHeaviest session: …xenett-brain-service, 122 M re-read, Oct 15\nMost cut: Bash · bash, 88 outputs, 287 k kept out"
   }
 ]
